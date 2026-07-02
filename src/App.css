@@ -43,6 +43,8 @@ header h1 {
   border: 1px solid #c3c2b7;
   font-size: 14px;
   background: #fcfcfb;
+  color: #0b0b0b;
+  color-scheme: light;
 }
 
 .error {
