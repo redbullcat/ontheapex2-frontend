@@ -4,14 +4,15 @@ import type { LapRead } from '../api/types'
 import { getEntityColor, getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
-import { CarPicker, type CarOption } from './CarPicker'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import type { EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const ROW_HEIGHT = 22
 const ROW_GAP = 6
 
-type GroupBy = 'team' | 'driver' | 'manufacturer'
+type GroupBy = 'team' | 'driver' | 'manufacturer' | 'car'
 type ChartType = 'bar' | 'box'
 
 interface GroupStats {
@@ -29,28 +30,35 @@ interface GroupStats {
 function fieldFor(groupBy: GroupBy): (lap: LapRead) => string | null {
   if (groupBy === 'team') return (l) => l.team
   if (groupBy === 'driver') return (l) => l.driver_name
+  if (groupBy === 'car') return (l) => l.car_number
   return (l) => l.manufacturer
 }
 
-function colorFor(groupBy: GroupBy, key: string): string {
-  return groupBy === 'team' ? getTeamColor(key) : getEntityColor(key)
+function colorFor(groupBy: GroupBy, key: string, carTeam: Map<string, string | null>): string {
+  if (groupBy === 'team') return getTeamColor(key)
+  if (groupBy === 'car') return getTeamColor(carTeam.get(key))
+  return getEntityColor(key)
 }
 
 function buildGroups(
   laps: LapRead[],
   activeClasses: Set<string>,
   groupBy: GroupBy,
-  carSelection: string[],
+  carSelection: EntitySelection,
+  driverSelection: EntitySelection,
   lapRange: [number, number],
   topPercent: number,
 ): GroupStats[] {
   const field = fieldFor(groupBy)
+  const carTeam = new Map<string, string | null>()
   const byGroup = new Map<string, number[]>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null) continue
     if (!activeClasses.has(lap.class ?? 'Unknown')) continue
-    if (carSelection.length > 0 && !carSelection.includes(lap.car_number)) continue
+    if (carSelection && !carSelection.has(lap.car_number)) continue
+    if (groupBy === 'driver' && driverSelection && lap.driver_name && !driverSelection.has(lap.driver_name)) continue
     if (lap.lap_number < lapRange[0] || lap.lap_number > lapRange[1]) continue
+    if (!carTeam.has(lap.car_number)) carTeam.set(lap.car_number, lap.team)
     const key = field(lap)
     if (!key) continue
     const arr = byGroup.get(key)
@@ -69,7 +77,7 @@ function buildGroups(
     const sorted = sortedAll.slice(0, keepCount)
     groups.push({
       key,
-      color: colorFor(groupBy, key),
+      color: colorFor(groupBy, key, carTeam),
       laps: sorted,
       mean: d3.mean(sorted) ?? 0,
       min: sorted[0],
@@ -96,7 +104,8 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('team')
   const [chartType, setChartType] = useState<ChartType>('bar')
-  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
+  const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [topPercentInput, setTopPercentInput] = useState('100')
 
@@ -122,14 +131,22 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const carOptions: CarOption[] = useMemo(() => {
+  const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
       if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
     }
     return [...byCar.entries()]
-      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
-      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+      .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+  }, [laps])
+
+  const driverOptions: EntityOption[] = useMemo(() => {
+    const names = new Set<string>()
+    for (const lap of laps) {
+      if (lap.driver_name) names.add(lap.driver_name)
+    }
+    return [...names].sort().map((name) => ({ id: name, label: name }))
   }, [laps])
 
   const lapBounds = useMemo((): [number, number] => {
@@ -147,8 +164,8 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
   const topPercent = Math.max(0, Math.min(100, Number(topPercentInput) || 0))
 
   const groups = useMemo(
-    () => buildGroups(laps, activeClasses, groupBy, carSelection, effectiveLapRange, topPercent),
-    [laps, activeClasses, groupBy, carSelection, effectiveLapRange, topPercent],
+    () => buildGroups(laps, activeClasses, groupBy, carSelection, driverSelection, effectiveLapRange, topPercent),
+    [laps, activeClasses, groupBy, carSelection, driverSelection, effectiveLapRange, topPercent],
   )
 
   useEffect(() => {
@@ -301,7 +318,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         <div className="color-mode-toggle" role="radiogroup" aria-label="Group by">
-          {(['team', 'driver', 'manufacturer'] as const).map((g) => (
+          {(['team', 'driver', 'manufacturer', 'car'] as const).map((g) => (
             <button key={g} type="button" className={groupBy === g ? 'active' : ''} onClick={() => setGroupBy(g)}>
               {g[0].toUpperCase() + g.slice(1)}
             </button>
@@ -327,8 +344,25 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
         </label>
       </div>
       <div className="chart-controls">
-        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
+        <EntityFilter
+          items={carOptions}
+          selection={carSelection}
+          onChange={setCarSelection}
+          addLabel="Add car"
+          resetLabel="Show all cars"
+        />
       </div>
+      {groupBy === 'driver' && (
+        <div className="chart-controls">
+          <EntityFilter
+            items={driverOptions}
+            selection={driverSelection}
+            onChange={setDriverSelection}
+            addLabel="Add driver"
+            resetLabel="Show all drivers"
+          />
+        </div>
+      )}
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
     </div>
   )

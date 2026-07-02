@@ -244,6 +244,38 @@ header h1 {
   border-color: var(--axis, #c3c2b7);
 }
 
+.entity-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.entity-filter-add {
+  min-width: 200px;
+}
+
+.entity-filter-reset {
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #898781);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 0 8px;
+}
+
+.entity-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  max-height: 84px;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+
 .lap-range {
   display: flex;
   align-items: center;
