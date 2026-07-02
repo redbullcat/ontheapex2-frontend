@@ -155,3 +155,35 @@ header h1 {
   margin-right: 6px;
   vertical-align: middle;
 }
+
+.car-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.car-picker-add {
+  min-width: 200px;
+}
+
+.car-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.car-picker-chip {
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  font-size: 13px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.car-picker-chip:hover {
+  border-color: var(--axis, #c3c2b7);
+}

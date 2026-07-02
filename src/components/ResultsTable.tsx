@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { LapRead } from '../api/types'
-import { getTeamColor } from '../lib/teamColors'
+import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 

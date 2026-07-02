@@ -79,35 +79,42 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${f(0)}${f(8)}${f(4)}`
 }
 
-function fallbackColor(team: string): string {
-  // FNV-1a hash to a stable hue so an unlisted team still gets a unique,
-  // deterministic color (same name -> same hue every render).
+// FNV-1a hash to a stable hue so any name (team, driver, manufacturer) not
+// in a manual map still gets a unique, deterministic color — same name ->
+// same hue every render, with no coordination needed across components.
+const entityColorCache = new Map<string, string>()
+
+export function getEntityColor(name: string): string {
+  const cached = entityColorCache.get(name)
+  if (cached) return cached
   let hash = 0x811c9dc5
-  for (let i = 0; i < team.length; i++) {
-    hash ^= team.charCodeAt(i)
+  for (let i = 0; i < name.length; i++) {
+    hash ^= name.charCodeAt(i)
     hash = Math.imul(hash, 0x01000193)
   }
   const unsigned = hash >>> 0
   const hue = (unsigned & 0xffff) / 0x10000
   const sat = 0.65 + ((unsigned >>> 16) & 0xff) / 255 / 5
   const light = 0.5 + ((unsigned >>> 8) & 0xff) / 255 * 0.15
-  return hslToHex(hue, sat, light)
+  const color = hslToHex(hue, sat, light)
+  entityColorCache.set(name, color)
+  return color
 }
 
-const resolvedCache = new Map<string, string>()
+const resolvedTeamCache = new Map<string, string>()
 
 export function getTeamColor(team: string | null | undefined): string {
-  if (!team) return fallbackColor('Unknown')
-  const cached = resolvedCache.get(team)
+  if (!team) return getEntityColor('Unknown')
+  const cached = resolvedTeamCache.get(team)
   if (cached) return cached
   const lower = team.toLowerCase()
   for (const [key, color] of TEAM_COLORS) {
     if (lower.includes(key.toLowerCase())) {
-      resolvedCache.set(team, color)
+      resolvedTeamCache.set(team, color)
       return color
     }
   }
-  const fallback = fallbackColor(team)
-  resolvedCache.set(team, fallback)
+  const fallback = getEntityColor(team)
+  resolvedTeamCache.set(team, fallback)
   return fallback
 }

@@ -81,3 +81,16 @@ export interface LapRead {
   manufacturer: string | null
   flag_at_fl: string | null
 }
+
+export interface Stint {
+  car_number: string
+  team: string | null
+  manufacturer: string | null
+  class: string | null
+  drivers: string
+  start_lap: number
+  end_lap: number
+  lap_count: number
+  avg_lap_seconds: number | null
+  best_lap_seconds: number | null
+}
