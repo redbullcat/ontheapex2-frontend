@@ -31,6 +31,30 @@ header h1 {
   top: 24px;
 }
 
+.sidebar-collapsed {
+  flex: none;
+  position: sticky;
+  top: 24px;
+}
+
+.sidebar-toggle {
+  align-self: flex-end;
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-muted, #898781);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  color: var(--text, #52514e);
+  border-color: var(--axis, #c3c2b7);
+}
+
 .main {
   flex: 1;
   min-width: 0;
@@ -46,6 +70,10 @@ header h1 {
     flex-direction: row;
     flex-wrap: wrap;
     position: static;
+  }
+
+  .sidebar .sidebar-toggle {
+    order: -1;
   }
 }
 

@@ -6,6 +6,8 @@ interface Option {
 }
 
 export function Sidebar({
+  open,
+  onToggle,
   series,
   seriesValue,
   onSeriesChange,
@@ -23,6 +25,8 @@ export function Sidebar({
   onSessionChange,
   sessionDisabled,
 }: {
+  open: boolean
+  onToggle: () => void
   series: Option[]
   seriesValue: string
   onSeriesChange: (v: string) => void
@@ -40,8 +44,21 @@ export function Sidebar({
   onSessionChange: (v: string) => void
   sessionDisabled: boolean
 }) {
+  if (!open) {
+    return (
+      <div className="sidebar-collapsed">
+        <button type="button" className="sidebar-toggle" onClick={onToggle} title="Show sidebar" aria-label="Show sidebar">
+          »
+        </button>
+      </div>
+    )
+  }
+
   return (
     <aside className="sidebar">
+      <button type="button" className="sidebar-toggle" onClick={onToggle} title="Hide sidebar" aria-label="Hide sidebar">
+        «
+      </button>
       <Select label="Series" value={seriesValue} options={series} onChange={onSeriesChange} disabled={seriesDisabled} />
       <Select label="Year" value={yearValue} options={years} onChange={onYearChange} disabled={yearDisabled} />
       <Select label="Event" value={eventValue} options={events} onChange={onEventChange} disabled={eventDisabled} />

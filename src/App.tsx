@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions, getStints } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Sidebar } from './components/Sidebar'
@@ -20,12 +20,38 @@ const TABS: Tab[] = [
   { id: 'stints', label: 'Stints' },
 ]
 
+// Selections round-trip through the URL (mirroring the Streamlit app's
+// st.query_params) so a refresh or a shared link resumes the same view
+// instead of dropping back to the empty pickers.
+function readParam(name: string): string {
+  return new URLSearchParams(window.location.search).get(name) ?? ''
+}
+
 function App() {
-  const [seriesSlug, setSeriesSlug] = useState('')
-  const [year, setYear] = useState('')
-  const [eventId, setEventId] = useState('')
-  const [sessionId, setSessionId] = useState('')
-  const [activeTab, setActiveTab] = useState('results')
+  const [seriesSlug, setSeriesSlug] = useState(() => readParam('series'))
+  const [year, setYear] = useState(() => readParam('year'))
+  const [eventId, setEventId] = useState(() => readParam('event'))
+  const [sessionId, setSessionId] = useState(() => readParam('session'))
+  const [activeTab, setActiveTab] = useState(() => readParam('tab') || 'results')
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const stored = window.localStorage.getItem('sidebarOpen')
+    return stored === null ? true : stored === 'true'
+  })
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (seriesSlug) params.set('series', seriesSlug)
+    if (year) params.set('year', year)
+    if (eventId) params.set('event', eventId)
+    if (sessionId) params.set('session', sessionId)
+    if (activeTab !== 'results') params.set('tab', activeTab)
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname)
+  }, [seriesSlug, year, eventId, sessionId, activeTab])
+
+  useEffect(() => {
+    window.localStorage.setItem('sidebarOpen', String(sidebarOpen))
+  }, [sidebarOpen])
 
   const seriesState = useAsync(getSeries, [])
   const eventsState = useAsync(seriesSlug ? () => getEvents(seriesSlug) : null, [seriesSlug])
@@ -63,6 +89,8 @@ function App() {
 
       <div className="app-shell">
         <Sidebar
+          open={sidebarOpen}
+          onToggle={() => setSidebarOpen((v) => !v)}
           series={
             seriesState.status === 'success'
               ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
