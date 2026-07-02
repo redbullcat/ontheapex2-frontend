@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import type { HourlyPositionEntry, HourlyPositions } from '../api/types'
+import type { LapRead } from '../api/types'
 import { CLASS_VARS, OTHER_VAR, assignClassVars, CLASS_COLOR_CSS_VARS, CLASS_COLOR_CSS_VARS_DARK } from '../lib/classColors'
 import { getTeamColor } from '../lib/teamColors'
 import { ClassFilter } from './ClassFilter'
@@ -11,15 +11,18 @@ const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
 
 interface Point {
-  hour: number
-  position: number
   lap_number: number
-  elapsed_seconds: number
+  position: number
+  lap_time_seconds: number | null
 }
 
-interface RankedEntry extends HourlyPositionEntry {
+interface RankedLap {
+  car_number: string
   class: string
-  hour: number
+  team: string | null
+  lap_number: number
+  position: number
+  lap_time_seconds: number | null
 }
 
 interface CarSeries {
@@ -36,11 +39,11 @@ interface HoverState {
   cls: string
   team: string | null
   position: number
-  hour: number
   lap: number
+  lapTime: number | null
 }
 
-export function PositionChart({ data }: { data: HourlyPositions[] }) {
+export function LapPositionChart({ laps }: { laps: LapRead[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
@@ -59,22 +62,31 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     return () => ro.disconnect()
   }, [])
 
-  // Classes ordered by their best (lowest) overall position at the first
-  // hour, so the fastest class takes color slot 1 — deterministic without
-  // hardcoding series names. Derived from the full (unfiltered) data so a
-  // class's color/slot never changes when the filter narrows.
+  const lapsByNumber = useMemo(() => {
+    const m = new Map<number, LapRead[]>()
+    for (const lap of laps) {
+      const arr = m.get(lap.lap_number)
+      if (arr) arr.push(lap)
+      else m.set(lap.lap_number, [lap])
+    }
+    return m
+  }, [laps])
+
+  // Classes ordered by whichever appears fastest (min elapsed) on lap 1, so
+  // the leading class takes color slot 1 — stable across filter changes
+  // since it's derived from the full, unfiltered dataset.
   const allClasses = useMemo(() => {
+    const firstLap = [...lapsByNumber.keys()].sort((a, b) => a - b)[0]
+    const rows = firstLap !== undefined ? lapsByNumber.get(firstLap) ?? [] : []
     const bestAtStart = new Map<string, number>()
-    const firstHour = data[0]
-    if (firstHour) {
-      for (const p of firstHour.positions) {
-        const cls = p.class ?? 'Unknown'
-        const prev = bestAtStart.get(cls)
-        if (prev === undefined || p.position < prev) bestAtStart.set(cls, p.position)
-      }
+    for (const row of rows) {
+      if (row.elapsed_seconds == null) continue
+      const cls = row.class ?? 'Unknown'
+      const prev = bestAtStart.get(cls)
+      if (prev === undefined || row.elapsed_seconds < prev) bestAtStart.set(cls, row.elapsed_seconds)
     }
     return [...bestAtStart.entries()].sort((a, b) => a[1] - b[1]).map(([cls]) => cls)
-  }, [data])
+  }, [lapsByNumber])
 
   const classVar = useMemo(() => assignClassVars(allClasses), [allClasses])
 
@@ -83,60 +95,52 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     [classSelection, allClasses],
   )
 
-  // Re-rank within the selected classes: position is recomputed per hour
-  // from elapsed_seconds among only the entries whose class is selected, so
-  // filtering to one class shows that class's own P1..Pn running order.
-  const rankedByHour = useMemo(() => {
-    const m = new Map<number, RankedEntry[]>()
-    for (const hourEntry of data) {
-      const filtered = hourEntry.positions.filter((p) => activeClasses.has(p.class ?? 'Unknown'))
-      const sorted = [...filtered].sort((a, b) => a.elapsed_seconds - b.elapsed_seconds)
-      const ranked = sorted.map((p, i) => ({ ...p, class: p.class ?? 'Unknown', hour: hourEntry.hour, position: i + 1 }))
-      m.set(hourEntry.hour, ranked)
+  // Re-rank within the selected classes: for each lap, sort the selected
+  // cars by elapsed time and assign 1..N, same convention as the hourly
+  // chart and the original per-lap position matrix it was ported from.
+  const rankedByLap = useMemo(() => {
+    const m = new Map<number, RankedLap[]>()
+    for (const [lapNumber, rows] of lapsByNumber) {
+      const filtered = rows.filter((r) => r.elapsed_seconds != null && activeClasses.has(r.class ?? 'Unknown'))
+      const sorted = [...filtered].sort((a, b) => a.elapsed_seconds! - b.elapsed_seconds!)
+      const ranked = sorted.map((r, i) => ({
+        car_number: r.car_number,
+        class: r.class ?? 'Unknown',
+        team: r.team,
+        lap_number: lapNumber,
+        position: i + 1,
+        lap_time_seconds: r.lap_time_seconds,
+      }))
+      m.set(lapNumber, ranked)
     }
     return m
-  }, [data, activeClasses])
+  }, [lapsByNumber, activeClasses])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
-    for (const ranked of rankedByHour.values()) {
+    for (const ranked of rankedByLap.values()) {
       for (const p of ranked) {
         let car = byCar.get(p.car_number)
         if (!car) {
           car = { car_number: p.car_number, class: p.class, team: p.team, points: [] }
           byCar.set(p.car_number, car)
         }
-        car.points.push({
-          hour: p.hour,
-          position: p.position,
-          lap_number: p.lap_number,
-          elapsed_seconds: p.elapsed_seconds,
-        })
+        car.points.push({ lap_number: p.lap_number, position: p.position, lap_time_seconds: p.lap_time_seconds })
       }
     }
-    for (const car of byCar.values()) car.points.sort((a, b) => a.hour - b.hour)
+    for (const car of byCar.values()) car.points.sort((a, b) => a.lap_number - b.lap_number)
     return [...byCar.values()]
-  }, [rankedByHour])
+  }, [rankedByLap])
 
-  const { maxHour, maxPosition } = useMemo(() => {
-    let maxHour = 0
+  const { maxLap, maxPosition } = useMemo(() => {
+    let maxLap = 0
     let maxPosition = 1
-    for (const [hour, ranked] of rankedByHour) {
-      maxHour = Math.max(maxHour, hour)
+    for (const [lapNumber, ranked] of rankedByLap) {
+      maxLap = Math.max(maxLap, lapNumber)
       for (const p of ranked) maxPosition = Math.max(maxPosition, p.position)
     }
-    return { maxHour, maxPosition }
-  }, [rankedByHour])
-
-  const positionsByHourAndCar = useMemo(() => {
-    const m = new Map<number, Map<string, RankedEntry>>()
-    for (const [hour, ranked] of rankedByHour) {
-      const inner = new Map<string, RankedEntry>()
-      for (const p of ranked) inner.set(p.car_number, p)
-      m.set(hour, inner)
-    }
-    return m
-  }, [rankedByHour])
+    return { maxLap, maxPosition }
+  }, [rankedByLap])
 
   const strokeColor = useCallback(
     (car: { class: string; team: string | null }) =>
@@ -156,7 +160,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     const innerHeight = PLOT_HEIGHT - MARGIN.top - MARGIN.bottom
     svg.attr('width', width).attr('height', PLOT_HEIGHT)
 
-    const x = d3.scaleLinear().domain([0, maxHour]).range([0, innerWidth])
+    const x = d3.scaleLinear().domain([1, maxLap]).range([0, innerWidth])
     const y = d3.scaleLinear().domain([1, maxPosition]).range([0, innerHeight])
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
@@ -176,7 +180,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
 
     const line = d3
       .line<Point>()
-      .x((d) => x(d.hour))
+      .x((d) => x(d.lap_number))
       .y((d) => y(d.position))
       .curve(d3.curveLinear)
 
@@ -195,20 +199,18 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
 
-    // Direct label: each selected class's leader (lowest position) at the
-    // final hour. The dot carries color identity; the label stays in ink.
-    const finalHour = positionsByHourAndCar.get(maxHour)
-    if (finalHour) {
+    const finalLap = rankedByLap.get(maxLap)
+    if (finalLap) {
       const leaders = [...activeClasses]
         .map((cls) => {
-          let best: RankedEntry | null = null
-          for (const entry of finalHour.values()) {
+          let best: RankedLap | null = null
+          for (const entry of finalLap) {
             if (entry.class !== cls) continue
             if (!best || entry.position < best.position) best = entry
           }
           return best
         })
-        .filter((e): e is RankedEntry => e !== null)
+        .filter((e): e is RankedLap => e !== null)
         .sort((a, b) => a.position - b.position)
 
       const minGap = 14
@@ -245,8 +247,8 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
 
     const xAxis = d3
       .axisBottom(x)
-      .ticks(Math.max(2, Math.min(maxHour + 1, Math.floor(innerWidth / 60))))
-      .tickFormat((d) => `H${d}`)
+      .ticks(Math.max(2, Math.min(maxLap, Math.floor(innerWidth / 60))))
+      .tickFormat((d) => `L${d}`)
       .tickSizeOuter(0)
 
     g.append('g')
@@ -263,9 +265,6 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       .call((sel) => sel.selectAll('.tick line').remove())
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
 
-    // Crosshair + nearest-car hover: with many overlapping lines a per-mark
-    // hit target isn't viable, so the pointer's Y picks the nearest car at
-    // the snapped hour instead (a 1-D nearest-point layer).
     const crosshair = g
       .append('line')
       .attr('y1', 0)
@@ -285,15 +284,15 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     overlay
       .on('mousemove', (event: MouseEvent) => {
         const [mx, my] = d3.pointer(event, g.node())
-        const hourAtX = Math.round(x.invert(mx))
-        const clampedHour = Math.max(0, Math.min(maxHour, hourAtX))
-        const hourData = positionsByHourAndCar.get(clampedHour)
-        if (!hourData || hourData.size === 0) return
+        const lapAtX = Math.round(x.invert(mx))
+        const clampedLap = Math.max(1, Math.min(maxLap, lapAtX))
+        const lapData = rankedByLap.get(clampedLap)
+        if (!lapData || lapData.length === 0) return
 
         const positionAtY = y.invert(my)
-        let nearest: RankedEntry | null = null
+        let nearest: RankedLap | null = null
         let nearestDist = Infinity
-        for (const entry of hourData.values()) {
+        for (const entry of lapData) {
           const d = Math.abs(entry.position - positionAtY)
           if (d < nearestDist) {
             nearestDist = d
@@ -303,7 +302,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         if (!nearest) return
         const nearestCar = nearest.car_number
 
-        crosshair.style('display', null).attr('x1', x(clampedHour)).attr('x2', x(clampedHour))
+        crosshair.style('display', null).attr('x1', x(clampedLap)).attr('x2', x(clampedLap))
         pathsSelRef.current
           ?.attr('opacity', (d) => (d.car_number === nearestCar ? 1 : 0.25))
           .attr('stroke-width', (d) => (d.car_number === nearestCar ? 3 : 2))
@@ -317,8 +316,8 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
           cls: nearest.class,
           team: nearest.team,
           position: nearest.position,
-          hour: clampedHour,
           lap: nearest.lap_number,
+          lapTime: nearest.lap_time_seconds,
         })
       })
       .on('mouseleave', () => {
@@ -326,7 +325,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, maxHour, maxPosition, positionsByHourAndCar])
+  }, [cars, width, activeClasses, strokeColor, maxLap, maxPosition, rankedByLap])
 
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
@@ -414,7 +413,8 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
             <strong>#{hover.car}</strong> {hover.team ? `— ${hover.team}` : ''}
           </div>
           <div>
-            P{hover.position} · {hover.cls} · Hour {hover.hour} · Lap {hover.lap}
+            P{hover.position} · {hover.cls} · Lap {hover.lap}
+            {hover.lapTime != null ? ` · ${hover.lapTime.toFixed(3)}s` : ''}
           </div>
         </div>
       )}
