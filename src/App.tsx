@@ -10,6 +10,7 @@ import { LeadHistoryPanel } from './components/LeadHistoryPanel'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
 import { ResultsTable } from './components/ResultsTable'
+import { SessionResultsTable } from './components/SessionResultsTable'
 import { PaceChart } from './components/PaceChart'
 import { GapEvolutionChart } from './components/GapEvolutionChart'
 import { DriverHistoryChart } from './components/DriverHistoryChart'
@@ -44,10 +45,13 @@ const RACE_TABS: Tab[] = [
 ]
 
 // Practice/Qualifying sessions have no fixed finishing order, so the
-// race-classification charts (Overview/Results/Position) don't apply —
-// Pace, Battle (gap evolution still works as a pace-over-laps comparison),
-// Sectors, Long Runs, Pit Stops and Stints are all still meaningful without one.
+// race-classification charts (Overview/Position) don't apply — Results
+// still works but ranks by fastest lap instead of laps-completed/elapsed
+// time (see SessionResultsTable). Pace, Battle (gap evolution still works
+// as a pace-over-laps comparison), Sectors, Long Runs, Pit Stops and
+// Stints are all still meaningful without a fixed finish too.
 const NON_RACE_TABS: Tab[] = [
+  { id: 'results', label: 'Results' },
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
   { id: 'sectors', label: 'Sectors' },
@@ -278,7 +282,7 @@ function App() {
                 </section>
               )}
 
-              {activeTab === 'results' && (
+              {activeTab === 'results' && sessionSection === 'race' && (
                 <>
                   <section className="chart-section">
                     <h2>Race stats</h2>
@@ -311,6 +315,32 @@ function App() {
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
                         <ResultsTable laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No results for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Fastest laps</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading fastest laps…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <FastestLapsTable laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+                </>
+              )}
+
+              {activeTab === 'results' && sessionSection !== 'race' && (
+                <>
+                  <section className="chart-section">
+                    <h2>Results</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <SessionResultsTable laps={lapsState.data} />
                       ) : (
                         <p className="hint">No results for this session.</p>
                       ))}
