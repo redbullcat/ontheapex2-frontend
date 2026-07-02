@@ -68,6 +68,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [showFlags, setShowFlags] = useState(false)
+  const [referenceCarOverride, setReferenceCarOverride] = useState<string | null>(null)
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
 
@@ -137,31 +138,34 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     [laps, activeClasses, activeCars, effectiveLapRange],
   )
 
-  // Reference car: the classification leader of the selection (most laps
-  // completed, ties broken by lowest elapsed time at that lap), held fixed
-  // for the entire chart. The original Streamlit chart picked whichever car
-  // had the lowest max cumulative time, which relied on every car sharing
-  // the same lap-range window (a slider clamped them all to one span); here
-  // cars can have different final laps, so that rule would just pick
-  // whoever raced (and thus accumulated less time) the least — e.g. a
-  // car that retired early. Using the same classification rule as the
-  // results table avoids that trap.
-  const { referenceCar, gapByLapAndCar, minLap, maxLap, maxGap } = useMemo(() => {
+  // Reference car: defaults to the classification leader of the selection
+  // (most laps completed, ties broken by lowest elapsed time at that lap),
+  // but the user can pin it to any car via referenceCarOverride. The
+  // original Streamlit chart picked whichever car had the lowest max
+  // cumulative time, which relied on every car sharing the same lap-range
+  // window (a slider clamped them all to one span); here cars can have
+  // different final laps, so that rule would just pick whoever raced (and
+  // thus accumulated less time) the least — e.g. a car that retired early.
+  // Using the same classification rule as the results table avoids that trap.
+  const { referenceCar, isAutoReference, gapByLapAndCar, minLap, maxLap, minGap, maxGap } = useMemo(() => {
     const lastLapByCar = new Map<string, LapRead>()
     for (const lap of filtered) {
       const prev = lastLapByCar.get(lap.car_number)
       if (!prev || lap.lap_number > prev.lap_number) lastLapByCar.set(lap.car_number, lap)
     }
-    let referenceCar: string | null = null
+    let autoReferenceCar: string | null = null
     let bestLap = -1
     let bestElapsed = Infinity
     for (const [car, lastLap] of lastLapByCar) {
       if (lastLap.lap_number > bestLap || (lastLap.lap_number === bestLap && lastLap.elapsed_seconds! < bestElapsed)) {
         bestLap = lastLap.lap_number
         bestElapsed = lastLap.elapsed_seconds!
-        referenceCar = car
+        autoReferenceCar = car
       }
     }
+
+    const isAutoReference = !referenceCarOverride || !lastLapByCar.has(referenceCarOverride)
+    const referenceCar = isAutoReference ? autoReferenceCar : referenceCarOverride
 
     const refByLap = new Map<number, number>()
     if (referenceCar) {
@@ -173,7 +177,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     const gapByLapAndCar = new Map<number, Map<string, { gap: number; team: string | null; class: string }>>()
     let minLap = Infinity
     let maxLap = 0
-    let maxGap = 0
+    let minGap = Infinity
+    let maxGap = -Infinity
     for (const lap of filtered) {
       const refTime = refByLap.get(lap.lap_number)
       if (refTime === undefined) continue
@@ -186,11 +191,20 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       inner.set(lap.car_number, { gap, team: lap.team, class: lap.class ?? 'Unknown' })
       minLap = Math.min(minLap, lap.lap_number)
       maxLap = Math.max(maxLap, lap.lap_number)
+      minGap = Math.min(minGap, gap)
       maxGap = Math.max(maxGap, gap)
     }
 
-    return { referenceCar, gapByLapAndCar, minLap: minLap === Infinity ? 1 : minLap, maxLap, maxGap }
-  }, [filtered])
+    return {
+      referenceCar,
+      isAutoReference,
+      gapByLapAndCar,
+      minLap: minLap === Infinity ? 1 : minLap,
+      maxLap,
+      minGap: minGap === Infinity ? 0 : minGap,
+      maxGap: maxGap === -Infinity ? 0 : maxGap,
+    }
+  }, [filtered, referenceCarOverride])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
@@ -219,6 +233,11 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const yScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
   const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
   const markersSelRef = useRef<d3.Selection<SVGCircleElement, CarSeries, SVGGElement, unknown> | null>(null)
+  const gridlinesGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
+  const yAxisGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
+  const endLabelsGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
+  const lineGenRef = useRef<d3.Line<Point> | null>(null)
+  const overallMaxAbsRef = useRef(1)
 
   const playback = usePlayback(minLap, maxLap, 3)
 
@@ -232,7 +251,13 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     svg.attr('width', width).attr('height', PLOT_HEIGHT)
 
     const x = d3.scaleLinear().domain([minLap, maxLap]).range([0, innerWidth])
-    const y = d3.scaleLinear().domain([0, maxGap || 1]).range([0, innerHeight])
+    // Symmetric around zero (0 sits at vertical center) rather than pinned
+    // to the top — matches the usual gap-to-reference chart convention,
+    // and lets a manually chosen reference car show both ahead (-) and
+    // behind (+) gaps.
+    const overallMaxAbs = Math.max(Math.abs(minGap), Math.abs(maxGap), 1)
+    overallMaxAbsRef.current = overallMaxAbs
+    const y = d3.scaleLinear().domain([overallMaxAbs, -overallMaxAbs]).range([0, innerHeight])
     xScaleRef.current = x
     yScaleRef.current = y
 
@@ -253,8 +278,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     }
 
     const yTicks = y.ticks(6)
-    g.append('g')
-      .attr('class', 'gridlines')
+    const gridlinesG = g.append('g').attr('class', 'gridlines')
+    gridlinesG
       .selectAll('line')
       .data(yTicks)
       .join('line')
@@ -262,14 +287,16 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       .attr('x2', innerWidth)
       .attr('y1', (d) => y(d))
       .attr('y2', (d) => y(d))
-      .attr('stroke', 'var(--grid)')
-      .attr('stroke-width', 1)
+      .attr('stroke', (d) => (d === 0 ? 'var(--axis)' : 'var(--grid)'))
+      .attr('stroke-width', (d) => (d === 0 ? 1.5 : 1))
+    gridlinesGRef.current = gridlinesG
 
     const line = d3
       .line<Point>()
       .x((d) => x(d.lap_number))
       .y((d) => y(d.gap))
       .curve(d3.curveLinear)
+    lineGenRef.current = line
 
     // Playback reveal clip: the car-lines group is clipped to a rect whose
     // width tracks the replay position, so scrubbing/playing only has to
@@ -342,6 +369,11 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       }
 
       const endLabels = g.append('g').attr('class', 'end-labels')
+      endLabelsGRef.current = endLabels
+      // Final-classification labels only make sense once the replay has
+      // reached the end (they're computed from the last lap in range) —
+      // hidden mid-playback, shown at the static default/fully-revealed view.
+      endLabels.style('display', playback.current < maxLap ? 'none' : 'inline')
 
       endLabels
         .selectAll('circle')
@@ -380,12 +412,18 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
 
-    const yAxis = d3.axisLeft(y).tickValues(yTicks).tickFormat((d) => `+${d}s`).tickSizeOuter(0)
-    g.append('g')
+    const yAxis = d3
+      .axisLeft(y)
+      .tickValues(yTicks)
+      .tickFormat((d) => `${Number(d) > 0 ? '+' : ''}${d}s`)
+      .tickSizeOuter(0)
+    const yAxisG = g
+      .append('g')
       .call(yAxis)
       .call((sel) => sel.select('.domain').remove())
       .call((sel) => sel.selectAll('.tick line').remove())
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
+    yAxisGRef.current = yAxisG
 
     const crosshair = g
       .append('line')
@@ -448,16 +486,62 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, minGap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods])
 
-  // Cheap per-frame update: just the clip-rect width and marker positions,
-  // driven by playback.current — deliberately not touching the dependency
-  // list above so playback never triggers the expensive full chart rebuild.
+  // Cheap per-frame update: the clip-rect width, marker positions, and a
+  // "progressive zoom" y-domain rescaled to whatever's been revealed so far
+  // — small early-race gaps aren't squashed by a scale sized for a later
+  // pit-stop spike. Deliberately not touching the dependency list on the
+  // effect above so playback never triggers the expensive full chart rebuild;
+  // this only updates existing attributes (no elements added/removed).
   useEffect(() => {
     const x = xScaleRef.current
     const y = yScaleRef.current
-    if (!x || !y) return
+    const line = lineGenRef.current
+    if (!x || !y || !line) return
     const current = playback.current
+
+    let revealedMin = Infinity
+    let revealedMax = -Infinity
+    for (const car of cars) {
+      for (const p of car.points) {
+        if (p.lap_number <= current) {
+          revealedMin = Math.min(revealedMin, p.gap)
+          revealedMax = Math.max(revealedMax, p.gap)
+        }
+      }
+    }
+    const floor = overallMaxAbsRef.current * 0.08
+    const revealedMaxAbs =
+      revealedMin === Infinity ? floor : Math.max(Math.abs(revealedMin), Math.abs(revealedMax), floor)
+    y.domain([revealedMaxAbs, -revealedMaxAbs])
+
+    const yTicks = y.ticks(6)
+    gridlinesGRef.current
+      ?.selectAll<SVGLineElement, number>('line')
+      .data(yTicks)
+      .join('line')
+      .attr('x1', 0)
+      .attr('x2', x.range()[1])
+      .attr('y1', (d) => y(d))
+      .attr('y2', (d) => y(d))
+      .attr('stroke', (d) => (d === 0 ? 'var(--axis)' : 'var(--grid)'))
+      .attr('stroke-width', (d) => (d === 0 ? 1.5 : 1))
+
+    yAxisGRef.current
+      ?.call(
+        d3
+          .axisLeft(y)
+          .tickValues(yTicks)
+          .tickFormat((d) => `${Number(d) > 0 ? '+' : ''}${d}s`)
+          .tickSizeOuter(0),
+      )
+      .call((sel) => sel.select('.domain').remove())
+      .call((sel) => sel.selectAll('.tick line').remove())
+      .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
+
+    pathsSelRef.current?.attr('d', (d) => line(d.points))
+
     clipRectRef.current?.attr('width', Math.max(0, x(current) + 8))
     const showMarkers = current < maxLap
     markersSelRef.current
@@ -467,7 +551,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         const v = gapAtLap(d.points, current)
         return v == null ? -9999 : y(v)
       })
-  }, [playback.current, maxLap])
+    endLabelsGRef.current?.style('display', showMarkers ? 'none' : 'inline')
+  }, [playback.current, maxLap, cars])
 
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
@@ -553,6 +638,14 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .gap-evolution-chart .tooltip strong {
           font-size: 13px;
         }
+        .gap-evolution-chart .ref-car-picker select {
+          font-size: 13px;
+          padding: 3px 4px;
+          border-radius: 4px;
+          border: 1px solid var(--grid);
+          background: transparent;
+          color: var(--text-primary);
+        }
       `}</style>
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
@@ -561,6 +654,20 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         <label className="class-filter-item">
           <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
           Show flag periods
+        </label>
+        <label className="class-filter-item ref-car-picker">
+          Reference
+          <select
+            value={referenceCarOverride ?? ''}
+            onChange={(e) => setReferenceCarOverride(e.target.value || null)}
+          >
+            <option value="">Auto (race leader)</option>
+            {carOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </label>
         <ChartExportButtons svgRef={svgRef} filename="gap_evolution" />
       </div>
@@ -604,7 +711,10 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       {cars.length === 0 ? (
         <p className="hint">No lap data for this selection.</p>
       ) : (
-        <p className="hint">Gap to #{referenceCar} — the fastest car across this selection.</p>
+        <p className="hint">
+          Gap to #{referenceCar}
+          {isAutoReference ? ' — the race leader across this selection.' : ' (manually selected reference car).'}
+        </p>
       )}
       <svg ref={svgRef} />
       {hover && (
@@ -613,7 +723,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
             <strong>#{hover.car}</strong> {hover.team ? `— ${getTeamDisplayName(hover.team)}` : ''}
           </div>
           <div>
-            +{hover.gap.toFixed(3)}s · {hover.cls} · Lap {hover.lap}
+            {hover.gap > 0 ? '+' : ''}
+            {hover.gap.toFixed(3)}s · {hover.cls} · Lap {hover.lap}
           </div>
         </div>
       )}
