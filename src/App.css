@@ -28,6 +28,10 @@ header h1 {
   min-width: 220px;
 }
 
+.field-narrow {
+  min-width: 100px;
+}
+
 .field-label {
   font-size: 12px;
   color: var(--text-muted, #898781);
