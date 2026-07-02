@@ -51,8 +51,18 @@
   --text-secondary: #52514e;
 }
 
+html,
 body {
   margin: 0;
+  /* D3 charts size their <svg> from a ResizeObserver measurement that
+     lands one frame after mount, seeded with a fixed default width in the
+     meantime. On mobile that transient oversized frame is enough for the
+     browser to widen its layout viewport to fit it and never shrink back
+     — the exact "everything is tiny, have to scroll sideways" symptom.
+     This keeps the page itself from ever growing wider than the viewport;
+     elements with their own intentional horizontal scroller (.table-scroll)
+     are unaffected since that scrolling happens on a child, not the page. */
+  overflow-x: hidden;
 }
 
 h1,

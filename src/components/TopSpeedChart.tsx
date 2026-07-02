@@ -5,8 +5,10 @@ import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { truncateLabel } from '../lib/textTruncate'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
+const MARGIN_LEFT_MIN = 80
 const ROW_HEIGHT = 22
 const ROW_GAP = 6
 
@@ -91,7 +93,8 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
     svg.selectAll('*').remove()
     if (cars.length === 0 || width === 0) return
 
-    const innerWidth = width - MARGIN.left - MARGIN.right
+    const marginLeft = Math.max(MARGIN_LEFT_MIN, Math.min(MARGIN.left, width * 0.42))
+    const innerWidth = width - marginLeft - MARGIN.right
     const plotHeight = cars.length * (ROW_HEIGHT + ROW_GAP)
     const height = plotHeight + MARGIN.top + MARGIN.bottom
     svg.attr('width', width).attr('height', height)
@@ -105,7 +108,7 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
       .range([0, plotHeight])
       .paddingInner(ROW_GAP / (ROW_HEIGHT + ROW_GAP))
 
-    const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+    const g = svg.append('g').attr('transform', `translate(${marginLeft},${MARGIN.top})`)
 
     const xTicks = x.ticks(6)
     g.append('g')
@@ -130,7 +133,10 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => `#${d.car} — ${getTeamDisplayName(d.team)}`)
+      .text((d) => {
+        const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
+        return marginLeft < MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
+      })
 
     g.append('g')
       .selectAll('rect')
