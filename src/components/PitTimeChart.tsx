@@ -51,11 +51,14 @@ function computePitStops(laps: LapRead[], activeClasses: Set<string>): PitStop[]
     const greenMedian = d3.median(greenLaps) ?? median
     if (greenMedian === 0) continue
 
-    const byLapNumber = new Map(sorted.map((r) => [r.lap_number, r]))
+    // Keyed by session too — lap_number resets to 1 each session, so a
+    // combined multi-session view must never pair an in-lap from one
+    // session with a same-numbered lap from another.
+    const byLapNumber = new Map(sorted.map((r) => [`${r.session_id}:${r.lap_number}`, r]))
     for (const row of sorted) {
       if (row.crossing_finish_line_in_pit !== 'B') continue
       if (row.lap_time_seconds == null) continue
-      const outLap = byLapNumber.get(row.lap_number + 1)
+      const outLap = byLapNumber.get(`${row.session_id}:${row.lap_number + 1}`)
       if (!outLap || outLap.lap_time_seconds == null) continue
       // A caution/safety-car period can make the in- or out-lap itself
       // genuinely very slow (bunched-up traffic), which the raw formula

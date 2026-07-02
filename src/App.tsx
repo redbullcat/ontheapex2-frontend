@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions, getStints } from './api/client'
+import {
+  getCombinedLaps,
+  getEvents,
+  getHourlyPositions,
+  getLaps,
+  getLeadHistory,
+  getSeries,
+  getSessions,
+  getStints,
+} from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Sidebar, type Theme } from './components/Sidebar'
 import { Tabs, type Tab } from './components/Tabs'
 import { SessionTypeTabs } from './components/SessionTypeTabs'
 import { bucketFor, type SessionBucket } from './lib/sessionBucket'
+import { parseCombinedSessionId } from './lib/combinedSession'
 import type { SessionSummary } from './api/types'
 import { LeadHistoryPanel } from './components/LeadHistoryPanel'
 import { PositionChart } from './components/PositionChart'
@@ -110,16 +120,45 @@ function App() {
   const seriesState = useAsync(getSeries, [])
   const eventsState = useAsync(seriesSlug ? () => getEvents(seriesSlug) : null, [seriesSlug])
   const sessionsState = useAsync(eventId ? () => getSessions(Number(eventId)) : null, [eventId])
+
+  const combinedBucket = parseCombinedSessionId(sessionId)
+
+  const sessionsByBucket = useMemo(() => {
+    const buckets: Record<SessionBucket, SessionSummary[]> = { practice: [], qualifying: [], race: [] }
+    if (sessionsState.status === 'success') {
+      for (const s of sessionsState.data) buckets[bucketFor(s.type)].push(s)
+    }
+    return buckets
+  }, [sessionsState])
+
+  // Lead history and hourly positions are race-only concepts (a race has a
+  // running order to lead/rank; practice and qualifying don't) — "combine
+  // all Practice/Qualifying" never needs either, so skip fetching them.
   const leadHistoryState = useAsync(
-    sessionId ? () => getLeadHistory(Number(sessionId)) : null,
-    [sessionId],
+    sessionId && !combinedBucket ? () => getLeadHistory(Number(sessionId)) : null,
+    [sessionId, combinedBucket],
   )
   const positionsState = useAsync(
-    sessionId ? () => getHourlyPositions(Number(sessionId)) : null,
-    [sessionId],
+    sessionId && !combinedBucket ? () => getHourlyPositions(Number(sessionId)) : null,
+    [sessionId, combinedBucket],
   )
-  const lapsState = useAsync(sessionId ? () => getLaps(Number(sessionId)) : null, [sessionId])
-  const stintsState = useAsync(sessionId ? () => getStints(Number(sessionId)) : null, [sessionId])
+  const lapsState = useAsync(
+    combinedBucket
+      ? () => getCombinedLaps(sessionsByBucket[combinedBucket].map((s) => s.id))
+      : sessionId
+        ? () => getLaps(Number(sessionId))
+        : null,
+    [sessionId, combinedBucket, sessionsByBucket],
+  )
+  // Stint Gantt charts plot against raw lap number, which resets to 1 each
+  // session — combining sessions would draw overlapping bars from
+  // different sessions at the same x position, so that tab stays
+  // single-session only (see the "stints" tab render below) and this
+  // fetch is skipped entirely in combined mode.
+  const stintsState = useAsync(
+    sessionId && !combinedBucket ? () => getStints(Number(sessionId)) : null,
+    [sessionId, combinedBucket],
+  )
 
   const knownTeams = useMemo(() => {
     if (lapsState.status !== 'success') return []
@@ -144,29 +183,24 @@ function App() {
     [eventsForYear, eventId],
   )
 
-  const sessionsByBucket = useMemo(() => {
-    const buckets: Record<SessionBucket, SessionSummary[]> = { practice: [], qualifying: [], race: [] }
-    if (sessionsState.status === 'success') {
-      for (const s of sessionsState.data) buckets[bucketFor(s.type)].push(s)
-    }
-    return buckets
-  }, [sessionsState])
-
   const currentSession = useMemo(
     () => (sessionsState.status === 'success' ? sessionsState.data.find((s) => String(s.id) === sessionId) : undefined),
     [sessionsState, sessionId],
   )
-  const sessionSection: SessionBucket | '' = currentSession ? bucketFor(currentSession.type) : ''
+  const sessionSection: SessionBucket | '' = combinedBucket || (currentSession ? bucketFor(currentSession.type) : '')
 
   // Default session once the event's sessions load: prefer Race, then
   // Qualifying, then Practice — but leave an already-valid selection (e.g.
-  // restored from the URL) alone.
+  // restored from the URL, including a combined-session id) alone.
   useEffect(() => {
     if (sessionsState.status !== 'success') return
-    if (sessionId && sessionsState.data.some((s) => String(s.id) === sessionId)) return
+    if (sessionId) {
+      if (sessionsState.data.some((s) => String(s.id) === sessionId)) return
+      if (combinedBucket && sessionsByBucket[combinedBucket].length > 0) return
+    }
     const preferred = sessionsByBucket.race[0] ?? sessionsByBucket.qualifying[0] ?? sessionsByBucket.practice[0]
     if (preferred) setSessionId(String(preferred.id))
-  }, [sessionsState, sessionsByBucket, sessionId])
+  }, [sessionsState, sessionsByBucket, sessionId, combinedBucket])
 
   const chartTabs = sessionSection === 'race' ? RACE_TABS : NON_RACE_TABS
 
@@ -438,13 +472,22 @@ function App() {
               {activeTab === 'battle' && (
                 <section className="chart-section">
                   <h2>Gap evolution</h2>
-                  {lapsState.status === 'loading' && <p className="hint">Loading gap data…</p>}
-                  {lapsState.status === 'success' &&
-                    (lapsState.data.length > 0 ? (
-                      <GapEvolutionChart laps={lapsState.data} />
-                    ) : (
-                      <p className="hint">No lap data for this session.</p>
-                    ))}
+                  {combinedBucket ? (
+                    <p className="hint">
+                      Gap evolution compares elapsed time within one continuous session, so it isn't meaningful
+                      across combined sessions — pick a single session above to use this chart.
+                    </p>
+                  ) : (
+                    <>
+                      {lapsState.status === 'loading' && <p className="hint">Loading gap data…</p>}
+                      {lapsState.status === 'success' &&
+                        (lapsState.data.length > 0 ? (
+                          <GapEvolutionChart laps={lapsState.data} />
+                        ) : (
+                          <p className="hint">No lap data for this session.</p>
+                        ))}
+                    </>
+                  )}
                 </section>
               )}
 
@@ -529,16 +572,25 @@ function App() {
               {activeTab === 'stints' && (
                 <section className="chart-section">
                   <h2>Driver stint history</h2>
-                  {(stintsState.status === 'loading' || lapsState.status === 'loading') && (
-                    <p className="hint">Loading stint data…</p>
+                  {combinedBucket ? (
+                    <p className="hint">
+                      Stint history is plotted against lap number, which restarts each session, so it can't be
+                      combined across sessions — pick a single session above to use this chart.
+                    </p>
+                  ) : (
+                    <>
+                      {(stintsState.status === 'loading' || lapsState.status === 'loading') && (
+                        <p className="hint">Loading stint data…</p>
+                      )}
+                      {stintsState.status === 'success' &&
+                        lapsState.status === 'success' &&
+                        (stintsState.data.length > 0 ? (
+                          <DriverHistoryChart stints={stintsState.data} laps={lapsState.data} />
+                        ) : (
+                          <p className="hint">No stint data for this session.</p>
+                        ))}
+                    </>
                   )}
-                  {stintsState.status === 'success' &&
-                    lapsState.status === 'success' &&
-                    (stintsState.data.length > 0 ? (
-                      <DriverHistoryChart stints={stintsState.data} laps={lapsState.data} />
-                    ) : (
-                      <p className="hint">No stint data for this session.</p>
-                    ))}
                 </section>
               )}
 

@@ -182,6 +182,11 @@ header h1 {
   border-color: var(--text-secondary, #52514e);
 }
 
+.session-pill-combined {
+  border-style: dashed;
+  font-weight: 600;
+}
+
 .field {
   display: flex;
   flex-direction: column;
