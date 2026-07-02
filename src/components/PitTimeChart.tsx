@@ -5,8 +5,10 @@ import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { truncateLabel } from '../lib/textTruncate'
 
 const BAR_MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
+const BAR_MARGIN_LEFT_MIN = 80
 const ROW_HEIGHT = 22
 const ROW_GAP = 6
 
@@ -149,7 +151,8 @@ export function PitTimeChart({ laps }: { laps: LapRead[] }) {
     svg.selectAll('*').remove()
     if (carStats.length === 0 || barWidth === 0) return
 
-    const innerWidth = barWidth - BAR_MARGIN.left - BAR_MARGIN.right
+    const marginLeft = Math.max(BAR_MARGIN_LEFT_MIN, Math.min(BAR_MARGIN.left, barWidth * 0.42))
+    const innerWidth = barWidth - marginLeft - BAR_MARGIN.right
     const plotHeight = carStats.length * (ROW_HEIGHT + ROW_GAP)
     const height = plotHeight + BAR_MARGIN.top + BAR_MARGIN.bottom
     svg.attr('width', barWidth).attr('height', height)
@@ -161,7 +164,7 @@ export function PitTimeChart({ laps }: { laps: LapRead[] }) {
       .range([0, plotHeight])
       .paddingInner(ROW_GAP / (ROW_HEIGHT + ROW_GAP))
 
-    const g = svg.append('g').attr('transform', `translate(${BAR_MARGIN.left},${BAR_MARGIN.top})`)
+    const g = svg.append('g').attr('transform', `translate(${marginLeft},${BAR_MARGIN.top})`)
 
     g.append('g')
       .selectAll('text')
@@ -173,7 +176,10 @@ export function PitTimeChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => `#${d.car} — ${getTeamDisplayName(d.team)}`)
+      .text((d) => {
+        const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
+        return marginLeft < BAR_MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
+      })
 
     g.append('g')
       .selectAll('rect')

@@ -8,8 +8,10 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
+import { truncateLabel } from '../lib/textTruncate'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
+const MARGIN_LEFT_MIN = 90
 const ROW_HEIGHT = 22
 const ROW_GAP = 6
 
@@ -185,7 +187,11 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
     svg.selectAll('*').remove()
     if (groups.length === 0 || width === 0) return
 
-    const innerWidth = width - MARGIN.left - MARGIN.right
+    // On a narrow phone the fixed label column would eat most of the
+    // available width and leave almost nothing for the plot — cap it
+    // proportionally instead, and truncate labels below to match.
+    const marginLeft = Math.max(MARGIN_LEFT_MIN, Math.min(MARGIN.left, width * 0.42))
+    const innerWidth = width - marginLeft - MARGIN.right
     const plotHeight = groups.length * (ROW_HEIGHT + ROW_GAP)
     const height = plotHeight + MARGIN.top + MARGIN.bottom
     svg.attr('width', width).attr('height', height)
@@ -200,7 +206,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
       .range([0, plotHeight])
       .paddingInner(ROW_GAP / (ROW_HEIGHT + ROW_GAP))
 
-    const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+    const g = svg.append('g').attr('transform', `translate(${marginLeft},${MARGIN.top})`)
 
     const xTicks = x.ticks(6)
     g.append('g')
@@ -225,7 +231,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => d.label)
+      .text((d) => (marginLeft < MARGIN.left ? truncateLabel(d.label, marginLeft - 14) : d.label))
 
     if (chartType === 'bar') {
       g.append('g')

@@ -6,6 +6,7 @@ import { CarPicker, type CarOption } from './CarPicker'
 import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 140 }
+const MARGIN_LEFT_MIN = 44
 const ROW_HEIGHT = 40
 const ROW_GAP = 12
 const SEGMENT_GAP = 2
@@ -182,14 +183,15 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
     svg.selectAll('*').remove()
     if (rows.length === 0 || width === 0) return
 
-    const innerWidth = width - MARGIN.left - MARGIN.right
+    const marginLeft = Math.max(MARGIN_LEFT_MIN, Math.min(MARGIN.left, width * 0.3))
+    const innerWidth = width - marginLeft - MARGIN.right
     const plotHeight = rows.length * (ROW_HEIGHT + ROW_GAP) - ROW_GAP
     const height = plotHeight + MARGIN.top + MARGIN.bottom
     svg.attr('width', width).attr('height', height)
 
     const x = d3.scaleLinear().domain([1, maxLap]).range([0, innerWidth])
 
-    const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+    const g = svg.append('g').attr('transform', `translate(${marginLeft},${MARGIN.top})`)
 
     rows.forEach((row, i) => {
       const rowY = i * (ROW_HEIGHT + ROW_GAP)
