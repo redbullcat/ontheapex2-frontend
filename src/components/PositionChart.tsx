@@ -90,7 +90,13 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     const m = new Map<number, RankedEntry[]>()
     for (const hourEntry of data) {
       const filtered = hourEntry.positions.filter((p) => activeClasses.has(p.class ?? 'Unknown'))
-      const sorted = [...filtered].sort((a, b) => a.elapsed_seconds - b.elapsed_seconds)
+      // Rank by laps completed first, elapsed time only breaks ties within the
+      // same lap count — a car stuck on a stale forward-filled snapshot after
+      // retiring (fewer laps, frozen low elapsed_seconds) must not outrank
+      // cars still racing just because its elapsed clock stopped early.
+      const sorted = [...filtered].sort(
+        (a, b) => b.lap_number - a.lap_number || a.elapsed_seconds - b.elapsed_seconds,
+      )
       const ranked = sorted.map((p, i) => ({ ...p, class: p.class ?? 'Unknown', hour: hourEntry.hour, position: i + 1 }))
       m.set(hourEntry.hour, ranked)
     }
