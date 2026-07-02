@@ -69,6 +69,17 @@ header h1 {
 @media (max-width: 720px) {
   .app-shell {
     flex-direction: column;
+    /* align-items: flex-start (set above for the desktop row layout, so
+       the sidebar and main column don't stretch to match each other's
+       height) has a different effect once flex-direction flips to
+       column: flex-start becomes a CROSS-axis alignment, and the cross
+       axis is now width. That stops .main from stretching to fill the
+       container and lets it size off its own content instead — which is
+       how a single fixed-width element deep inside (an SVG chart at its
+       pre-ResizeObserver default width, in practice) could pull the
+       entire page wider than the viewport. Force stretch back so .main
+       always fills the actual available width on narrow screens. */
+    align-items: stretch;
   }
 
   .sidebar {
@@ -80,6 +91,11 @@ header h1 {
 
   .sidebar .sidebar-toggle {
     order: -1;
+  }
+
+  .main {
+    min-width: 0;
+    max-width: 100%;
   }
 }
 
