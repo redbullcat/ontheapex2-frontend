@@ -7,8 +7,16 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'favicon-dark.svg', 'favicon-16x16.png', 'favicon-32x32.png', 'apple-touch-icon.png'],
+      // The previous config (generateSW, no skipWaiting/clientsClaim) shipped
+      // a caching service worker that could get stuck serving an old app
+      // shell after a deploy — the classic SW footgun, and it broke the app
+      // for real on a phone that had visited before. selfDestroying ships a
+      // SW whose only job is to unregister itself and clear every cache it
+      // finds, which un-sticks any device currently stuck on the old one.
+      // The web manifest (installability/home-screen icon) doesn't need an
+      // active service worker at all, so this keeps that while dropping the
+      // actual risky part (offline asset caching).
+      selfDestroying: true,
       manifest: {
         name: 'On The Apex',
         short_name: 'On The Apex',
@@ -21,26 +29,6 @@ export default defineConfig({
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
-      workbox: {
-        // Precache only the app shell (JS/CSS/HTML/icons) — never the API.
-        // Live timing/results data must always come from the network; a
-        // cached lap list would silently go stale. Fall back to a cached
-        // copy only when actually offline, and re-check on every request
-        // otherwise (NetworkFirst), so cached data never masks a fresh
-        // response the network could have served.
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === 'https://ontheapex-api.fly.dev',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 8,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
         ],
       },
     }),
