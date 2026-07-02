@@ -92,13 +92,14 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     const byCar = new Map<string, string>()
     for (const hourEntry of data) {
       for (const p of hourEntry.positions) {
+        if (!activeClasses.has(p.class ?? 'Unknown')) continue
         if (!byCar.has(p.car_number)) byCar.set(p.car_number, p.team ?? 'Unknown team')
       }
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
       .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
-  }, [data])
+  }, [data, activeClasses])
 
   const activeCars = useMemo(
     () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
@@ -405,6 +406,26 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
             --axis: #383835;
             ${CLASS_COLOR_CSS_VARS_DARK}
           }
+        }
+        :root[data-theme='dark'] .position-chart {
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+            --grid: #2c2c2a;
+            --axis: #383835;
+            ${CLASS_COLOR_CSS_VARS_DARK}
+        }
+        :root[data-theme='light'] .position-chart {
+          --surface-1: #fcfcfb;
+          --text-primary: #0b0b0b;
+          --text-secondary: #52514e;
+          --text-muted: #898781;
+          --grid: #e1e0d9;
+          --axis: #c3c2b7;
+          ${CLASS_COLOR_CSS_VARS}
+          position: relative;
+          background: var(--surface-1);
         }
         .position-chart .legend {
           display: flex;

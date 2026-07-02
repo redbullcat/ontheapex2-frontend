@@ -193,12 +193,13 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
   const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
+      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
       if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
       .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
-  }, [laps])
+  }, [laps, activeClasses])
 
   const activeCars = useMemo(
     () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
@@ -406,6 +407,26 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
             --axis: #383835;
             --caution: #fab219;
           }
+        }
+        :root[data-theme='dark'] .story-chart {
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+            --grid: #2c2c2a;
+            --axis: #383835;
+            --caution: #fab219;
+        }
+        :root[data-theme='light'] .story-chart {
+          --surface-1: #fcfcfb;
+          --text-primary: #0b0b0b;
+          --text-secondary: #52514e;
+          --text-muted: #898781;
+          --grid: #e1e0d9;
+          --axis: #c3c2b7;
+          --caution: #fab219;
+          position: relative;
+          background: var(--surface-1);
         }
         .story-chart .tooltip {
           position: absolute;

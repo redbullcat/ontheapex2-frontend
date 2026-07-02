@@ -217,6 +217,24 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
             --axis: #383835;
           }
         }
+        :root[data-theme='dark'] .pace-consistency-chart {
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+            --grid: #2c2c2a;
+            --axis: #383835;
+        }
+        :root[data-theme='light'] .pace-consistency-chart {
+          --surface-1: #fcfcfb;
+          --text-primary: #0b0b0b;
+          --text-secondary: #52514e;
+          --text-muted: #898781;
+          --grid: #e1e0d9;
+          --axis: #c3c2b7;
+          position: relative;
+          background: var(--surface-1);
+        }
         .pace-consistency-chart .tooltip {
           position: absolute;
           pointer-events: none;

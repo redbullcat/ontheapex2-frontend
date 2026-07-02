@@ -43,6 +43,21 @@ export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
     return [...best.values()].sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
   }, [laps, activeClasses])
 
+  // Cars sharing driving duties can have a car-level fastest lap set by only
+  // one of them — this breaks the fastest lap out per individual driver
+  // instead, so every driver's best lap is visible even if a teammate is
+  // quicker overall.
+  const fastestByDriver = useMemo(() => {
+    const best = new Map<string, LapRead>()
+    for (const lap of laps) {
+      if (lap.lap_time_seconds == null || !lap.driver_name) continue
+      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+      const prev = best.get(lap.driver_name)
+      if (!prev || lap.lap_time_seconds < prev.lap_time_seconds!) best.set(lap.driver_name, lap)
+    }
+    return [...best.values()].sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
+  }, [laps, activeClasses])
+
   return (
     <div className="fastest-laps">
       <div className="chart-controls">
@@ -98,6 +113,33 @@ export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
                     <td>{lap.team ?? '—'}</td>
                     <td>{formatLapTime(lap.lap_time_seconds!)}</td>
                     <td>{lap.driver_name ?? '—'}</td>
+                    <td>{lap.lap_number}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3>Fastest lap by driver</h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Driver</th>
+                  <th>Car</th>
+                  <th>Team</th>
+                  <th>Time</th>
+                  <th>Lap</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fastestByDriver.map((lap) => (
+                  <tr key={lap.driver_name}>
+                    <td>{lap.driver_name}</td>
+                    <td>#{lap.car_number}</td>
+                    <td>{lap.team ?? '—'}</td>
+                    <td>{formatLapTime(lap.lap_time_seconds!)}</td>
                     <td>{lap.lap_number}</td>
                   </tr>
                 ))}

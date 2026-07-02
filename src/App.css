@@ -37,6 +37,12 @@ header h1 {
   top: 24px;
 }
 
+.sidebar-top-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .sidebar-toggle {
   align-self: flex-end;
   border: 1px solid var(--border, #e1e0d9);
@@ -505,6 +511,11 @@ header h1 {
   text-decoration: underline;
   cursor: pointer;
   padding: 0;
+}
+
+.lead-history-panel .color-mode-toggle {
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .top-percent {
