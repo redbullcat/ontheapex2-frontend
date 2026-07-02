@@ -6,6 +6,8 @@ import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
+import { CarPicker, type CarOption } from './CarPicker'
+import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 400
@@ -40,6 +42,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
+  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -65,9 +69,40 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
+  const carOptions: CarOption[] = useMemo(() => {
+    const byCar = new Map<string, string>()
+    for (const lap of laps) {
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
+    }
+    return [...byCar.entries()]
+      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+  }, [laps])
+
+  const lapBounds = useMemo((): [number, number] => {
+    let min = Infinity
+    let max = 0
+    for (const lap of laps) {
+      min = Math.min(min, lap.lap_number)
+      max = Math.max(max, lap.lap_number)
+    }
+    return min === Infinity ? [0, 1] : [min, max]
+  }, [laps])
+
+  const effectiveLapRange = lapRange ?? lapBounds
+
   const filtered = useMemo(
-    () => laps.filter((l) => l.elapsed_seconds != null && l.lap_number != null && activeClasses.has(l.class ?? 'Unknown')),
-    [laps, activeClasses],
+    () =>
+      laps.filter(
+        (l) =>
+          l.elapsed_seconds != null &&
+          l.lap_number != null &&
+          activeClasses.has(l.class ?? 'Unknown') &&
+          (carSelection.length === 0 || carSelection.includes(l.car_number)) &&
+          l.lap_number >= effectiveLapRange[0] &&
+          l.lap_number <= effectiveLapRange[1],
+      ),
+    [laps, activeClasses, carSelection, effectiveLapRange],
   )
 
   // Reference car: the classification leader of the selection (most laps
@@ -79,7 +114,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   // whoever raced (and thus accumulated less time) the least — e.g. a
   // car that retired early. Using the same classification rule as the
   // results table avoids that trap.
-  const { referenceCar, gapByLapAndCar, maxLap, maxGap } = useMemo(() => {
+  const { referenceCar, gapByLapAndCar, minLap, maxLap, maxGap } = useMemo(() => {
     const lastLapByCar = new Map<string, LapRead>()
     for (const lap of filtered) {
       const prev = lastLapByCar.get(lap.car_number)
@@ -104,6 +139,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     }
 
     const gapByLapAndCar = new Map<number, Map<string, { gap: number; team: string | null; class: string }>>()
+    let minLap = Infinity
     let maxLap = 0
     let maxGap = 0
     for (const lap of filtered) {
@@ -116,11 +152,12 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         gapByLapAndCar.set(lap.lap_number, inner)
       }
       inner.set(lap.car_number, { gap, team: lap.team, class: lap.class ?? 'Unknown' })
+      minLap = Math.min(minLap, lap.lap_number)
       maxLap = Math.max(maxLap, lap.lap_number)
       maxGap = Math.max(maxGap, gap)
     }
 
-    return { referenceCar, gapByLapAndCar, maxLap, maxGap }
+    return { referenceCar, gapByLapAndCar, minLap: minLap === Infinity ? 1 : minLap, maxLap, maxGap }
   }, [filtered])
 
   const cars = useMemo(() => {
@@ -156,7 +193,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     const innerHeight = PLOT_HEIGHT - MARGIN.top - MARGIN.bottom
     svg.attr('width', width).attr('height', PLOT_HEIGHT)
 
-    const x = d3.scaleLinear().domain([1, maxLap]).range([0, innerWidth])
+    const x = d3.scaleLinear().domain([minLap, maxLap]).range([0, innerWidth])
     const y = d3.scaleLinear().domain([0, maxGap || 1]).range([0, innerHeight])
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
@@ -245,7 +282,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
 
     const xAxis = d3
       .axisBottom(x)
-      .ticks(Math.max(2, Math.min(maxLap, Math.floor(innerWidth / 60))))
+      .ticks(Math.max(2, Math.min(maxLap - minLap + 1, Math.floor(innerWidth / 60))))
       .tickFormat((d) => `L${d}`)
       .tickSizeOuter(0)
 
@@ -282,7 +319,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       .on('mousemove', (event: MouseEvent) => {
         const [mx, my] = d3.pointer(event, g.node())
         const lapAtX = Math.round(x.invert(mx))
-        const clampedLap = Math.max(1, Math.min(maxLap, lapAtX))
+        const clampedLap = Math.max(minLap, Math.min(maxLap, lapAtX))
         const lapData = gapByLapAndCar.get(clampedLap)
         if (!lapData || lapData.size === 0) return
 
@@ -324,7 +361,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, maxLap, maxGap, gapByLapAndCar, referenceCar])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxGap, gapByLapAndCar, referenceCar])
 
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
@@ -394,6 +431,10 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
+        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+      </div>
+      <div className="chart-controls">
+        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
       </div>
       {colorMode === 'class' && (
         <div className="legend">

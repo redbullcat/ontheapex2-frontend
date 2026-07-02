@@ -4,6 +4,8 @@ import type { LapRead } from '../api/types'
 import { getEntityColor, getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { CarPicker, type CarOption } from './CarPicker'
+import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const ROW_HEIGHT = 22
@@ -34,12 +36,21 @@ function colorFor(groupBy: GroupBy, key: string): string {
   return groupBy === 'team' ? getTeamColor(key) : getEntityColor(key)
 }
 
-function buildGroups(laps: LapRead[], activeClasses: Set<string>, groupBy: GroupBy): GroupStats[] {
+function buildGroups(
+  laps: LapRead[],
+  activeClasses: Set<string>,
+  groupBy: GroupBy,
+  carSelection: string[],
+  lapRange: [number, number],
+  topPercent: number,
+): GroupStats[] {
   const field = fieldFor(groupBy)
   const byGroup = new Map<string, number[]>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null) continue
     if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+    if (carSelection.length > 0 && !carSelection.includes(lap.car_number)) continue
+    if (lap.lap_number < lapRange[0] || lap.lap_number > lapRange[1]) continue
     const key = field(lap)
     if (!key) continue
     const arr = byGroup.get(key)
@@ -49,7 +60,13 @@ function buildGroups(laps: LapRead[], activeClasses: Set<string>, groupBy: Group
 
   const groups: GroupStats[] = []
   for (const [key, times] of byGroup) {
-    const sorted = [...times].sort((a, b) => a - b)
+    const sortedAll = [...times].sort((a, b) => a - b)
+    // Top-N% fastest-laps filter: keep the N% quickest laps in this group,
+    // ported from filter_top_percent in the Streamlit reference. 0% is a
+    // literal "show nothing" — every other value keeps at least one lap.
+    const keepCount = topPercent <= 0 ? 0 : Math.max(1, Math.ceil((sortedAll.length * topPercent) / 100))
+    if (keepCount === 0) continue
+    const sorted = sortedAll.slice(0, keepCount)
     groups.push({
       key,
       color: colorFor(groupBy, key),
@@ -79,6 +96,9 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('team')
   const [chartType, setChartType] = useState<ChartType>('bar')
+  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
+  const [topPercentInput, setTopPercentInput] = useState('100')
 
   useEffect(() => {
     const el = containerRef.current
@@ -102,7 +122,34 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const groups = useMemo(() => buildGroups(laps, activeClasses, groupBy), [laps, activeClasses, groupBy])
+  const carOptions: CarOption[] = useMemo(() => {
+    const byCar = new Map<string, string>()
+    for (const lap of laps) {
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
+    }
+    return [...byCar.entries()]
+      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+  }, [laps])
+
+  const lapBounds = useMemo((): [number, number] => {
+    let min = Infinity
+    let max = 0
+    for (const lap of laps) {
+      min = Math.min(min, lap.lap_number)
+      max = Math.max(max, lap.lap_number)
+    }
+    return min === Infinity ? [0, 1] : [min, max]
+  }, [laps])
+
+  const effectiveLapRange = lapRange ?? lapBounds
+
+  const topPercent = Math.max(0, Math.min(100, Number(topPercentInput) || 0))
+
+  const groups = useMemo(
+    () => buildGroups(laps, activeClasses, groupBy, carSelection, effectiveLapRange, topPercent),
+    [laps, activeClasses, groupBy, carSelection, effectiveLapRange, topPercent],
+  )
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -267,6 +314,20 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
             </button>
           ))}
         </div>
+        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+        <label className="top-percent">
+          <span className="field-label">Top % of laps</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={topPercentInput}
+            onChange={(e) => setTopPercentInput(e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="chart-controls">
+        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
       </div>
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
     </div>
