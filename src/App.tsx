@@ -31,7 +31,7 @@ function App() {
           value={seriesSlug}
           options={
             seriesState.status === 'success'
-              ? seriesState.data.map((s) => ({ value: s.slug, label: s.name }))
+              ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
               : []
           }
           onChange={(v) => {
@@ -46,7 +46,7 @@ function App() {
           value={eventId}
           options={
             eventsState.status === 'success'
-              ? eventsState.data.map((e) => ({ value: String(e.id), label: e.name }))
+              ? eventsState.data.map((e) => ({ value: String(e.id), label: e.display_name }))
               : []
           }
           onChange={(v) => {
@@ -60,7 +60,7 @@ function App() {
           value={sessionId}
           options={
             sessionsState.status === 'success'
-              ? sessionsState.data.map((s) => ({ value: String(s.id), label: `${s.name} (${s.type})` }))
+              ? sessionsState.data.map((s) => ({ value: String(s.id), label: `${s.label} (${s.type})` }))
               : []
           }
           onChange={setSessionId}
