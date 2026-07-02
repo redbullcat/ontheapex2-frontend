@@ -9,15 +9,17 @@ export function Select({
   options,
   onChange,
   disabled,
+  narrow,
 }: {
   label: string
   value: string
   options: Option[]
   onChange: (value: string) => void
   disabled?: boolean
+  narrow?: boolean
 }) {
   return (
-    <label className="field">
+    <label className={narrow ? 'field field-narrow' : 'field'}>
       <span className="field-label">{label}</span>
       <select
         value={value}

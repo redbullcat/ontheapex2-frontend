@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { getEvents, getLeadHistory, getSeries, getSessions } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Select } from './components/Select'
@@ -7,6 +7,7 @@ import './App.css'
 
 function App() {
   const [seriesSlug, setSeriesSlug] = useState('')
+  const [year, setYear] = useState('')
   const [eventId, setEventId] = useState('')
   const [sessionId, setSessionId] = useState('')
 
@@ -17,6 +18,17 @@ function App() {
     sessionId ? () => getLeadHistory(Number(sessionId)) : null,
     [sessionId],
   )
+
+  const years = useMemo(() => {
+    if (eventsState.status !== 'success') return []
+    const distinct = [...new Set(eventsState.data.map((e) => e.year))]
+    return distinct.sort((a, b) => b - a)
+  }, [eventsState])
+
+  const eventsForYear = useMemo(() => {
+    if (eventsState.status !== 'success' || !year) return []
+    return eventsState.data.filter((e) => String(e.year) === year)
+  }, [eventsState, year])
 
   return (
     <div className="app">
@@ -36,24 +48,33 @@ function App() {
           }
           onChange={(v) => {
             setSeriesSlug(v)
+            setYear('')
             setEventId('')
             setSessionId('')
           }}
           disabled={seriesState.status !== 'success'}
         />
         <Select
+          label="Year"
+          narrow
+          value={year}
+          options={years.map((y) => ({ value: String(y), label: String(y) }))}
+          onChange={(v) => {
+            setYear(v)
+            setEventId('')
+            setSessionId('')
+          }}
+          disabled={!seriesSlug || eventsState.status !== 'success'}
+        />
+        <Select
           label="Event"
           value={eventId}
-          options={
-            eventsState.status === 'success'
-              ? eventsState.data.map((e) => ({ value: String(e.id), label: e.display_name }))
-              : []
-          }
+          options={eventsForYear.map((e) => ({ value: String(e.id), label: e.display_name }))}
           onChange={(v) => {
             setEventId(v)
             setSessionId('')
           }}
-          disabled={!seriesSlug || eventsState.status !== 'success'}
+          disabled={!year || eventsState.status !== 'success'}
         />
         <Select
           label="Session"
@@ -83,7 +104,9 @@ function App() {
           ) : (
             <p className="hint">No lead-history data for this session.</p>
           ))}
-        {leadHistoryState.status === 'idle' && <p className="hint">Pick a series, event and session to see who led.</p>}
+        {leadHistoryState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see who led.</p>
+        )}
       </section>
     </div>
   )
