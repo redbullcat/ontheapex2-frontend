@@ -284,6 +284,58 @@ header h1 {
   border-left: 1px solid var(--border, #e1e0d9);
 }
 
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.playback-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-primary, #0b0b0b);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playback-btn:hover {
+  background: var(--border, #e1e0d9);
+}
+
+.playback-scrubber {
+  flex: 1 1 auto;
+  min-width: 80px;
+  accent-color: var(--text-primary, #0b0b0b);
+}
+
+.playback-readout {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #52514e);
+  min-width: 52px;
+}
+
+.playback-speed {
+  flex: none;
+  font-size: 12px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-primary, #0b0b0b);
+}
+
 .results-table .table-scroll,
 .race-stats .table-scroll,
 .fastest-laps .table-scroll {

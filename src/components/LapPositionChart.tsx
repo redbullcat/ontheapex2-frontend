@@ -11,6 +11,8 @@ import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelec
 import { LapRangeInputs } from './LapRangeInputs'
 import { computeFlagPeriods, FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { ChartExportButtons } from './ChartExportButtons'
+import { usePlayback } from '../hooks/usePlayback'
+import { PlaybackControls } from './PlaybackControls'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -46,6 +48,24 @@ interface HoverState {
   position: number
   lap: number
   lapTime: number | null
+}
+
+// Linear interpolation of a car's position at a fractional lap, for smooth
+// scrubbing between the integer lap samples the data is recorded at.
+function positionAtLap(points: Point[], lap: number): number | null {
+  if (points.length === 0) return null
+  if (lap <= points[0].lap_number) return points[0].position
+  const last = points[points.length - 1]
+  if (lap >= last.lap_number) return last.position
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].lap_number >= lap) {
+      const a = points[i - 1]
+      const b = points[i]
+      const t = (lap - a.lap_number) / (b.lap_number - a.lap_number || 1)
+      return a.position + t * (b.position - a.position)
+    }
+  }
+  return last.position
 }
 
 export function LapPositionChart({ laps }: { laps: LapRead[] }) {
@@ -196,6 +216,12 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
 
   const pathsSelRef = useRef<d3.Selection<SVGPathElement, CarSeries, SVGGElement, unknown> | null>(null)
   const crosshairRef = useRef<d3.Selection<SVGLineElement, unknown, null, undefined> | null>(null)
+  const xScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
+  const yScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
+  const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
+  const markersSelRef = useRef<d3.Selection<SVGCircleElement, CarSeries, SVGGElement, unknown> | null>(null)
+
+  const playback = usePlayback(minLap, maxLap, 3)
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -208,6 +234,8 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
 
     const x = d3.scaleLinear().domain([minLap, maxLap]).range([0, innerWidth])
     const y = d3.scaleLinear().domain([1, maxPosition]).range([0, innerHeight])
+    xScaleRef.current = x
+    yScaleRef.current = y
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
 
@@ -244,9 +272,24 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
       .y((d) => y(d.position))
       .curve(d3.curveLinear)
 
+    // Playback reveal clip: the car-lines group is clipped to a rect whose
+    // width tracks the replay position, so scrubbing/playing only has to
+    // update the clip rect + marker dots (see the lightweight effect below)
+    // instead of rebuilding the whole chart every animation frame.
+    const clipId = `lap-pos-clip-${Math.random().toString(36).slice(2)}`
+    g.append('clipPath')
+      .attr('id', clipId)
+      .append('rect')
+      .attr('x', -8)
+      .attr('y', -8)
+      .attr('width', Math.max(0, x(playback.current) + 8))
+      .attr('height', innerHeight + 16)
+    clipRectRef.current = g.select<SVGRectElement>(`#${clipId} rect`)
+
     const paths = g
       .append('g')
       .attr('class', 'car-lines')
+      .attr('clip-path', `url(#${clipId})`)
       .selectAll<SVGPathElement, CarSeries>('path')
       .data(cars)
       .join('path')
@@ -258,6 +301,24 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
       .attr('opacity', 0.65)
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
+
+    const markers = g
+      .append('g')
+      .attr('class', 'playback-markers')
+      .selectAll<SVGCircleElement, CarSeries>('circle')
+      .data(cars)
+      .join('circle')
+      .attr('r', 4)
+      .attr('fill', strokeColor)
+      .attr('stroke', 'var(--surface-1)')
+      .attr('stroke-width', 1.5)
+      .style('display', playback.current < maxLap ? 'inline' : 'none')
+      .attr('cx', x(playback.current))
+      .attr('cy', (d) => {
+        const v = positionAtLap(d.points, playback.current)
+        return v == null ? -9999 : y(v)
+      })
+    markersSelRef.current = markers
 
     const finalLap = rankedByLap.get(maxLap)
     if (finalLap) {
@@ -387,6 +448,25 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
       })
   }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods])
 
+  // Cheap per-frame update: just the clip-rect width and marker positions,
+  // driven by playback.current — deliberately not touching the dependency
+  // list above so playback never triggers the expensive full chart rebuild.
+  useEffect(() => {
+    const x = xScaleRef.current
+    const y = yScaleRef.current
+    if (!x || !y) return
+    const current = playback.current
+    clipRectRef.current?.attr('width', Math.max(0, x(current) + 8))
+    const showMarkers = current < maxLap
+    markersSelRef.current
+      ?.style('display', showMarkers ? 'inline' : 'none')
+      .attr('cx', x(current))
+      .attr('cy', (d) => {
+        const v = positionAtLap(d.points, current)
+        return v == null ? -9999 : y(v)
+      })
+  }, [playback.current, maxLap])
+
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
     [activeClasses, allClasses],
@@ -481,6 +561,14 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
           Show flag periods
         </label>
         <ChartExportButtons svgRef={svgRef} filename="lap_position" />
+      </div>
+      <div className="chart-controls">
+        <PlaybackControls
+          playback={playback}
+          min={minLap}
+          max={maxLap}
+          formatValue={(v) => `Lap ${Math.round(v)}`}
+        />
       </div>
       <div className="chart-controls">
         <EntityFilter
