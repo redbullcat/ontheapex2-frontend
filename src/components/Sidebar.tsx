@@ -20,10 +20,6 @@ export function Sidebar({
   eventValue,
   onEventChange,
   eventDisabled,
-  sessions,
-  sessionValue,
-  onSessionChange,
-  sessionDisabled,
 }: {
   open: boolean
   onToggle: () => void
@@ -39,10 +35,6 @@ export function Sidebar({
   eventValue: string
   onEventChange: (v: string) => void
   eventDisabled: boolean
-  sessions: Option[]
-  sessionValue: string
-  onSessionChange: (v: string) => void
-  sessionDisabled: boolean
 }) {
   if (!open) {
     return (
@@ -62,13 +54,6 @@ export function Sidebar({
       <Select label="Series" value={seriesValue} options={series} onChange={onSeriesChange} disabled={seriesDisabled} />
       <Select label="Year" value={yearValue} options={years} onChange={onYearChange} disabled={yearDisabled} />
       <Select label="Event" value={eventValue} options={events} onChange={onEventChange} disabled={eventDisabled} />
-      <Select
-        label="Session"
-        value={sessionValue}
-        options={sessions}
-        onChange={onSessionChange}
-        disabled={sessionDisabled}
-      />
     </aside>
   )
 }

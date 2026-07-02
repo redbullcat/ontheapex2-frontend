@@ -3,6 +3,9 @@ import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getS
 import { useAsync } from './hooks/useAsync'
 import { Sidebar } from './components/Sidebar'
 import { Tabs, type Tab } from './components/Tabs'
+import { SessionTypeTabs } from './components/SessionTypeTabs'
+import { bucketFor, type SessionBucket } from './lib/sessionBucket'
+import type { SessionSummary } from './api/types'
 import { LeadHistoryChart } from './components/LeadHistoryChart'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
@@ -18,10 +21,21 @@ import { TopSpeedChart } from './components/TopSpeedChart'
 import { PitTimeChart } from './components/PitTimeChart'
 import './App.css'
 
-const TABS: Tab[] = [
+const RACE_TABS: Tab[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'results', label: 'Results' },
   { id: 'position', label: 'Position' },
+  { id: 'pace', label: 'Pace' },
+  { id: 'battle', label: 'Battle' },
+  { id: 'pit', label: 'Pit Stops' },
+  { id: 'stints', label: 'Stints' },
+]
+
+// Practice/Qualifying sessions have no fixed finishing order, so the
+// race-classification charts (Overview/Results/Position) don't apply —
+// Pace, Battle (gap evolution still works as a pace-over-laps comparison),
+// Pit Stops and Stints are all still meaningful without one.
+const NON_RACE_TABS: Tab[] = [
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
   { id: 'pit', label: 'Pit Stops' },
@@ -86,6 +100,44 @@ function App() {
     return eventsState.data.filter((e) => String(e.year) === year)
   }, [eventsState, year])
 
+  const sessionsByBucket = useMemo(() => {
+    const buckets: Record<SessionBucket, SessionSummary[]> = { practice: [], qualifying: [], race: [] }
+    if (sessionsState.status === 'success') {
+      for (const s of sessionsState.data) buckets[bucketFor(s.type)].push(s)
+    }
+    return buckets
+  }, [sessionsState])
+
+  const currentSession = useMemo(
+    () => (sessionsState.status === 'success' ? sessionsState.data.find((s) => String(s.id) === sessionId) : undefined),
+    [sessionsState, sessionId],
+  )
+  const sessionSection: SessionBucket | '' = currentSession ? bucketFor(currentSession.type) : ''
+
+  // Default session once the event's sessions load: prefer Race, then
+  // Qualifying, then Practice — but leave an already-valid selection (e.g.
+  // restored from the URL) alone.
+  useEffect(() => {
+    if (sessionsState.status !== 'success') return
+    if (sessionId && sessionsState.data.some((s) => String(s.id) === sessionId)) return
+    const preferred = sessionsByBucket.race[0] ?? sessionsByBucket.qualifying[0] ?? sessionsByBucket.practice[0]
+    if (preferred) setSessionId(String(preferred.id))
+  }, [sessionsState, sessionsByBucket, sessionId])
+
+  const chartTabs = sessionSection === 'race' ? RACE_TABS : NON_RACE_TABS
+
+  // Keep the active chart tab valid when the session section changes (e.g.
+  // switching from Race's "Results" to Practice, which doesn't have one).
+  // Skip while sessionSection hasn't resolved yet (still loading which
+  // session is active) — otherwise this fires once against the "not race"
+  // default and bumps a perfectly valid "overview" off before Race is known.
+  useEffect(() => {
+    if (!sessionSection) return
+    if (!chartTabs.some((t) => t.id === activeTab)) setActiveTab(chartTabs[0]?.id ?? '')
+    // chartTabs is derived from sessionSection each render; re-run when that changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionSection])
+
   const hasSession = sessionId !== ''
 
   return (
@@ -127,14 +179,6 @@ function App() {
             setSessionId('')
           }}
           eventDisabled={!year || eventsState.status !== 'success'}
-          sessions={
-            sessionsState.status === 'success'
-              ? sessionsState.data.map((s) => ({ value: String(s.id), label: `${s.label} (${s.type})` }))
-              : []
-          }
-          sessionValue={sessionId}
-          onSessionChange={setSessionId}
-          sessionDisabled={!eventId || sessionsState.status !== 'success'}
         />
 
         <main className="main">
@@ -154,13 +198,28 @@ function App() {
             <p className="error">Failed to load stint data: {stintsState.error}</p>
           )}
 
-          {!hasSession ? (
-            <p className="hint">Pick a series, year, event and session in the sidebar to get started.</p>
+          {!eventId ? (
+            <p className="hint">Pick a series, year and event in the sidebar to get started.</p>
+          ) : sessionsState.status === 'loading' ? (
+            <p className="hint">Loading sessions…</p>
           ) : (
             <>
-              <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
+              <SessionTypeTabs
+                sessionsByBucket={sessionsByBucket}
+                activeBucket={sessionSection}
+                onBucketChange={(bucket) => {
+                  const preferred = sessionsByBucket[bucket][0]
+                  if (preferred) setSessionId(String(preferred.id))
+                }}
+                sessionId={sessionId}
+                onSessionChange={setSessionId}
+              />
 
-              {activeTab === 'overview' && (
+              {!hasSession ? null : (
+                <>
+                  <Tabs tabs={chartTabs} value={activeTab} onChange={setActiveTab} />
+
+                  {activeTab === 'overview' && (
                 <section className="chart-section">
                   <h2>Overview</h2>
                   {(lapsState.status === 'loading' || leadHistoryState.status === 'loading') && (
@@ -329,6 +388,8 @@ function App() {
                       <p className="hint">No stint data for this session.</p>
                     ))}
                 </section>
+              )}
+                </>
               )}
             </>
           )}
