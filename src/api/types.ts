@@ -32,3 +32,18 @@ export interface LeadStint {
   end_lap: number
   laps_led: number
 }
+
+export interface HourlyPositionEntry {
+  position: number
+  car_number: string
+  team: string | null
+  class: string | null
+  manufacturer: string | null
+  lap_number: number
+  elapsed_seconds: number
+}
+
+export interface HourlyPositions {
+  hour: number
+  positions: HourlyPositionEntry[]
+}

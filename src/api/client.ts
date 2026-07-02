@@ -1,4 +1,4 @@
-import type { EventSummary, LeadStint, Series, SessionSummary } from './types'
+import type { EventSummary, HourlyPositions, LeadStint, Series, SessionSummary } from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
 
@@ -24,4 +24,8 @@ export function getSessions(eventId: number): Promise<SessionSummary[]> {
 
 export function getLeadHistory(sessionId: number): Promise<LeadStint[]> {
   return get<LeadStint[]>(`/api/sessions/${sessionId}/lead-history`)
+}
+
+export function getHourlyPositions(sessionId: number): Promise<HourlyPositions[]> {
+  return get<HourlyPositions[]>(`/api/sessions/${sessionId}/hourly-positions`)
 }

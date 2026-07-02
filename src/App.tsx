@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { getEvents, getLeadHistory, getSeries, getSessions } from './api/client'
+import { getEvents, getHourlyPositions, getLeadHistory, getSeries, getSessions } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Select } from './components/Select'
 import { LeadHistoryChart } from './components/LeadHistoryChart'
+import { PositionChart } from './components/PositionChart'
 import './App.css'
 
 function App() {
@@ -16,6 +17,10 @@ function App() {
   const sessionsState = useAsync(eventId ? () => getSessions(Number(eventId)) : null, [eventId])
   const leadHistoryState = useAsync(
     sessionId ? () => getLeadHistory(Number(sessionId)) : null,
+    [sessionId],
+  )
+  const positionsState = useAsync(
+    sessionId ? () => getHourlyPositions(Number(sessionId)) : null,
     [sessionId],
   )
 
@@ -34,7 +39,7 @@ function App() {
     <div className="app">
       <header>
         <h1>On The Apex</h1>
-        <p className="subtitle">Endurance racing data — lead history</p>
+        <p className="subtitle">Endurance racing data</p>
       </header>
 
       <section className="picker">
@@ -95,8 +100,12 @@ function App() {
       {leadHistoryState.status === 'error' && (
         <p className="error">Failed to load lead history: {leadHistoryState.error}</p>
       )}
+      {positionsState.status === 'error' && (
+        <p className="error">Failed to load position data: {positionsState.error}</p>
+      )}
 
       <section className="chart-section">
+        <h2>Who led</h2>
         {leadHistoryState.status === 'loading' && <p className="hint">Loading lead history…</p>}
         {leadHistoryState.status === 'success' &&
           (leadHistoryState.data.length > 0 ? (
@@ -106,6 +115,20 @@ function App() {
           ))}
         {leadHistoryState.status === 'idle' && (
           <p className="hint">Pick a series, year, event and session to see who led.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Race position by hour</h2>
+        {positionsState.status === 'loading' && <p className="hint">Loading position data…</p>}
+        {positionsState.status === 'success' &&
+          (positionsState.data.length > 0 ? (
+            <PositionChart data={positionsState.data} />
+          ) : (
+            <p className="hint">No position data for this session.</p>
+          ))}
+        {positionsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see the running order.</p>
         )}
       </section>
     </div>
