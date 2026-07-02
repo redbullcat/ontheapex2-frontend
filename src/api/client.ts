@@ -1,4 +1,4 @@
-import type { EventSummary, HourlyPositions, LeadStint, Series, SessionSummary } from './types'
+import type { EventSummary, HourlyPositions, LapRead, LeadStint, Series, SessionSummary } from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
 
@@ -28,4 +28,20 @@ export function getLeadHistory(sessionId: number): Promise<LeadStint[]> {
 
 export function getHourlyPositions(sessionId: number): Promise<HourlyPositions[]> {
   return get<HourlyPositions[]>(`/api/sessions/${sessionId}/hourly-positions`)
+}
+
+const LAPS_PAGE_SIZE = 5000
+
+// Long endurance races can exceed the 5000-row page cap (e.g. Le Mans is
+// ~20k+ rows), so page through sequentially until a short page signals the end.
+export async function getLaps(sessionId: number): Promise<LapRead[]> {
+  const all: LapRead[] = []
+  let offset = 0
+  for (;;) {
+    const page = await get<LapRead[]>(`/api/sessions/${sessionId}/laps?limit=${LAPS_PAGE_SIZE}&offset=${offset}`)
+    all.push(...page)
+    if (page.length < LAPS_PAGE_SIZE) break
+    offset += LAPS_PAGE_SIZE
+  }
+  return all
 }

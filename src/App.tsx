@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { getEvents, getHourlyPositions, getLeadHistory, getSeries, getSessions } from './api/client'
+import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Select } from './components/Select'
 import { LeadHistoryChart } from './components/LeadHistoryChart'
 import { PositionChart } from './components/PositionChart'
+import { LapPositionChart } from './components/LapPositionChart'
+import { ResultsTable } from './components/ResultsTable'
 import './App.css'
 
 function App() {
@@ -23,6 +25,7 @@ function App() {
     sessionId ? () => getHourlyPositions(Number(sessionId)) : null,
     [sessionId],
   )
+  const lapsState = useAsync(sessionId ? () => getLaps(Number(sessionId)) : null, [sessionId])
 
   const years = useMemo(() => {
     if (eventsState.status !== 'success') return []
@@ -103,6 +106,7 @@ function App() {
       {positionsState.status === 'error' && (
         <p className="error">Failed to load position data: {positionsState.error}</p>
       )}
+      {lapsState.status === 'error' && <p className="error">Failed to load lap data: {lapsState.error}</p>}
 
       <section className="chart-section">
         <h2>Who led</h2>
@@ -129,6 +133,34 @@ function App() {
           ))}
         {positionsState.status === 'idle' && (
           <p className="hint">Pick a series, year, event and session to see the running order.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Lap-by-lap position</h2>
+        {lapsState.status === 'loading' && <p className="hint">Loading lap data (this can take a while for long races)…</p>}
+        {lapsState.status === 'success' &&
+          (lapsState.data.length > 0 ? (
+            <LapPositionChart laps={lapsState.data} />
+          ) : (
+            <p className="hint">No lap data for this session.</p>
+          ))}
+        {lapsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see lap-by-lap position.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Results</h2>
+        {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
+        {lapsState.status === 'success' &&
+          (lapsState.data.length > 0 ? (
+            <ResultsTable laps={lapsState.data} />
+          ) : (
+            <p className="hint">No results for this session.</p>
+          ))}
+        {lapsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see results.</p>
         )}
       </section>
     </div>

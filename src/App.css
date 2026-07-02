@@ -65,3 +65,93 @@ header h1 {
   margin: 0 0 12px;
   font-size: 16px;
 }
+
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.class-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.class-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-secondary, #52514e);
+  cursor: pointer;
+}
+
+.class-filter-item input {
+  margin: 0;
+}
+
+.color-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.color-mode-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  font-size: 13px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.color-mode-toggle button.active {
+  background: var(--text-secondary, #52514e);
+  color: var(--surface-1, #fcfcfb);
+}
+
+.color-mode-toggle button + button {
+  border-left: 1px solid var(--border, #e1e0d9);
+}
+
+.results-table .table-scroll {
+  overflow-x: auto;
+}
+
+.results-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.results-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted, #898781);
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--border, #e1e0d9);
+}
+
+.results-table td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--border, #e1e0d9);
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table tbody tr:hover {
+  background: color-mix(in srgb, var(--text, #52514e) 6%, transparent);
+}
+
+.team-key {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
