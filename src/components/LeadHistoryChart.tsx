@@ -156,6 +156,20 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
             --text-muted: #898781;
           }
         }
+        :root[data-theme='dark'] .lead-history {
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+        }
+        :root[data-theme='light'] .lead-history {
+          --surface-1: #fcfcfb;
+          --text-primary: #0b0b0b;
+          --text-secondary: #52514e;
+          --text-muted: #898781;
+          position: relative;
+          background: var(--surface-1);
+        }
         .lead-history .legend {
           display: flex;
           flex-wrap: wrap;

@@ -27,6 +27,12 @@ interface GroupStats {
   max: number
 }
 
+interface HoverState {
+  x: number
+  y: number
+  group: GroupStats
+}
+
 function fieldFor(groupBy: GroupBy): (lap: LapRead) => string | null {
   if (groupBy === 'team') return (l) => l.team
   if (groupBy === 'driver') return (l) => l.driver_name
@@ -108,6 +114,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
   const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [topPercentInput, setTopPercentInput] = useState('100')
+  const [hover, setHover] = useState<HoverState | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -134,20 +141,22 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
   const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
+      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
       if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
       .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
-  }, [laps])
+  }, [laps, activeClasses])
 
   const driverOptions: EntityOption[] = useMemo(() => {
     const names = new Set<string>()
     for (const lap of laps) {
+      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
       if (lap.driver_name) names.add(lap.driver_name)
     }
     return [...names].sort().map((name) => ({ id: name, label: name }))
-  }, [laps])
+  }, [laps, activeClasses])
 
   const lapBounds = useMemo((): [number, number] => {
     let min = Infinity
@@ -277,6 +286,26 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
         .attr('stroke-width', 2)
     }
 
+    // Transparent full-width overlay per row so hovering anywhere along a
+    // bar or box plot row (not just directly over the thin box/whisker
+    // marks) shows that group's stats.
+    g.append('g')
+      .selectAll('rect.hover-overlay')
+      .data(groups)
+      .join('rect')
+      .attr('class', 'hover-overlay')
+      .attr('x', 0)
+      .attr('y', (d) => y(d.key) ?? 0)
+      .attr('width', innerWidth)
+      .attr('height', ROW_HEIGHT)
+      .attr('fill', 'transparent')
+      .style('cursor', 'pointer')
+      .on('mousemove', (event: MouseEvent, d) => {
+        const rect = containerRef.current?.getBoundingClientRect()
+        setHover({ x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0), group: d })
+      })
+      .on('mouseleave', () => setHover(null))
+
     const xAxis = d3
       .axisBottom(x)
       .tickValues(xTicks)
@@ -313,6 +342,39 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
             --grid: #2c2c2a;
             --axis: #383835;
           }
+        }
+        :root[data-theme='dark'] .pace-chart {
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+            --grid: #2c2c2a;
+            --axis: #383835;
+        }
+        :root[data-theme='light'] .pace-chart {
+          --surface-1: #fcfcfb;
+          --text-primary: #0b0b0b;
+          --text-secondary: #52514e;
+          --text-muted: #898781;
+          --grid: #e1e0d9;
+          --axis: #c3c2b7;
+          position: relative;
+          background: var(--surface-1);
+        }
+        .pace-chart .tooltip {
+          position: absolute;
+          pointer-events: none;
+          background: var(--text-primary);
+          color: var(--surface-1);
+          font-size: 12px;
+          padding: 6px 10px;
+          border-radius: 6px;
+          transform: translate(12px, -50%);
+          white-space: nowrap;
+          z-index: 10;
+        }
+        .pace-chart .tooltip strong {
+          font-size: 13px;
         }
       `}</style>
       <div className="chart-controls">
@@ -364,6 +426,30 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
         </div>
       )}
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
+      {hover && (
+        <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
+          <div>
+            <strong>{hover.group.key}</strong>
+          </div>
+          {chartType === 'bar' ? (
+            <div>
+              Mean {formatSeconds(hover.group.mean)} · {hover.group.laps.length} lap
+              {hover.group.laps.length === 1 ? '' : 's'}
+            </div>
+          ) : (
+            <>
+              <div>
+                Median {formatSeconds(hover.group.median)} · {hover.group.laps.length} lap
+                {hover.group.laps.length === 1 ? '' : 's'}
+              </div>
+              <div>
+                Min {formatSeconds(hover.group.min)} · Q1 {formatSeconds(hover.group.q1)} · Q3{' '}
+                {formatSeconds(hover.group.q3)} · Max {formatSeconds(hover.group.max)}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

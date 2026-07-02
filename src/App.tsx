@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions, getStints } from './api/client'
 import { useAsync } from './hooks/useAsync'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, type Theme } from './components/Sidebar'
 import { Tabs, type Tab } from './components/Tabs'
 import { SessionTypeTabs } from './components/SessionTypeTabs'
 import { bucketFor, type SessionBucket } from './lib/sessionBucket'
 import type { SessionSummary } from './api/types'
-import { LeadHistoryChart } from './components/LeadHistoryChart'
+import { LeadHistoryPanel } from './components/LeadHistoryPanel'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
 import { ResultsTable } from './components/ResultsTable'
@@ -61,6 +61,11 @@ function App() {
     const stored = window.localStorage.getItem('sidebarOpen')
     return stored === null ? true : stored === 'true'
   })
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = window.localStorage.getItem('theme')
+    if (stored === 'light' || stored === 'dark') return stored
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -76,6 +81,11 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('sidebarOpen', String(sidebarOpen))
   }, [sidebarOpen])
+
+  useEffect(() => {
+    window.localStorage.setItem('theme', theme)
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
   const seriesState = useAsync(getSeries, [])
   const eventsState = useAsync(seriesSlug ? () => getEvents(seriesSlug) : null, [seriesSlug])
@@ -153,6 +163,8 @@ function App() {
         <Sidebar
           open={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => !v)}
+          theme={theme}
+          onThemeChange={setTheme}
           series={
             seriesState.status === 'success'
               ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
@@ -252,10 +264,13 @@ function App() {
 
                   <section className="chart-section">
                     <h2>Who led</h2>
-                    {leadHistoryState.status === 'loading' && <p className="hint">Loading lead history…</p>}
+                    {(leadHistoryState.status === 'loading' || lapsState.status === 'loading') && (
+                      <p className="hint">Loading lead history…</p>
+                    )}
                     {leadHistoryState.status === 'success' &&
+                      lapsState.status === 'success' &&
                       (leadHistoryState.data.length > 0 ? (
-                        <LeadHistoryChart stints={leadHistoryState.data} />
+                        <LeadHistoryPanel laps={lapsState.data} overallStints={leadHistoryState.data} />
                       ) : (
                         <p className="hint">No lead-history data for this session.</p>
                       ))}
