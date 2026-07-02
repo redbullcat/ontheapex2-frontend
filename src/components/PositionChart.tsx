@@ -6,7 +6,8 @@ import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
-import { CarPicker, type CarOption } from './CarPicker'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
@@ -49,7 +50,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
-  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     [classSelection, allClasses],
   )
 
-  const carOptions: CarOption[] = useMemo(() => {
+  const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const hourEntry of data) {
       for (const p of hourEntry.positions) {
@@ -95,9 +96,14 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       }
     }
     return [...byCar.entries()]
-      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
-      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+      .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
   }, [data])
+
+  const activeCars = useMemo(
+    () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
+    [carSelection, carOptions],
+  )
 
   const lapBounds = useMemo((): [number, number] => {
     let min = Infinity
@@ -122,7 +128,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       const filtered = hourEntry.positions.filter(
         (p) =>
           activeClasses.has(p.class ?? 'Unknown') &&
-          (carSelection.length === 0 || carSelection.includes(p.car_number)) &&
+          activeCars.has(p.car_number) &&
           p.lap_number >= effectiveLapRange[0] &&
           p.lap_number <= effectiveLapRange[1],
       )
@@ -137,7 +143,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       m.set(hourEntry.hour, ranked)
     }
     return m
-  }, [data, activeClasses, carSelection, effectiveLapRange])
+  }, [data, activeClasses, activeCars, effectiveLapRange])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
@@ -441,7 +447,13 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
       </div>
       <div className="chart-controls">
-        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
+        <EntityFilter
+          items={carOptions}
+          selection={carSelection}
+          onChange={setCarSelection}
+          addLabel="Add car"
+          resetLabel="Show all cars"
+        />
       </div>
       {colorMode === 'class' && (
         <div className="legend">

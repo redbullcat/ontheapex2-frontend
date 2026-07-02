@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions, getStints } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Sidebar } from './components/Sidebar'
 import { Tabs, type Tab } from './components/Tabs'
+import { SessionTypeTabs } from './components/SessionTypeTabs'
+import { bucketFor, type SessionBucket } from './lib/sessionBucket'
+import type { SessionSummary } from './api/types'
 import { LeadHistoryChart } from './components/LeadHistoryChart'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
@@ -10,22 +13,67 @@ import { ResultsTable } from './components/ResultsTable'
 import { PaceChart } from './components/PaceChart'
 import { GapEvolutionChart } from './components/GapEvolutionChart'
 import { DriverHistoryChart } from './components/DriverHistoryChart'
+import { RaceOverview } from './components/RaceOverview'
+import { RaceStats } from './components/RaceStats'
+import { FastestLapsTable } from './components/FastestLapsTable'
+import { PaceConsistencyChart } from './components/PaceConsistencyChart'
+import { TopSpeedChart } from './components/TopSpeedChart'
+import { PitTimeChart } from './components/PitTimeChart'
 import './App.css'
 
-const TABS: Tab[] = [
+const RACE_TABS: Tab[] = [
+  { id: 'overview', label: 'Overview' },
   { id: 'results', label: 'Results' },
   { id: 'position', label: 'Position' },
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
+  { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
 ]
 
+// Practice/Qualifying sessions have no fixed finishing order, so the
+// race-classification charts (Overview/Results/Position) don't apply —
+// Pace, Battle (gap evolution still works as a pace-over-laps comparison),
+// Pit Stops and Stints are all still meaningful without one.
+const NON_RACE_TABS: Tab[] = [
+  { id: 'pace', label: 'Pace' },
+  { id: 'battle', label: 'Battle' },
+  { id: 'pit', label: 'Pit Stops' },
+  { id: 'stints', label: 'Stints' },
+]
+
+// Selections round-trip through the URL (mirroring the Streamlit app's
+// st.query_params) so a refresh or a shared link resumes the same view
+// instead of dropping back to the empty pickers.
+function readParam(name: string): string {
+  return new URLSearchParams(window.location.search).get(name) ?? ''
+}
+
 function App() {
-  const [seriesSlug, setSeriesSlug] = useState('')
-  const [year, setYear] = useState('')
-  const [eventId, setEventId] = useState('')
-  const [sessionId, setSessionId] = useState('')
-  const [activeTab, setActiveTab] = useState('results')
+  const [seriesSlug, setSeriesSlug] = useState(() => readParam('series'))
+  const [year, setYear] = useState(() => readParam('year'))
+  const [eventId, setEventId] = useState(() => readParam('event'))
+  const [sessionId, setSessionId] = useState(() => readParam('session'))
+  const [activeTab, setActiveTab] = useState(() => readParam('tab') || 'overview')
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const stored = window.localStorage.getItem('sidebarOpen')
+    return stored === null ? true : stored === 'true'
+  })
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (seriesSlug) params.set('series', seriesSlug)
+    if (year) params.set('year', year)
+    if (eventId) params.set('event', eventId)
+    if (sessionId) params.set('session', sessionId)
+    if (activeTab !== 'overview') params.set('tab', activeTab)
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname)
+  }, [seriesSlug, year, eventId, sessionId, activeTab])
+
+  useEffect(() => {
+    window.localStorage.setItem('sidebarOpen', String(sidebarOpen))
+  }, [sidebarOpen])
 
   const seriesState = useAsync(getSeries, [])
   const eventsState = useAsync(seriesSlug ? () => getEvents(seriesSlug) : null, [seriesSlug])
@@ -52,6 +100,44 @@ function App() {
     return eventsState.data.filter((e) => String(e.year) === year)
   }, [eventsState, year])
 
+  const sessionsByBucket = useMemo(() => {
+    const buckets: Record<SessionBucket, SessionSummary[]> = { practice: [], qualifying: [], race: [] }
+    if (sessionsState.status === 'success') {
+      for (const s of sessionsState.data) buckets[bucketFor(s.type)].push(s)
+    }
+    return buckets
+  }, [sessionsState])
+
+  const currentSession = useMemo(
+    () => (sessionsState.status === 'success' ? sessionsState.data.find((s) => String(s.id) === sessionId) : undefined),
+    [sessionsState, sessionId],
+  )
+  const sessionSection: SessionBucket | '' = currentSession ? bucketFor(currentSession.type) : ''
+
+  // Default session once the event's sessions load: prefer Race, then
+  // Qualifying, then Practice — but leave an already-valid selection (e.g.
+  // restored from the URL) alone.
+  useEffect(() => {
+    if (sessionsState.status !== 'success') return
+    if (sessionId && sessionsState.data.some((s) => String(s.id) === sessionId)) return
+    const preferred = sessionsByBucket.race[0] ?? sessionsByBucket.qualifying[0] ?? sessionsByBucket.practice[0]
+    if (preferred) setSessionId(String(preferred.id))
+  }, [sessionsState, sessionsByBucket, sessionId])
+
+  const chartTabs = sessionSection === 'race' ? RACE_TABS : NON_RACE_TABS
+
+  // Keep the active chart tab valid when the session section changes (e.g.
+  // switching from Race's "Results" to Practice, which doesn't have one).
+  // Skip while sessionSection hasn't resolved yet (still loading which
+  // session is active) — otherwise this fires once against the "not race"
+  // default and bumps a perfectly valid "overview" off before Race is known.
+  useEffect(() => {
+    if (!sessionSection) return
+    if (!chartTabs.some((t) => t.id === activeTab)) setActiveTab(chartTabs[0]?.id ?? '')
+    // chartTabs is derived from sessionSection each render; re-run when that changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionSection])
+
   const hasSession = sessionId !== ''
 
   return (
@@ -63,6 +149,8 @@ function App() {
 
       <div className="app-shell">
         <Sidebar
+          open={sidebarOpen}
+          onToggle={() => setSidebarOpen((v) => !v)}
           series={
             seriesState.status === 'success'
               ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
@@ -91,14 +179,6 @@ function App() {
             setSessionId('')
           }}
           eventDisabled={!year || eventsState.status !== 'success'}
-          sessions={
-            sessionsState.status === 'success'
-              ? sessionsState.data.map((s) => ({ value: String(s.id), label: `${s.label} (${s.type})` }))
-              : []
-          }
-          sessionValue={sessionId}
-          onSessionChange={setSessionId}
-          sessionDisabled={!eventId || sessionsState.status !== 'success'}
         />
 
         <main className="main">
@@ -118,14 +198,56 @@ function App() {
             <p className="error">Failed to load stint data: {stintsState.error}</p>
           )}
 
-          {!hasSession ? (
-            <p className="hint">Pick a series, year, event and session in the sidebar to get started.</p>
+          {!eventId ? (
+            <p className="hint">Pick a series, year and event in the sidebar to get started.</p>
+          ) : sessionsState.status === 'loading' ? (
+            <p className="hint">Loading sessions…</p>
           ) : (
             <>
-              <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
+              <SessionTypeTabs
+                sessionsByBucket={sessionsByBucket}
+                activeBucket={sessionSection}
+                onBucketChange={(bucket) => {
+                  const preferred = sessionsByBucket[bucket][0]
+                  if (preferred) setSessionId(String(preferred.id))
+                }}
+                sessionId={sessionId}
+                onSessionChange={setSessionId}
+              />
+
+              {!hasSession ? null : (
+                <>
+                  <Tabs tabs={chartTabs} value={activeTab} onChange={setActiveTab} />
+
+                  {activeTab === 'overview' && (
+                <section className="chart-section">
+                  <h2>Overview</h2>
+                  {(lapsState.status === 'loading' || leadHistoryState.status === 'loading') && (
+                    <p className="hint">Loading overview…</p>
+                  )}
+                  {lapsState.status === 'success' &&
+                    leadHistoryState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <RaceOverview laps={lapsState.data} leadHistory={leadHistoryState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
 
               {activeTab === 'results' && (
                 <>
+                  <section className="chart-section">
+                    <h2>Race stats</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading race stats…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <RaceStats laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
                   <section className="chart-section">
                     <h2>Who led</h2>
                     {leadHistoryState.status === 'loading' && <p className="hint">Loading lead history…</p>}
@@ -145,6 +267,17 @@ function App() {
                         <ResultsTable laps={lapsState.data} />
                       ) : (
                         <p className="hint">No results for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Fastest laps</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading fastest laps…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <FastestLapsTable laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
                       ))}
                   </section>
                 </>
@@ -179,16 +312,40 @@ function App() {
               )}
 
               {activeTab === 'pace' && (
-                <section className="chart-section">
-                  <h2>Average pace</h2>
-                  {lapsState.status === 'loading' && <p className="hint">Loading pace data…</p>}
-                  {lapsState.status === 'success' &&
-                    (lapsState.data.length > 0 ? (
-                      <PaceChart laps={lapsState.data} />
-                    ) : (
-                      <p className="hint">No lap data for this session.</p>
-                    ))}
-                </section>
+                <>
+                  <section className="chart-section">
+                    <h2>Average pace</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pace data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PaceChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Pace consistency</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading consistency data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PaceConsistencyChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Top speed</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading top speed data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <TopSpeedChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+                </>
               )}
 
               {activeTab === 'battle' && (
@@ -198,6 +355,19 @@ function App() {
                   {lapsState.status === 'success' &&
                     (lapsState.data.length > 0 ? (
                       <GapEvolutionChart laps={lapsState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
+
+              {activeTab === 'pit' && (
+                <section className="chart-section">
+                  <h2>Pit stops</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <PitTimeChart laps={lapsState.data} />
                     ) : (
                       <p className="hint">No lap data for this session.</p>
                     ))}
@@ -218,6 +388,8 @@ function App() {
                       <p className="hint">No stint data for this session.</p>
                     ))}
                 </section>
+              )}
+                </>
               )}
             </>
           )}

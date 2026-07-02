@@ -6,7 +6,8 @@ import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
-import { CarPicker, type CarOption } from './CarPicker'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
@@ -52,7 +53,7 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
-  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
 
   useEffect(() => {
@@ -99,15 +100,20 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const carOptions: CarOption[] = useMemo(() => {
+  const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
       if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
     }
     return [...byCar.entries()]
-      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
-      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+      .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
   }, [laps])
+
+  const activeCars = useMemo(
+    () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
+    [carSelection, carOptions],
+  )
 
   const lapBounds = useMemo((): [number, number] => {
     let min = Infinity
@@ -132,7 +138,7 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
         (r) =>
           r.elapsed_seconds != null &&
           activeClasses.has(r.class ?? 'Unknown') &&
-          (carSelection.length === 0 || carSelection.includes(r.car_number)),
+          activeCars.has(r.car_number),
       )
       const sorted = [...filtered].sort((a, b) => a.elapsed_seconds! - b.elapsed_seconds!)
       const ranked = sorted.map((r, i) => ({
@@ -146,7 +152,7 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
       m.set(lapNumber, ranked)
     }
     return m
-  }, [lapsByNumber, activeClasses, carSelection, effectiveLapRange])
+  }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
@@ -432,7 +438,13 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
         <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
       </div>
       <div className="chart-controls">
-        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
+        <EntityFilter
+          items={carOptions}
+          selection={carSelection}
+          onChange={setCarSelection}
+          addLabel="Add car"
+          resetLabel="Show all cars"
+        />
       </div>
       {colorMode === 'class' && (
         <div className="legend">

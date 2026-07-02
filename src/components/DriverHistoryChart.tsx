@@ -101,6 +101,14 @@ function computeDriverSummary(carStints: Stint[], carLaps: LapRead[]): DriverSum
   return rows
 }
 
+const PIE_RADIUS = 70
+
+function driverPieArcs(rows: DriverSummaryRow[]) {
+  const pie = d3.pie<DriverSummaryRow>().value((d) => d.totalTimeSeconds).sort(null)
+  const arc = d3.arc<d3.PieArcDatum<DriverSummaryRow>>().innerRadius(0).outerRadius(PIE_RADIUS)
+  return pie(rows).map((slice) => ({ ...slice, path: arc(slice) ?? '' }))
+}
+
 export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: LapRead[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -335,6 +343,33 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           margin-right: 6px;
           vertical-align: middle;
         }
+        .driver-history-chart .driver-pie-row {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+        .driver-history-chart .driver-pie {
+          flex: none;
+        }
+        .driver-history-chart .driver-pie-legend {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          font-size: 13px;
+          color: var(--text-secondary);
+        }
+        .driver-history-chart .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .driver-history-chart .legend-key {
+          width: 10px;
+          height: 10px;
+          flex: none;
+        }
       `}</style>
       <div className="chart-controls">
         <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
@@ -365,6 +400,29 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           <h3>
             #{row.carNumber} {row.team ? `— ${row.team}` : ''}
           </h3>
+          <div className="driver-pie-row">
+            <svg width={PIE_RADIUS * 2} height={PIE_RADIUS * 2} className="driver-pie">
+              <g transform={`translate(${PIE_RADIUS},${PIE_RADIUS})`}>
+                {driverPieArcs(row.driverSummary).map((slice) => (
+                  <path key={slice.data.driver} d={slice.path} fill={slice.data.color} stroke="var(--surface-1)" strokeWidth={2} />
+                ))}
+              </g>
+            </svg>
+            <div className="driver-pie-legend">
+              {row.driverSummary.map((d) => {
+                const total = row.driverSummary.reduce((sum, r) => sum + r.totalTimeSeconds, 0)
+                const pct = total > 0 ? (d.totalTimeSeconds / total) * 100 : 0
+                return (
+                  <div className="legend-item" key={d.driver}>
+                    <span className="legend-key" style={{ background: d.color, borderRadius: '50%', height: 10 }} />
+                    <span>
+                      {d.driver} — {formatDuration(d.totalTimeSeconds)} ({pct.toFixed(0)}%)
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
           <div className="table-scroll">
             <table>
               <thead>
