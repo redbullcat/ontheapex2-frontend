@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { LapRead } from '../api/types'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { getTeamDisplayName } from '../lib/identityColors'
 
 const TOP_N = 20
 
@@ -110,7 +111,7 @@ export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
                 {fastestByCar.map((lap) => (
                   <tr key={lap.car_number}>
                     <td>#{lap.car_number}</td>
-                    <td>{lap.team ?? '—'}</td>
+                    <td>{lap.team ? getTeamDisplayName(lap.team) : '—'}</td>
                     <td>{formatLapTime(lap.lap_time_seconds!)}</td>
                     <td>{lap.driver_name ?? '—'}</td>
                     <td>{lap.lap_number}</td>
@@ -138,7 +139,7 @@ export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
                   <tr key={lap.driver_name}>
                     <td>{lap.driver_name}</td>
                     <td>#{lap.car_number}</td>
-                    <td>{lap.team ?? '—'}</td>
+                    <td>{lap.team ? getTeamDisplayName(lap.team) : '—'}</td>
                     <td>{formatLapTime(lap.lap_time_seconds!)}</td>
                     <td>{lap.lap_number}</td>
                   </tr>

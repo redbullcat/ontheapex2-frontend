@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
-import { getEntityColor, getTeamColor } from '../lib/identityColors'
+import { getEntityColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const ROW_HEIGHT = 22
@@ -17,6 +18,7 @@ type ChartType = 'bar' | 'box'
 
 interface GroupStats {
   key: string
+  label: string
   color: string
   laps: number[]
   mean: number
@@ -83,6 +85,7 @@ function buildGroups(
     const sorted = sortedAll.slice(0, keepCount)
     groups.push({
       key,
+      label: groupBy === 'team' ? getTeamDisplayName(key) : key,
       color: colorFor(groupBy, key, carTeam),
       laps: sorted,
       mean: d3.mean(sorted) ?? 0,
@@ -142,7 +145,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
-      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, getTeamDisplayName(lap.team))
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
@@ -222,7 +225,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => d.key)
+      .text((d) => d.label)
 
     if (chartType === 'bar') {
       g.append('g')
@@ -404,6 +407,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
             onChange={(e) => setTopPercentInput(e.target.value)}
           />
         </label>
+        <ChartExportButtons svgRef={svgRef} filename="pace_chart" />
       </div>
       <div className="chart-controls">
         <EntityFilter
@@ -429,7 +433,7 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
           <div>
-            <strong>{hover.group.key}</strong>
+            <strong>{hover.group.label}</strong>
           </div>
           {chartType === 'bar' ? (
             <div>

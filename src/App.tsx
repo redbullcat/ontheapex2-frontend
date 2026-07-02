@@ -20,6 +20,10 @@ import { PaceConsistencyChart } from './components/PaceConsistencyChart'
 import { TopSpeedChart } from './components/TopSpeedChart'
 import { PitTimeChart } from './components/PitTimeChart'
 import { StoryChart } from './components/StoryChart'
+import { FlagGanttChart } from './components/FlagGanttChart'
+import { SectorAnalysisChart } from './components/SectorAnalysisChart'
+import { SettingsPanel } from './components/SettingsPanel'
+import { onIdentityOverridesChanged } from './lib/identityOverrides'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -28,6 +32,7 @@ const RACE_TABS: Tab[] = [
   { id: 'position', label: 'Position' },
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
+  { id: 'sectors', label: 'Sectors' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
   { id: 'story', label: 'Story' },
@@ -36,10 +41,11 @@ const RACE_TABS: Tab[] = [
 // Practice/Qualifying sessions have no fixed finishing order, so the
 // race-classification charts (Overview/Results/Position) don't apply —
 // Pace, Battle (gap evolution still works as a pace-over-laps comparison),
-// Pit Stops and Stints are all still meaningful without one.
+// Sectors, Pit Stops and Stints are all still meaningful without one.
 const NON_RACE_TABS: Tab[] = [
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
+  { id: 'sectors', label: 'Sectors' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
 ]
@@ -66,6 +72,10 @@ function App() {
     if (stored === 'light' || stored === 'dark') return stored
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [colorVersion, setColorVersion] = useState(0)
+
+  useEffect(() => onIdentityOverridesChanged(() => setColorVersion((v) => v + 1)), [])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -101,6 +111,13 @@ function App() {
   const lapsState = useAsync(sessionId ? () => getLaps(Number(sessionId)) : null, [sessionId])
   const stintsState = useAsync(sessionId ? () => getStints(Number(sessionId)) : null, [sessionId])
 
+  const knownTeams = useMemo(() => {
+    if (lapsState.status !== 'success') return []
+    const s = new Set<string>()
+    for (const lap of lapsState.data) if (lap.team) s.add(lap.team)
+    return [...s].sort()
+  }, [lapsState])
+
   const years = useMemo(() => {
     if (eventsState.status !== 'success') return []
     const distinct = [...new Set(eventsState.data.map((e) => e.year))]
@@ -111,6 +128,11 @@ function App() {
     if (eventsState.status !== 'success' || !year) return []
     return eventsState.data.filter((e) => String(e.year) === year)
   }, [eventsState, year])
+
+  const currentEvent = useMemo(
+    () => eventsForYear.find((e) => String(e.id) === eventId),
+    [eventsForYear, eventId],
+  )
 
   const sessionsByBucket = useMemo(() => {
     const buckets: Record<SessionBucket, SessionSummary[]> = { practice: [], qualifying: [], race: [] }
@@ -165,6 +187,7 @@ function App() {
           onToggle={() => setSidebarOpen((v) => !v)}
           theme={theme}
           onThemeChange={setTheme}
+          onOpenSettings={() => setSettingsOpen(true)}
           series={
             seriesState.status === 'success'
               ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
@@ -195,7 +218,7 @@ function App() {
           eventDisabled={!year || eventsState.status !== 'success'}
         />
 
-        <main className="main">
+        <main className="main" key={colorVersion}>
           {seriesState.status === 'error' && <p className="error">Failed to load series: {seriesState.error}</p>}
           {eventsState.status === 'error' && <p className="error">Failed to load events: {eventsState.error}</p>}
           {sessionsState.status === 'error' && (
@@ -325,6 +348,17 @@ function App() {
                         <p className="hint">No lap data for this session.</p>
                       ))}
                   </section>
+
+                  <section className="chart-section">
+                    <h2>Flag periods</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading flag data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <FlagGanttChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
                 </>
               )}
 
@@ -378,6 +412,23 @@ function App() {
                 </section>
               )}
 
+              {activeTab === 'sectors' && (
+                <section className="chart-section">
+                  <h2>Sector analysis</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading sector data…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <SectorAnalysisChart
+                        laps={lapsState.data}
+                        seriesSlug={seriesSlug}
+                        eventName={currentEvent?.display_name}
+                      />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
+
               {activeTab === 'pit' && (
                 <section className="chart-section">
                   <h2>Pit stops</h2>
@@ -425,6 +476,9 @@ function App() {
           )}
         </main>
       </div>
+      {settingsOpen && (
+        <SettingsPanel teams={knownTeams} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   )
 }

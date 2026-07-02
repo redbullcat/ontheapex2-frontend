@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LeadStint } from '../api/types'
+import { ChartExportButtons } from './ChartExportButtons'
+import { getTeamDisplayName } from '../lib/identityColors'
 
 const CATEGORICAL: readonly string[] = [
   '#2a78d6', // blue
@@ -202,20 +204,23 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
           z-index: 10;
         }
       `}</style>
-      <div className="legend">
-        {legendCars.map((car) => (
-          <div className="legend-item" key={car}>
-            <span className="swatch" style={{ background: carColor.get(car) }} />
-            <span>#{car}</span>
-          </div>
-        ))}
+      <div className="chart-controls">
+        <div className="legend">
+          {legendCars.map((car) => (
+            <div className="legend-item" key={car}>
+              <span className="swatch" style={{ background: carColor.get(car) }} />
+              <span>#{car}</span>
+            </div>
+          ))}
+        </div>
+        <ChartExportButtons svgRef={svgRef} filename="lead_history" />
       </div>
       <svg ref={svgRef} />
       {tooltip && (
         <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
           <div>
             <strong>#{tooltip.stint.car_number}</strong>
-            {tooltip.stint.team ? ` — ${tooltip.stint.team}` : ''}
+            {tooltip.stint.team ? ` — ${getTeamDisplayName(tooltip.stint.team)}` : ''}
           </div>
           <div>
             Laps {tooltip.stint.start_lap}–{tooltip.stint.end_lap}

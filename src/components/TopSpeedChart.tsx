@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const ROW_HEIGHT = 22
@@ -129,7 +130,7 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => `#${d.car} — ${d.team ?? 'Unknown'}`)
+      .text((d) => `#${d.car} — ${getTeamDisplayName(d.team)}`)
 
     g.append('g')
       .selectAll('rect')
@@ -207,6 +208,7 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
       `}</style>
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        <ChartExportButtons svgRef={svgRef} filename="top_speed" />
       </div>
       {cars.length === 0 ? <p className="hint">No top speed data for this selection.</p> : <svg ref={svgRef} />}
     </div>

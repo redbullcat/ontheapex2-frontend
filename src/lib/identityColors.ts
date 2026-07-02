@@ -1,3 +1,5 @@
+import { getTeamOverrides, onIdentityOverridesChanged } from './identityOverrides'
+
 // Ported from streamlit_api/config.py TEAM_COLORS + utils.py get_team_color.
 // Real team livery colors, not the abstract categorical system palette — this
 // is a domain-specific identity lookup (like a sports team color), matched
@@ -103,8 +105,15 @@ export function getEntityColor(name: string): string {
 
 const resolvedTeamCache = new Map<string, string>()
 
+// User overrides can change at any time from the Settings panel — clear the
+// resolved-color cache so the next lookup picks up the new value/reverts
+// cleanly when an override is removed.
+onIdentityOverridesChanged(() => resolvedTeamCache.clear())
+
 export function getTeamColor(team: string | null | undefined): string {
   if (!team) return getEntityColor('Unknown')
+  const override = getTeamOverrides()[team]?.color
+  if (override) return override
   const cached = resolvedTeamCache.get(team)
   if (cached) return cached
   const lower = team.toLowerCase()
@@ -117,4 +126,10 @@ export function getTeamColor(team: string | null | undefined): string {
   const fallback = getEntityColor(team)
   resolvedTeamCache.set(team, fallback)
   return fallback
+}
+
+// Falls back to the raw TEAM string when no display-name override is set.
+export function getTeamDisplayName(team: string | null | undefined): string {
+  if (!team) return 'Unknown'
+  return getTeamOverrides()[team]?.name || team
 }

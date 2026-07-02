@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { LapRead, LeadStint } from '../api/types'
 import { LeadHistoryPanel } from './LeadHistoryPanel'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 
 interface PodiumRow {
   position: number
@@ -156,7 +156,7 @@ export function RaceOverview({ laps, leadHistory }: { laps: LapRead[]; leadHisto
             <span className="team-key" style={{ background: getTeamColor(row.team) }} />
             <div className="podium-details">
               <span className="podium-car">
-                #{row.car} {row.team ? `— ${row.team}` : ''}
+                #{row.car} {row.team ? `— ${getTeamDisplayName(row.team)}` : ''}
               </span>
               <span className="podium-drivers">{row.drivers || '—'}</span>
               <span className="podium-laps">{row.laps} laps</span>
@@ -178,7 +178,7 @@ export function RaceOverview({ laps, leadHistory }: { laps: LapRead[]; leadHisto
                   <span className="team-key" style={{ background: getTeamColor(row.team) }} />
                   <div className="podium-details">
                     <span className="podium-car">
-                      #{row.car} {row.team ? `— ${row.team}` : ''}
+                      #{row.car} {row.team ? `— ${getTeamDisplayName(row.team)}` : ''}
                     </span>
                     <span className="podium-drivers">{row.drivers || '—'}</span>
                     <span className="podium-laps">{row.laps} laps</span>
