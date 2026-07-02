@@ -19,6 +19,7 @@ import { FastestLapsTable } from './components/FastestLapsTable'
 import { PaceConsistencyChart } from './components/PaceConsistencyChart'
 import { TopSpeedChart } from './components/TopSpeedChart'
 import { PitTimeChart } from './components/PitTimeChart'
+import { StoryChart } from './components/StoryChart'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -29,6 +30,7 @@ const RACE_TABS: Tab[] = [
   { id: 'battle', label: 'Battle' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
+  { id: 'story', label: 'Story' },
 ]
 
 // Practice/Qualifying sessions have no fixed finishing order, so the
@@ -386,6 +388,19 @@ function App() {
                       <DriverHistoryChart stints={stintsState.data} laps={lapsState.data} />
                     ) : (
                       <p className="hint">No stint data for this session.</p>
+                    ))}
+                </section>
+              )}
+
+              {activeTab === 'story' && (
+                <section className="chart-section">
+                  <h2>Story</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading story…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <StoryChart laps={lapsState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
                     ))}
                 </section>
               )}
