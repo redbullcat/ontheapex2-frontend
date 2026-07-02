@@ -10,6 +10,11 @@ import { ResultsTable } from './components/ResultsTable'
 import { PaceChart } from './components/PaceChart'
 import { GapEvolutionChart } from './components/GapEvolutionChart'
 import { DriverHistoryChart } from './components/DriverHistoryChart'
+import { RaceStats } from './components/RaceStats'
+import { FastestLapsTable } from './components/FastestLapsTable'
+import { PaceConsistencyChart } from './components/PaceConsistencyChart'
+import { TopSpeedChart } from './components/TopSpeedChart'
+import { PitTimeChart } from './components/PitTimeChart'
 import './App.css'
 
 const TABS: Tab[] = [
@@ -17,6 +22,7 @@ const TABS: Tab[] = [
   { id: 'position', label: 'Position' },
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
+  { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
 ]
 
@@ -155,6 +161,17 @@ function App() {
               {activeTab === 'results' && (
                 <>
                   <section className="chart-section">
+                    <h2>Race stats</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading race stats…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <RaceStats laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
                     <h2>Who led</h2>
                     {leadHistoryState.status === 'loading' && <p className="hint">Loading lead history…</p>}
                     {leadHistoryState.status === 'success' &&
@@ -173,6 +190,17 @@ function App() {
                         <ResultsTable laps={lapsState.data} />
                       ) : (
                         <p className="hint">No results for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Fastest laps</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading fastest laps…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <FastestLapsTable laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
                       ))}
                   </section>
                 </>
@@ -207,16 +235,40 @@ function App() {
               )}
 
               {activeTab === 'pace' && (
-                <section className="chart-section">
-                  <h2>Average pace</h2>
-                  {lapsState.status === 'loading' && <p className="hint">Loading pace data…</p>}
-                  {lapsState.status === 'success' &&
-                    (lapsState.data.length > 0 ? (
-                      <PaceChart laps={lapsState.data} />
-                    ) : (
-                      <p className="hint">No lap data for this session.</p>
-                    ))}
-                </section>
+                <>
+                  <section className="chart-section">
+                    <h2>Average pace</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pace data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PaceChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Pace consistency</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading consistency data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PaceConsistencyChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Top speed</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading top speed data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <TopSpeedChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+                </>
               )}
 
               {activeTab === 'battle' && (
@@ -226,6 +278,19 @@ function App() {
                   {lapsState.status === 'success' &&
                     (lapsState.data.length > 0 ? (
                       <GapEvolutionChart laps={lapsState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
+
+              {activeTab === 'pit' && (
+                <section className="chart-section">
+                  <h2>Pit stops</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <PitTimeChart laps={lapsState.data} />
                     ) : (
                       <p className="hint">No lap data for this session.</p>
                     ))}

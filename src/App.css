@@ -202,18 +202,24 @@ header h1 {
   border-left: 1px solid var(--border, #e1e0d9);
 }
 
-.results-table .table-scroll {
+.results-table .table-scroll,
+.race-stats .table-scroll,
+.fastest-laps .table-scroll {
   overflow-x: auto;
 }
 
-.results-table table {
+.results-table table,
+.race-stats table,
+.fastest-laps table {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
   white-space: nowrap;
 }
 
-.results-table th {
+.results-table th,
+.race-stats th,
+.fastest-laps th {
   text-align: left;
   font-weight: 600;
   color: var(--text-muted, #898781);
@@ -221,14 +227,66 @@ header h1 {
   border-bottom: 1px solid var(--border, #e1e0d9);
 }
 
-.results-table td {
+.results-table td,
+.race-stats td,
+.fastest-laps td {
   padding: 6px 12px 6px 0;
   border-bottom: 1px solid var(--border, #e1e0d9);
   font-variant-numeric: tabular-nums;
 }
 
-.results-table tbody tr:hover {
+.results-table tbody tr:hover,
+.race-stats tbody tr:hover,
+.fastest-laps tbody tr:hover {
   background: color-mix(in srgb, var(--text, #52514e) 6%, transparent);
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 8px;
+  min-width: 120px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted, #898781);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-h, #0b0b0b);
+}
+
+.race-stats-tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.race-stats-tables h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #52514e);
+}
+
+.pit-time-subheading {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #52514e);
 }
 
 .team-key {
