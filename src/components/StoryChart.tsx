@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 16, right: 64, bottom: 40, left: 48 }
 const PLOT_HEIGHT = 420
@@ -194,7 +195,7 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
-      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, getTeamDisplayName(lap.team))
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
@@ -470,6 +471,7 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
           addLabel="Add car"
           resetLabel="Show all cars"
         />
+        <ChartExportButtons svgRef={svgRef} filename="story_chart" />
       </div>
       {story.cars.length === 0 ? (
         <p className="hint">No lap data for this selection.</p>
@@ -493,7 +495,7 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
           <div>
-            <strong>#{hover.car}</strong> {hover.team ? `— ${hover.team}` : ''}
+            <strong>#{hover.car}</strong> {hover.team ? `— ${getTeamDisplayName(hover.team)}` : ''}
           </div>
           <div>
             +{hover.gap.toFixed(3)}s · Lap {hover.lap}

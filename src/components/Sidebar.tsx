@@ -12,6 +12,7 @@ export function Sidebar({
   onToggle,
   theme,
   onThemeChange,
+  onOpenSettings,
   series,
   seriesValue,
   onSeriesChange,
@@ -29,6 +30,7 @@ export function Sidebar({
   onToggle: () => void
   theme: Theme
   onThemeChange: (t: Theme) => void
+  onOpenSettings: () => void
   series: Option[]
   seriesValue: string
   onSeriesChange: (v: string) => void
@@ -66,6 +68,15 @@ export function Sidebar({
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {theme === 'dark' ? '☀' : '☾'}
+        </button>
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={onOpenSettings}
+          title="Settings"
+          aria-label="Open settings"
+        >
+          ⚙
         </button>
       </div>
       <Select label="Series" value={seriesValue} options={series} onChange={onSeriesChange} disabled={seriesDisabled} />

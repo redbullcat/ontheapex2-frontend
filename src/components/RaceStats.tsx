@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { LapRead } from '../api/types'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { getTeamDisplayName } from '../lib/identityColors'
 
 const FLAG_LABELS: Record<string, string> = {
   GF: 'Green',
@@ -98,7 +99,7 @@ function computeStats(laps: LapRead[], activeClasses: Set<string>) {
   const ledByCar: LedRow[] = [...lapsLedByCar.entries()]
     .map(([car, v]) => ({
       key: car,
-      label: `#${car}${v.team ? ` — ${v.team}` : ''}`,
+      label: `#${car}${v.team ? ` — ${getTeamDisplayName(v.team)}` : ''}`,
       laps: v.laps,
       pct: totalLeaderLaps > 0 ? (v.laps / totalLeaderLaps) * 100 : 0,
     }))

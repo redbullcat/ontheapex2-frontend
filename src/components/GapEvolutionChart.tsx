@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { CLASS_VARS, OTHER_VAR, assignClassVars, CLASS_COLOR_CSS_VARS, CLASS_COLOR_CSS_VARS_DARK } from '../lib/classColors'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
+import { computeFlagPeriods, FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 400
@@ -45,6 +47,9 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const [colorMode, setColorMode] = useState<ColorMode>('team')
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
+  const [showFlags, setShowFlags] = useState(false)
+
+  const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
 
   useEffect(() => {
     const el = containerRef.current
@@ -74,7 +79,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     const byCar = new Map<string, string>()
     for (const lap of laps) {
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
-      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, lap.team ?? 'Unknown team')
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, getTeamDisplayName(lap.team))
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
@@ -204,6 +209,20 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     const y = d3.scaleLinear().domain([0, maxGap || 1]).range([0, innerHeight])
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+
+    if (showFlags) {
+      g.append('g')
+        .attr('class', 'flag-bands')
+        .selectAll('rect')
+        .data(flagPeriods.filter((p) => p.category !== 'green'))
+        .join('rect')
+        .attr('x', (d) => x(d.startLap))
+        .attr('width', (d) => Math.max(1, x(d.endLap + 1) - x(d.startLap)))
+        .attr('y', 0)
+        .attr('height', innerHeight)
+        .attr('fill', (d) => FLAG_COLORS[d.category])
+        .attr('fill-opacity', 0.15)
+    }
 
     const yTicks = y.ticks(6)
     g.append('g')
@@ -368,7 +387,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxGap, gapByLapAndCar, referenceCar])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods])
 
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
@@ -459,6 +478,11 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
         <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+        <label className="class-filter-item">
+          <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
+          Show flag periods
+        </label>
+        <ChartExportButtons svgRef={svgRef} filename="gap_evolution" />
       </div>
       <div className="chart-controls">
         <EntityFilter
@@ -479,6 +503,16 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           ))}
         </div>
       )}
+      {showFlags && (
+        <div className="legend">
+          {[...new Set(flagPeriods.filter((p) => p.category !== 'green').map((p) => p.category))].map((cat) => (
+            <div className="legend-item" key={cat}>
+              <span className="legend-key" style={{ background: FLAG_COLORS[cat] }} />
+              <span>{FLAG_LABELS[cat]}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {cars.length === 0 ? (
         <p className="hint">No lap data for this selection.</p>
       ) : (
@@ -488,7 +522,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
           <div>
-            <strong>#{hover.car}</strong> {hover.team ? `— ${hover.team}` : ''}
+            <strong>#{hover.car}</strong> {hover.team ? `— ${getTeamDisplayName(hover.team)}` : ''}
           </div>
           <div>
             +{hover.gap.toFixed(3)}s · {hover.cls} · Lap {hover.lap}

@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { HourlyPositionEntry, HourlyPositions } from '../api/types'
 import { CLASS_VARS, OTHER_VAR, assignClassVars, CLASS_COLOR_CSS_VARS, CLASS_COLOR_CSS_VARS_DARK } from '../lib/classColors'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -93,7 +94,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     for (const hourEntry of data) {
       for (const p of hourEntry.positions) {
         if (!activeClasses.has(p.class ?? 'Unknown')) continue
-        if (!byCar.has(p.car_number)) byCar.set(p.car_number, p.team ?? 'Unknown team')
+        if (!byCar.has(p.car_number)) byCar.set(p.car_number, getTeamDisplayName(p.team))
       }
     }
     return [...byCar.entries()]
@@ -466,6 +467,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
         <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+        <ChartExportButtons svgRef={svgRef} filename="position_by_hour" />
       </div>
       <div className="chart-controls">
         <EntityFilter
@@ -490,7 +492,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
           <div>
-            <strong>#{hover.car}</strong> {hover.team ? `— ${hover.team}` : ''}
+            <strong>#{hover.car}</strong> {hover.team ? `— ${getTeamDisplayName(hover.team)}` : ''}
           </div>
           <div>
             P{hover.position} · {hover.cls} · Hour {hover.hour} · Lap {hover.lap}

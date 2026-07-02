@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead, Stint } from '../api/types'
-import { getEntityColor } from '../lib/identityColors'
+import { getEntityColor, getTeamDisplayName } from '../lib/identityColors'
 import { CarPicker, type CarOption } from './CarPicker'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 140 }
 const ROW_HEIGHT = 40
@@ -130,7 +131,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
   const carOptions: CarOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
     for (const s of stints) {
-      if (!byCar.has(s.car_number)) byCar.set(s.car_number, s.team ?? 'Unknown team')
+      if (!byCar.has(s.car_number)) byCar.set(s.car_number, getTeamDisplayName(s.team))
     }
     return [...byCar.entries()]
       .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
@@ -389,6 +390,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
       `}</style>
       <div className="chart-controls">
         <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
+        <ChartExportButtons svgRef={svgRef} filename="driver_stint_history" />
       </div>
       {rows.length === 0 ? (
         <p className="hint">Pick one or more cars above to see their driver stint history.</p>
@@ -414,7 +416,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
       {rows.map((row) => (
         <div className="driver-summary" key={row.carNumber}>
           <h3>
-            #{row.carNumber} {row.team ? `— ${row.team}` : ''}
+            #{row.carNumber} {row.team ? `— ${getTeamDisplayName(row.team)}` : ''}
           </h3>
           <div className="driver-pie-row">
             <svg width={PIE_RADIUS * 2} height={PIE_RADIUS * 2} className="driver-pie">

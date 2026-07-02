@@ -4,6 +4,7 @@ import type { LapRead } from '../api/types'
 import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { ChartExportButtons } from './ChartExportButtons'
 
 const MARGIN = { top: 16, right: 24, bottom: 40, left: 56 }
 const HEIGHT = 440
@@ -253,6 +254,7 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
       `}</style>
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        <ChartExportButtons svgRef={svgRef} filename="pace_consistency" />
       </div>
       {points.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
       {hover && (

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { LapRead } from '../api/types'
-import { getTeamColor } from '../lib/identityColors'
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 
@@ -152,7 +152,7 @@ export function ResultsTable({ laps }: { laps: LapRead[] }) {
                   <td>#{row.car_number}</td>
                   <td>
                     <span className="team-key" style={{ background: getTeamColor(row.team) }} />
-                    {row.team ?? '—'}
+                    {row.team ? getTeamDisplayName(row.team) : '—'}
                   </td>
                   {showClassColumn && <td>{row.class}</td>}
                   <td>{row.drivers || '—'}</td>
