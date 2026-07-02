@@ -10,6 +10,7 @@ import { ResultsTable } from './components/ResultsTable'
 import { PaceChart } from './components/PaceChart'
 import { GapEvolutionChart } from './components/GapEvolutionChart'
 import { DriverHistoryChart } from './components/DriverHistoryChart'
+import { RaceOverview } from './components/RaceOverview'
 import { RaceStats } from './components/RaceStats'
 import { FastestLapsTable } from './components/FastestLapsTable'
 import { PaceConsistencyChart } from './components/PaceConsistencyChart'
@@ -18,6 +19,7 @@ import { PitTimeChart } from './components/PitTimeChart'
 import './App.css'
 
 const TABS: Tab[] = [
+  { id: 'overview', label: 'Overview' },
   { id: 'results', label: 'Results' },
   { id: 'position', label: 'Position' },
   { id: 'pace', label: 'Pace' },
@@ -38,7 +40,7 @@ function App() {
   const [year, setYear] = useState(() => readParam('year'))
   const [eventId, setEventId] = useState(() => readParam('event'))
   const [sessionId, setSessionId] = useState(() => readParam('session'))
-  const [activeTab, setActiveTab] = useState(() => readParam('tab') || 'results')
+  const [activeTab, setActiveTab] = useState(() => readParam('tab') || 'overview')
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const stored = window.localStorage.getItem('sidebarOpen')
     return stored === null ? true : stored === 'true'
@@ -50,7 +52,7 @@ function App() {
     if (year) params.set('year', year)
     if (eventId) params.set('event', eventId)
     if (sessionId) params.set('session', sessionId)
-    if (activeTab !== 'results') params.set('tab', activeTab)
+    if (activeTab !== 'overview') params.set('tab', activeTab)
     const qs = params.toString()
     window.history.replaceState(null, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname)
   }, [seriesSlug, year, eventId, sessionId, activeTab])
@@ -157,6 +159,22 @@ function App() {
           ) : (
             <>
               <Tabs tabs={TABS} value={activeTab} onChange={setActiveTab} />
+
+              {activeTab === 'overview' && (
+                <section className="chart-section">
+                  <h2>Overview</h2>
+                  {(lapsState.status === 'loading' || leadHistoryState.status === 'loading') && (
+                    <p className="hint">Loading overview…</p>
+                  )}
+                  {lapsState.status === 'success' &&
+                    leadHistoryState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <RaceOverview laps={lapsState.data} leadHistory={leadHistoryState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
 
               {activeTab === 'results' && (
                 <>
