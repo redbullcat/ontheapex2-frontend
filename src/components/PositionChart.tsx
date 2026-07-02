@@ -6,6 +6,8 @@ import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ColorModeToggle, type ColorMode } from './ColorModeToggle'
+import { CarPicker, type CarOption } from './CarPicker'
+import { LapRangeInputs } from './LapRangeInputs'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -47,6 +49,8 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
+  const [carSelection, setCarSelection] = useState<string[]>([])
+  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -83,13 +87,45 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
     [classSelection, allClasses],
   )
 
+  const carOptions: CarOption[] = useMemo(() => {
+    const byCar = new Map<string, string>()
+    for (const hourEntry of data) {
+      for (const p of hourEntry.positions) {
+        if (!byCar.has(p.car_number)) byCar.set(p.car_number, p.team ?? 'Unknown team')
+      }
+    }
+    return [...byCar.entries()]
+      .map(([car_number, team]) => ({ car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
+  }, [data])
+
+  const lapBounds = useMemo((): [number, number] => {
+    let min = Infinity
+    let max = 0
+    for (const hourEntry of data) {
+      for (const p of hourEntry.positions) {
+        min = Math.min(min, p.lap_number)
+        max = Math.max(max, p.lap_number)
+      }
+    }
+    return min === Infinity ? [0, 1] : [min, max]
+  }, [data])
+
+  const effectiveLapRange = lapRange ?? lapBounds
+
   // Re-rank within the selected classes: position is recomputed per hour
   // from elapsed_seconds among only the entries whose class is selected, so
   // filtering to one class shows that class's own P1..Pn running order.
   const rankedByHour = useMemo(() => {
     const m = new Map<number, RankedEntry[]>()
     for (const hourEntry of data) {
-      const filtered = hourEntry.positions.filter((p) => activeClasses.has(p.class ?? 'Unknown'))
+      const filtered = hourEntry.positions.filter(
+        (p) =>
+          activeClasses.has(p.class ?? 'Unknown') &&
+          (carSelection.length === 0 || carSelection.includes(p.car_number)) &&
+          p.lap_number >= effectiveLapRange[0] &&
+          p.lap_number <= effectiveLapRange[1],
+      )
       // Rank by laps completed first, elapsed time only breaks ties within the
       // same lap count — a car stuck on a stale forward-filled snapshot after
       // retiring (fewer laps, frozen low elapsed_seconds) must not outrank
@@ -101,7 +137,7 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       m.set(hourEntry.hour, ranked)
     }
     return m
-  }, [data, activeClasses])
+  }, [data, activeClasses, carSelection, effectiveLapRange])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
@@ -402,6 +438,10 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
       <div className="chart-controls">
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
+        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+      </div>
+      <div className="chart-controls">
+        <CarPicker cars={carOptions} selected={carSelection} onChange={setCarSelection} />
       </div>
       {colorMode === 'class' && (
         <div className="legend">

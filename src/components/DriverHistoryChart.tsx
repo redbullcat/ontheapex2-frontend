@@ -11,6 +11,20 @@ const SEGMENT_GAP = 2
 
 interface StintSegment extends Stint {
   fastestLapNumber: number | null
+  avg20Seconds: number | null
+}
+
+interface DriverSummaryRow {
+  driver: string
+  color: string
+  totalTimeSeconds: number
+  avgSeconds: number | null
+  avg20Seconds: number | null
+  fastestSeconds: number | null
+  fastestLapNumber: number | null
+  stints: number
+  totalLaps: number
+  firstStintLap: number
 }
 
 interface TooltipState {
@@ -24,6 +38,67 @@ function formatLapTime(seconds: number | null): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}:${s.toFixed(3).padStart(6, '0')}`
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// Top-20% fastest laps, same convention as the pace chart's top-N% filter.
+function fastestPercentMean(sortedSeconds: number[], percent: number): number | null {
+  if (sortedSeconds.length === 0) return null
+  const keep = Math.max(1, Math.ceil((sortedSeconds.length * percent) / 100))
+  return d3.mean(sortedSeconds.slice(0, keep)) ?? null
+}
+
+function computeDriverSummary(carStints: Stint[], carLaps: LapRead[]): DriverSummaryRow[] {
+  const lapsByDriver = new Map<string, LapRead[]>()
+  const stintCountByDriver = new Map<string, number>()
+  const firstStintLapByDriver = new Map<string, number>()
+  for (const stint of carStints) {
+    stintCountByDriver.set(stint.drivers, (stintCountByDriver.get(stint.drivers) ?? 0) + 1)
+    const prevFirst = firstStintLapByDriver.get(stint.drivers)
+    if (prevFirst === undefined || stint.start_lap < prevFirst) firstStintLapByDriver.set(stint.drivers, stint.start_lap)
+    for (const lap of carLaps) {
+      if (lap.lap_number < stint.start_lap || lap.lap_number > stint.end_lap) continue
+      const arr = lapsByDriver.get(stint.drivers)
+      if (arr) arr.push(lap)
+      else lapsByDriver.set(stint.drivers, [lap])
+    }
+  }
+
+  const rows: DriverSummaryRow[] = []
+  for (const [driver, driverLaps] of lapsByDriver) {
+    const times = driverLaps.map((l) => l.lap_time_seconds).filter((t): t is number => t != null)
+    const sorted = [...times].sort((a, b) => a - b)
+    let fastestLapNumber: number | null = null
+    let fastestSeconds: number | null = null
+    for (const lap of driverLaps) {
+      if (lap.lap_time_seconds == null) continue
+      if (fastestSeconds === null || lap.lap_time_seconds < fastestSeconds) {
+        fastestSeconds = lap.lap_time_seconds
+        fastestLapNumber = lap.lap_number
+      }
+    }
+    rows.push({
+      driver,
+      color: getEntityColor(driver),
+      totalTimeSeconds: times.reduce((sum, t) => sum + t, 0),
+      avgSeconds: d3.mean(sorted) ?? null,
+      avg20Seconds: fastestPercentMean(sorted, 20),
+      fastestSeconds,
+      fastestLapNumber,
+      stints: stintCountByDriver.get(driver) ?? 0,
+      totalLaps: driverLaps.length,
+      firstStintLap: firstStintLapByDriver.get(driver) ?? 0,
+    })
+  }
+  rows.sort((a, b) => a.firstStintLap - b.firstStintLap)
+  return rows
 }
 
 export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: LapRead[] }) {
@@ -75,17 +150,21 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
       const segments: StintSegment[] = carStints.map((stint) => {
         let fastestLapNumber: number | null = null
         let best = Infinity
+        const stintTimes: number[] = []
         for (const lap of carLaps) {
           if (lap.lap_number < stint.start_lap || lap.lap_number > stint.end_lap) continue
           if (lap.lap_time_seconds == null) continue
+          stintTimes.push(lap.lap_time_seconds)
           if (lap.lap_time_seconds < best) {
             best = lap.lap_time_seconds
             fastestLapNumber = lap.lap_number
           }
         }
-        return { ...stint, fastestLapNumber }
+        const avg20Seconds = fastestPercentMean([...stintTimes].sort((a, b) => a - b), 20)
+        return { ...stint, fastestLapNumber, avg20Seconds }
       })
-      return { carNumber, team: carStints[0]?.team ?? null, segments }
+      const driverSummary = computeDriverSummary(carStints, carLaps)
+      return { carNumber, team: carStints[0]?.team ?? null, segments, driverSummary }
     })
   }, [selectedCars, stints, lapsByCar])
 
@@ -217,6 +296,45 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
         .driver-history-chart .tooltip strong {
           font-size: 13px;
         }
+        .driver-history-chart .driver-summary {
+          margin-top: 20px;
+        }
+        .driver-history-chart .driver-summary h3 {
+          margin: 0 0 8px;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+        }
+        .driver-history-chart .table-scroll {
+          overflow-x: auto;
+        }
+        .driver-history-chart table {
+          border-collapse: collapse;
+          width: 100%;
+          font-size: 13px;
+          white-space: nowrap;
+        }
+        .driver-history-chart th {
+          text-align: left;
+          font-weight: 600;
+          color: var(--text-muted);
+          padding: 6px 12px 6px 0;
+          border-bottom: 1px solid var(--axis);
+        }
+        .driver-history-chart td {
+          padding: 6px 12px 6px 0;
+          border-bottom: 1px solid var(--axis);
+          font-variant-numeric: tabular-nums;
+          color: var(--text-primary);
+        }
+        .driver-history-chart .team-key {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          margin-right: 6px;
+          vertical-align: middle;
+        }
       `}</style>
       <div className="chart-controls">
         <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
@@ -238,9 +356,51 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
             Fastest {formatLapTime(tooltip.segment.best_lap_seconds)}
             {tooltip.segment.fastestLapNumber != null ? ` (lap ${tooltip.segment.fastestLapNumber})` : ''}
           </div>
-          <div>Average {formatLapTime(tooltip.segment.avg_lap_seconds)}</div>
+          <div>Average (100%) {formatLapTime(tooltip.segment.avg_lap_seconds)}</div>
+          <div>Average (top 20%) {formatLapTime(tooltip.segment.avg20Seconds)}</div>
         </div>
       )}
+      {rows.map((row) => (
+        <div className="driver-summary" key={row.carNumber}>
+          <h3>
+            #{row.carNumber} {row.team ? `— ${row.team}` : ''}
+          </h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Driver</th>
+                  <th>Time in car</th>
+                  <th>Avg (100%)</th>
+                  <th>Avg (top 20%)</th>
+                  <th>Fastest lap</th>
+                  <th>Stints</th>
+                  <th>Laps</th>
+                </tr>
+              </thead>
+              <tbody>
+                {row.driverSummary.map((d) => (
+                  <tr key={d.driver}>
+                    <td>
+                      <span className="team-key" style={{ background: d.color }} />
+                      {d.driver}
+                    </td>
+                    <td>{formatDuration(d.totalTimeSeconds)}</td>
+                    <td>{formatLapTime(d.avgSeconds)}</td>
+                    <td>{formatLapTime(d.avg20Seconds)}</td>
+                    <td>
+                      {formatLapTime(d.fastestSeconds)}
+                      {d.fastestLapNumber != null ? ` (lap ${d.fastestLapNumber})` : ''}
+                    </td>
+                    <td>{d.stints}</td>
+                    <td>{d.totalLaps}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
