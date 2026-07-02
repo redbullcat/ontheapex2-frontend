@@ -49,3 +49,13 @@ export async function getLaps(sessionId: number): Promise<LapRead[]> {
 export function getStints(sessionId: number): Promise<Stint[]> {
   return get<Stint[]>(`/api/sessions/${sessionId}/stints`)
 }
+
+// "Combine all Practice sessions" (etc) fetches every session's laps in
+// parallel and pools them — each LapRead already carries its own
+// session_id, which is what keeps stint/pit-stop pairing from bridging
+// across a session boundary once laps from different sessions are mixed
+// together (see computeCarStints and PitTimeChart).
+export async function getCombinedLaps(sessionIds: number[]): Promise<LapRead[]> {
+  const pages = await Promise.all(sessionIds.map((id) => getLaps(id)))
+  return pages.flat()
+}
