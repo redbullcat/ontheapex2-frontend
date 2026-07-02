@@ -1,4 +1,4 @@
-import type { EventSummary, HourlyPositions, LapRead, LeadStint, Series, SessionSummary } from './types'
+import type { EventSummary, HourlyPositions, LapRead, LeadStint, Series, SessionSummary, Stint } from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
 
@@ -44,4 +44,8 @@ export async function getLaps(sessionId: number): Promise<LapRead[]> {
     offset += LAPS_PAGE_SIZE
   }
   return all
+}
+
+export function getStints(sessionId: number): Promise<Stint[]> {
+  return get<Stint[]>(`/api/sessions/${sessionId}/stints`)
 }

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
-import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions } from './api/client'
+import { getEvents, getHourlyPositions, getLaps, getLeadHistory, getSeries, getSessions, getStints } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { Select } from './components/Select'
 import { LeadHistoryChart } from './components/LeadHistoryChart'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
 import { ResultsTable } from './components/ResultsTable'
+import { PaceChart } from './components/PaceChart'
+import { GapEvolutionChart } from './components/GapEvolutionChart'
+import { DriverHistoryChart } from './components/DriverHistoryChart'
 import './App.css'
 
 function App() {
@@ -26,6 +29,7 @@ function App() {
     [sessionId],
   )
   const lapsState = useAsync(sessionId ? () => getLaps(Number(sessionId)) : null, [sessionId])
+  const stintsState = useAsync(sessionId ? () => getStints(Number(sessionId)) : null, [sessionId])
 
   const years = useMemo(() => {
     if (eventsState.status !== 'success') return []
@@ -107,6 +111,7 @@ function App() {
         <p className="error">Failed to load position data: {positionsState.error}</p>
       )}
       {lapsState.status === 'error' && <p className="error">Failed to load lap data: {lapsState.error}</p>}
+      {stintsState.status === 'error' && <p className="error">Failed to load stint data: {stintsState.error}</p>}
 
       <section className="chart-section">
         <h2>Who led</h2>
@@ -161,6 +166,51 @@ function App() {
           ))}
         {lapsState.status === 'idle' && (
           <p className="hint">Pick a series, year, event and session to see results.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Average pace</h2>
+        {lapsState.status === 'loading' && <p className="hint">Loading pace data…</p>}
+        {lapsState.status === 'success' &&
+          (lapsState.data.length > 0 ? (
+            <PaceChart laps={lapsState.data} />
+          ) : (
+            <p className="hint">No lap data for this session.</p>
+          ))}
+        {lapsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see average pace.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Gap evolution</h2>
+        {lapsState.status === 'loading' && <p className="hint">Loading gap data…</p>}
+        {lapsState.status === 'success' &&
+          (lapsState.data.length > 0 ? (
+            <GapEvolutionChart laps={lapsState.data} />
+          ) : (
+            <p className="hint">No lap data for this session.</p>
+          ))}
+        {lapsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see gap evolution.</p>
+        )}
+      </section>
+
+      <section className="chart-section">
+        <h2>Driver stint history</h2>
+        {(stintsState.status === 'loading' || lapsState.status === 'loading') && (
+          <p className="hint">Loading stint data…</p>
+        )}
+        {stintsState.status === 'success' &&
+          lapsState.status === 'success' &&
+          (stintsState.data.length > 0 ? (
+            <DriverHistoryChart stints={stintsState.data} laps={lapsState.data} />
+          ) : (
+            <p className="hint">No stint data for this session.</p>
+          ))}
+        {stintsState.status === 'idle' && (
+          <p className="hint">Pick a series, year, event and session to see driver stint history.</p>
         )}
       </section>
     </div>
