@@ -24,6 +24,10 @@ import { FlagGanttChart } from './components/FlagGanttChart'
 import { SectorAnalysisChart } from './components/SectorAnalysisChart'
 import { SettingsPanel } from './components/SettingsPanel'
 import { onIdentityOverridesChanged } from './lib/identityOverrides'
+import { LongRunChart } from './components/LongRunChart'
+import { AverageLongRunChart } from './components/AverageLongRunChart'
+import { StintLengthDistribution } from './components/StintLengthDistribution'
+import { LongRunPaceByManufacturer } from './components/LongRunPaceByManufacturer'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -33,6 +37,7 @@ const RACE_TABS: Tab[] = [
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
   { id: 'sectors', label: 'Sectors' },
+  { id: 'longruns', label: 'Long Runs' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
   { id: 'story', label: 'Story' },
@@ -41,11 +46,12 @@ const RACE_TABS: Tab[] = [
 // Practice/Qualifying sessions have no fixed finishing order, so the
 // race-classification charts (Overview/Results/Position) don't apply —
 // Pace, Battle (gap evolution still works as a pace-over-laps comparison),
-// Sectors, Pit Stops and Stints are all still meaningful without one.
+// Sectors, Long Runs, Pit Stops and Stints are all still meaningful without one.
 const NON_RACE_TABS: Tab[] = [
   { id: 'pace', label: 'Pace' },
   { id: 'battle', label: 'Battle' },
   { id: 'sectors', label: 'Sectors' },
+  { id: 'longruns', label: 'Long Runs' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
 ]
@@ -427,6 +433,54 @@ function App() {
                       <p className="hint">No lap data for this session.</p>
                     ))}
                 </section>
+              )}
+
+              {activeTab === 'longruns' && (
+                <>
+                  <section className="chart-section">
+                    <h2>Longest run pace by car</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading long run data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <LongRunChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Average long run pace</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading long run data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <AverageLongRunChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Stint length distribution</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading stint data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <StintLengthDistribution laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Long run pace by manufacturer</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading long run data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <LongRunPaceByManufacturer laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+                </>
               )}
 
               {activeTab === 'pit' && (
