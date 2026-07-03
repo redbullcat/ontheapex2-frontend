@@ -10,6 +10,8 @@ import { colorBadgeClass } from './liveColors'
 import { LiveSidebar } from './LiveSidebar'
 import { RaceLogPanel } from './RaceLogPanel'
 import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
+import { ReplayTrendChart } from '../replay/ReplayTrendChart'
+import { useLiveTrendData } from './liveTrendData'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
@@ -54,6 +56,11 @@ export function LiveNowApp() {
     return map
   }, [data])
 
+  // Called unconditionally (before the early returns below) so hook order
+  // stays consistent across renders regardless of loading/error state.
+  const trendData = useLiveTrendData(data?.laps ?? [])
+  const leaderLap = useMemo(() => Math.max(0, ...(data?.standings ?? []).map((r) => r.total_laps)), [data])
+
   if (griiipSessionId == null) {
     return (
       <div className="replay-root">
@@ -82,17 +89,26 @@ export function LiveNowApp() {
 
   // A pop-out from the sidebar lands here with &panel=<tab> — render just
   // that one panel full-screen instead of the whole console.
-  if (panel === 'race-log' || panel === 'fastest-laps') {
+  const POPOUT_TITLES: Record<string, string> = {
+    'race-log': 'Race log',
+    'fastest-laps': 'Fastest laps',
+    gap: 'Gap evolution',
+    position: 'Lap-by-lap position',
+  }
+  if (panel in POPOUT_TITLES) {
     return (
       <div className="replay-root">
         <div className="replay-console">
           <div className="replay-topbar">
             <h2>
-              {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+              {title} — {POPOUT_TITLES[panel]}
             </h2>
           </div>
           <div className="replay-leaderboard-panel">
-            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />}
+            {panel === 'race-log' && <RaceLogPanel entries={data.race_log} />}
+            {panel === 'fastest-laps' && <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />}
+            {panel === 'gap' && <ReplayTrendChart data={trendData} mode="gap" currentLap={leaderLap} title="Gap evolution" />}
+            {panel === 'position' && <ReplayTrendChart data={trendData} mode="position" currentLap={leaderLap} title="Lap-by-lap position" />}
           </div>
         </div>
       </div>

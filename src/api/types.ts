@@ -177,6 +177,9 @@ export interface LiveWeather {
 export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
+  // Raw Griiip sessionType string, best-effort — see lib/liveSessionType.ts
+  // for how this gets classified into practice/qualifying/race.
+  session_type: string | null
   session_ended: boolean
   // True once the chequered flag has been shown this session — distinct
   // from session_ended, since cars on track when it drops get to complete
