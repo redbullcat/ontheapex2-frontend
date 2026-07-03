@@ -13,6 +13,8 @@
   --replay-pit-soft: #efedfa;
   --replay-moved: #2f8a4e;
   --replay-moved-soft: #e3f2e8;
+  --replay-purple: #9c27d6;
+  --replay-purple-soft: #f4e6fb;
   --replay-mono: ui-monospace, 'SF Mono', 'Roboto Mono', 'Cascadia Mono', Consolas, monospace;
 
   min-height: 100vh;
@@ -37,6 +39,8 @@
   --replay-pit-soft: #2b2748;
   --replay-moved: #4fbf78;
   --replay-moved-soft: #163524;
+  --replay-purple: #c583ec;
+  --replay-purple-soft: #2f2140;
 }
 
 .replay-hint {
@@ -218,46 +222,198 @@ table.replay-board tr:last-child td {
   border-radius: 2px;
 }
 
-.replay-gap-strip {
-  padding: 10px 22px 16px;
-  border-top: 1px solid var(--replay-line);
-  border-bottom: 1px solid var(--replay-line);
-  display: flex;
-  align-items: center;
-  gap: 18px;
+/* purple = session best in class, green = personal best (motorsport convention) */
+.replay-row td.badge-session {
+  background: var(--replay-purple-soft);
+  color: var(--replay-purple);
+  font-weight: 700;
 }
-.replay-gap-strip svg {
-  flex: 1;
-  min-width: 0;
-  height: 64px;
-  display: block;
+.replay-row td.badge-personal {
+  background: var(--replay-moved-soft);
+  color: var(--replay-moved);
+  font-weight: 700;
 }
-.replay-gap-legend {
+/* an active flash (new value just landed) still wins visually so the tick
+   is visible even on an already-purple/green cell */
+.replay-row td.flash {
+  background: var(--replay-flash-soft);
+  color: var(--replay-flash);
+}
+
+.replay-row.highlighted td {
+  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--replay-accent) 8%, transparent);
+}
+.replay-row.highlighted td.pos {
+  color: var(--replay-accent);
+}
+
+.replay-flag-pill {
+  --flag-color: var(--replay-line-strong);
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--flag-color);
+  border: 1px solid var(--flag-color);
+  background: color-mix(in srgb, var(--flag-color) 14%, transparent);
+  padding: 3px 9px;
+  border-radius: 3px;
+}
+
+/* filter components (ClassFilter/EntityFilter) are shared with the main
+   app but this view doesn't import App.css, so they're re-themed here
+   using the replay token set instead of duplicating the components. */
+.replay-root .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: none;
+  min-width: 180px;
 }
-.replay-gap-legend-title {
-  font-family: var(--replay-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--replay-line-strong);
-}
-.replay-gap-legend-item {
-  font-family: var(--replay-mono);
-  font-size: 10px;
+.replay-root .field-label {
+  font-size: 11px;
   color: var(--replay-muted);
+}
+.replay-root .field select {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--replay-line-strong);
+  font-size: 12px;
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+}
+.replay-root .class-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.replay-root .class-filter-item {
   display: flex;
   align-items: center;
   gap: 5px;
-  white-space: nowrap;
+  font-size: 12px;
+  color: var(--replay-muted);
+  cursor: pointer;
+  font-family: var(--replay-mono);
 }
-.replay-gap-legend-item i {
-  width: 9px;
-  height: 2px;
-  display: inline-block;
+.replay-root .class-filter-item input {
+  margin: 0;
+  accent-color: var(--replay-accent);
+}
+.replay-root .entity-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 100%;
+}
+.replay-root .entity-filter-add {
+  min-width: 170px;
+}
+.replay-root .entity-filter-reset {
+  border: none;
+  background: transparent;
+  color: var(--replay-muted);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 0 6px;
+}
+.replay-root .entity-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  max-height: 60px;
+  overflow-y: auto;
+}
+.replay-root .car-picker-chip {
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--replay-muted);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+  font-family: var(--replay-mono);
+}
+.replay-root .car-picker-chip:hover {
+  border-color: var(--replay-accent);
+  color: var(--replay-accent);
+}
+
+/* trend charts (gap evolution / position) */
+.replay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+.replay-trend-panel {
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--replay-line);
+  position: relative;
+}
+.replay-trend-panel.expanded {
+  position: fixed;
+  inset: 24px;
+  z-index: 50;
+  background: var(--replay-surface);
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+  overflow-y: auto;
+  border-top: none;
+}
+.replay-trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.replay-expand-btn {
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--replay-muted);
+  flex: none;
+}
+.replay-expand-btn:hover {
+  border-color: var(--replay-accent);
+  color: var(--replay-accent);
+}
+.replay-trend-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.replay-trend-chart {
+  position: relative;
+}
+.replay-trend-chart svg {
+  width: 100%;
+  display: block;
+}
+.replay-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--replay-ink);
+  color: var(--replay-surface);
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  transform: translate(10px, -50%);
+  white-space: nowrap;
+  z-index: 10;
+}
+.replay-tooltip strong {
+  font-size: 12px;
 }
 
 .replay-transport {

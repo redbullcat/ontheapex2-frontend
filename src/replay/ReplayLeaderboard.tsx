@@ -19,13 +19,26 @@ function useFlash(value: number): boolean {
   return flash
 }
 
-function ReplayRow({ row }: { row: RowState }) {
+function badgeClass(badge: RowState['s1Badge']): string {
+  if (badge === 'session') return ' badge-session'
+  if (badge === 'personal') return ' badge-personal'
+  return ''
+}
+
+function ReplayRow({ row, highlighted }: { row: RowState; highlighted: boolean }) {
   const s1Flash = useFlash(row.s1UpdatedAt)
   const s2Flash = useFlash(row.s2UpdatedAt)
   const s3Flash = useFlash(row.s3UpdatedAt)
   const moved = useFlash(row.positionChangedAt)
 
-  const rowClass = ['replay-row', row.inPit ? 'in-pit' : '', moved ? 'moved' : ''].filter(Boolean).join(' ')
+  const rowClass = [
+    'replay-row',
+    row.inPit ? 'in-pit' : '',
+    moved ? 'moved' : '',
+    highlighted ? 'highlighted' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <tr className={rowClass}>
@@ -48,20 +61,29 @@ function ReplayRow({ row }: { row: RowState }) {
         </td>
       ) : (
         <>
-          <td className={s1Flash ? 'num flash' : 'num'}>{formatSplit(row.s1)}</td>
-          <td className={s2Flash ? 'num flash' : 'num'}>{formatSplit(row.s2)}</td>
-          <td className={s3Flash ? 'num flash' : 'num'}>{formatSplit(row.s3)}</td>
+          <td className={(s1Flash ? 'num flash' : 'num') + badgeClass(row.s1Badge)}>{formatSplit(row.s1)}</td>
+          <td className={(s2Flash ? 'num flash' : 'num') + badgeClass(row.s2Badge)}>{formatSplit(row.s2)}</td>
+          <td className={(s3Flash ? 'num flash' : 'num') + badgeClass(row.s3Badge)}>{formatSplit(row.s3)}</td>
         </>
       )}
       <td className="num best">{formatLapTime(row.bestLap)}</td>
-      <td className="num last">{formatLapTime(row.lastLap)}</td>
+      <td className={'num last' + badgeClass(row.lastLapBadge)}>{formatLapTime(row.lastLap)}</td>
       <td className="num">{row.pits}</td>
       <td className="num">{row.sincePit ?? '—'}</td>
     </tr>
   )
 }
 
-export function ReplayLeaderboard({ rows }: { rows: RowState[] }) {
+export function ReplayLeaderboard({
+  rows,
+  activeClasses,
+  highlightedCars,
+}: {
+  rows: RowState[]
+  activeClasses: Set<string>
+  highlightedCars?: Set<string>
+}) {
+  const visible = rows.filter((r) => activeClasses.has(r.class))
   return (
     <div className="replay-board-wrap">
       <table className="replay-board">
@@ -86,12 +108,12 @@ export function ReplayLeaderboard({ rows }: { rows: RowState[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <ReplayRow key={r.car_number} row={r} />
+          {visible.map((r) => (
+            <ReplayRow key={r.car_number} row={r} highlighted={highlightedCars?.has(r.car_number) ?? false} />
           ))}
         </tbody>
       </table>
-      {rows.length === 0 && <p className="replay-hint">No cars have started this session yet at this point.</p>}
+      {visible.length === 0 && <p className="replay-hint">No cars in this class have started yet at this point.</p>}
     </div>
   )
 }

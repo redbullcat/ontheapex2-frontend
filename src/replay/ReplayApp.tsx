@@ -1,13 +1,16 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getLaps } from '../api/client'
 import { useAsync } from '../hooks/useAsync'
-import { buildReplayData } from './replayData'
+import { buildReplayData, type ReplayData } from './replayData'
 import { useReplayClock } from './useReplayClock'
-import { useReplayRows } from './useReplayRows'
+import { useReplaySnapshot } from './useReplayRows'
 import { ReplayLeaderboard } from './ReplayLeaderboard'
-import { ReplayGapStrip } from './ReplayGapStrip'
+import { ReplayTrendChart } from './ReplayTrendChart'
 import { ReplayTransport } from './ReplayTransport'
 import { formatClock } from './format'
+import { ClassFilter } from '../components/ClassFilter'
+import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import './replay.css'
 
 function readParam(name: string): string {
@@ -50,18 +53,51 @@ export function ReplayApp() {
   )
 }
 
-function ReplayConsole({ title, data }: { title: string; data: ReturnType<typeof buildReplayData> }) {
+function ReplayConsole({ title, data }: { title: string; data: ReplayData }) {
   const clock = useReplayClock(data.minTime, data.maxTime)
-  const rows = useReplayRows(data, clock.current)
+  const snapshot = useReplaySnapshot(data, clock.current)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [expandedChart, setExpandedChart] = useState<'gap' | 'position' | null>(null)
+  const [gapVisibleCars, setGapVisibleCars] = useState<Set<string>>(new Set())
+  const [positionVisibleCars, setPositionVisibleCars] = useState<Set<string>>(new Set())
+
+  const activeClasses = useMemo(() => resolveClassSelection(classSelection, data.classes), [classSelection, data.classes])
+
+  // A chart's car filter only counts as a "highlight" once the user has
+  // actually narrowed it away from the default (everything) — otherwise
+  // every row would highlight, which isn't useful.
+  const highlightedCars = useMemo(() => {
+    const allCars = new Set(data.cars.map((c) => c.car_number))
+    const gapIsFiltered = gapVisibleCars.size > 0 && gapVisibleCars.size < allCars.size
+    const positionIsFiltered = positionVisibleCars.size > 0 && positionVisibleCars.size < allCars.size
+    if (!gapIsFiltered && !positionIsFiltered) return undefined
+    const merged = new Set<string>()
+    if (gapIsFiltered) for (const c of gapVisibleCars) merged.add(c)
+    if (positionIsFiltered) for (const c of positionVisibleCars) merged.add(c)
+    return merged
+  }, [data, gapVisibleCars, positionVisibleCars])
+
+  const onGapVisibleCarsChange = useCallback((cars: Set<string>) => setGapVisibleCars(cars), [])
+  const onPositionVisibleCarsChange = useCallback((cars: Set<string>) => setPositionVisibleCars(cars), [])
+
+  const flag = snapshot.flag
+  const flagLabel = flag ? FLAG_LABELS[flag] : null
 
   return (
     <div className="replay-console">
+      {expandedChart && <div className="replay-backdrop" onClick={() => setExpandedChart(null)} />}
+
       <div className="replay-topbar">
         <div className="replay-session-id">
           <h2>{title}</h2>
           <span>{data.cars.length} cars</span>
         </div>
         <div className="replay-clock-block">
+          {flag && (
+            <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flag] } as CSSProperties}>
+              {flagLabel}
+            </span>
+          )}
           <span className="replay-clock-mode">Replay</span>
           <div className="replay-clock">
             {formatClock(clock.current)}
@@ -73,12 +109,33 @@ function ReplayConsole({ title, data }: { title: string; data: ReturnType<typeof
       <div className="replay-leaderboard-panel">
         <p className="replay-panel-label">
           Leaderboard — updates on every sector crossing
-          <span className="hint"> — blank cell = split not recorded · violet row = car currently in the pits</span>
+          <span className="hint"> — blank = split not recorded · violet row = in the pits · purple time = session best in class · green time = personal best</span>
         </p>
-        <ReplayLeaderboard rows={rows} />
+        <div className="replay-trend-controls">
+          <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <ReplayLeaderboard rows={snapshot.rows} activeClasses={activeClasses} highlightedCars={highlightedCars} />
       </div>
 
-      <ReplayGapStrip data={data} current={clock.current} />
+      <ReplayTrendChart
+        data={data}
+        mode="gap"
+        currentLap={snapshot.leaderLap}
+        title="Gap evolution — live"
+        onVisibleCarsChange={onGapVisibleCarsChange}
+        expanded={expandedChart === 'gap'}
+        onToggleExpand={() => setExpandedChart((c) => (c === 'gap' ? null : 'gap'))}
+      />
+
+      <ReplayTrendChart
+        data={data}
+        mode="position"
+        currentLap={snapshot.leaderLap}
+        title="Lap-by-lap position — live"
+        onVisibleCarsChange={onPositionVisibleCarsChange}
+        expanded={expandedChart === 'position'}
+        onToggleExpand={() => setExpandedChart((c) => (c === 'position' ? null : 'position'))}
+      />
 
       <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
     </div>
