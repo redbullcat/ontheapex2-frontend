@@ -1,5 +1,6 @@
 import type { LapRead, RaceLogEntry } from '../api/types'
 import { computeFlagPeriods, type FlagPeriod } from '../lib/flags'
+import { computeReferenceAndGaps, computePositionByLap } from '../lib/trendData'
 import { buildReplayRaceLog } from './raceLogSynth'
 
 export interface CarMeta {
@@ -68,74 +69,6 @@ export interface ReplayData {
   raceLog: RaceLogEntry[]
   minTime: number
   maxTime: number
-}
-
-// Mirrors GapEvolutionChart's reference-car rule: the classification leader
-// (most laps completed, ties broken by lowest elapsed time), held fixed for
-// the whole replay. Unfiltered here — v1 always replays the full field.
-function computeReferenceAndGaps(laps: LapRead[]): {
-  referenceCar: string | null
-  gapByLapAndCar: Map<number, Map<string, number>>
-} {
-  const lastLapByCar = new Map<string, LapRead>()
-  for (const lap of laps) {
-    if (lap.elapsed_seconds == null) continue
-    const prev = lastLapByCar.get(lap.car_number)
-    if (!prev || lap.lap_number > prev.lap_number) lastLapByCar.set(lap.car_number, lap)
-  }
-  let referenceCar: string | null = null
-  let bestLap = -1
-  let bestElapsed = Infinity
-  for (const [car, lastLap] of lastLapByCar) {
-    if (lastLap.lap_number > bestLap || (lastLap.lap_number === bestLap && lastLap.elapsed_seconds! < bestElapsed)) {
-      bestLap = lastLap.lap_number
-      bestElapsed = lastLap.elapsed_seconds!
-      referenceCar = car
-    }
-  }
-
-  const refByLap = new Map<number, number>()
-  if (referenceCar) {
-    for (const lap of laps) {
-      if (lap.car_number === referenceCar && lap.elapsed_seconds != null) refByLap.set(lap.lap_number, lap.elapsed_seconds)
-    }
-  }
-
-  const gapByLapAndCar = new Map<number, Map<string, number>>()
-  for (const lap of laps) {
-    if (lap.elapsed_seconds == null) continue
-    const refTime = refByLap.get(lap.lap_number)
-    if (refTime === undefined) continue
-    let inner = gapByLapAndCar.get(lap.lap_number)
-    if (!inner) {
-      inner = new Map()
-      gapByLapAndCar.set(lap.lap_number, inner)
-    }
-    inner.set(lap.car_number, lap.elapsed_seconds - refTime)
-  }
-
-  return { referenceCar, gapByLapAndCar }
-}
-
-// Same convention as LapPositionChart: re-rank within each lap by elapsed
-// time ascending. Unlike gap-to-a-fixed-reference, position doesn't need a
-// reference car at all — it's just "who's covered the most track by here."
-function computePositionByLap(laps: LapRead[]): Map<number, Map<string, number>> {
-  const byLap = new Map<number, LapRead[]>()
-  for (const lap of laps) {
-    if (lap.lap_number == null || lap.elapsed_seconds == null) continue
-    const arr = byLap.get(lap.lap_number)
-    if (arr) arr.push(lap)
-    else byLap.set(lap.lap_number, [lap])
-  }
-  const positionByLapAndCar = new Map<number, Map<string, number>>()
-  for (const [lapNumber, rows] of byLap) {
-    const sorted = [...rows].sort((a, b) => a.elapsed_seconds! - b.elapsed_seconds!)
-    const inner = new Map<string, number>()
-    sorted.forEach((r, i) => inner.set(r.car_number, i + 1))
-    positionByLapAndCar.set(lapNumber, inner)
-  }
-  return positionByLapAndCar
 }
 
 // Pairs each car's in-lap (crossing_finish_line_in_pit === 'B') with the

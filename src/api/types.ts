@@ -95,10 +95,25 @@ export interface LiveStanding {
   driver_name: string | null
   gap_to_first_seconds: number
   gap_to_next_seconds: number | null
+  // Lap-deficit form of the two gaps above, e.g. "+1 Lap" instead of a
+  // seconds figure once a car's actually a lap or more behind — null
+  // whenever the deficit is zero (never actually observed non-null in a
+  // capture yet, only ever seen in practice sessions where it doesn't
+  // apply; see app/live/state.py's standings_as_list).
+  gap_to_first_laps: number | null
+  gap_to_next_laps: number | null
   best_lap_seconds: number | null
   last_lap_seconds: number | null
   last_lap_color: LiveTimeColor
   total_laps: number
+  // True once this car has completed the one lap it's entitled to finish
+  // after the chequered flag came out (motorsport convention — see
+  // chequered_flag_shown below). Always false until the flag has been shown.
+  taken_chequered_flag: boolean
+  // Real-time (car-location-on-track channel), not inferred from lap
+  // boundaries — can flip mid-lap, before the car's current lap even
+  // completes.
+  in_pit: boolean
 }
 
 export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
@@ -173,7 +188,14 @@ export interface LiveWeather {
 export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
+  // Raw Griiip sessionType string, best-effort — see lib/liveSessionType.ts
+  // for how this gets classified into practice/qualifying/race.
+  session_type: string | null
   session_ended: boolean
+  // True once the chequered flag has been shown this session — distinct
+  // from session_ended, since cars on track when it drops get to complete
+  // their current lap first (see LiveStanding.taken_chequered_flag).
+  chequered_flag_shown: boolean
   session_clock: SessionClock | null
   weather: LiveWeather | null
   standings: LiveStanding[]

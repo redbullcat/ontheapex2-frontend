@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import type { ReplayData } from './replayData'
+import type { CarMeta } from './replayData'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from '../components/ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
@@ -23,6 +23,16 @@ interface Series {
   points: Point[]
 }
 
+// Only the fields this chart actually reads — deliberately narrower than
+// ReplayData so Live can feed it data built fresh from the polling feed
+// (see live/liveTrendData.ts) without needing a full ReplayData object.
+export interface TrendChartData {
+  cars: CarMeta[]
+  classes: string[]
+  gapByLapAndCar: Map<number, Map<string, number>>
+  positionByLapAndCar: Map<number, Map<string, number>>
+}
+
 // Shared by the gap-evolution and position trend charts under the
 // leaderboard — same shape (per-car line over laps, class/car filters, a
 // clip-path reveal synced to the replay clock), just a different data
@@ -36,7 +46,7 @@ export function ReplayTrendChart({
   expanded,
   onToggleExpand,
 }: {
-  data: ReplayData
+  data: TrendChartData
   mode: 'gap' | 'position'
   currentLap: number
   title: string

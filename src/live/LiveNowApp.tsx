@@ -10,6 +10,8 @@ import { colorBadgeClass } from './liveColors'
 import { LiveSidebar } from './LiveSidebar'
 import { RaceLogPanel } from './RaceLogPanel'
 import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
+import { ReplayTrendChart } from '../replay/ReplayTrendChart'
+import { useLiveTrendData } from './liveTrendData'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
@@ -54,6 +56,11 @@ export function LiveNowApp() {
     return map
   }, [data])
 
+  // Called unconditionally (before the early returns below) so hook order
+  // stays consistent across renders regardless of loading/error state.
+  const trendData = useLiveTrendData(data?.laps ?? [])
+  const leaderLap = useMemo(() => Math.max(0, ...(data?.standings ?? []).map((r) => r.total_laps)), [data])
+
   if (griiipSessionId == null) {
     return (
       <div className="replay-root">
@@ -82,17 +89,26 @@ export function LiveNowApp() {
 
   // A pop-out from the sidebar lands here with &panel=<tab> — render just
   // that one panel full-screen instead of the whole console.
-  if (panel === 'race-log' || panel === 'fastest-laps') {
+  const POPOUT_TITLES: Record<string, string> = {
+    'race-log': 'Race log',
+    'fastest-laps': 'Fastest laps',
+    gap: 'Gap evolution',
+    position: 'Lap-by-lap position',
+  }
+  if (panel in POPOUT_TITLES) {
     return (
       <div className="replay-root">
         <div className="replay-console">
           <div className="replay-topbar">
             <h2>
-              {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+              {title} — {POPOUT_TITLES[panel]}
             </h2>
           </div>
           <div className="replay-leaderboard-panel">
-            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />}
+            {panel === 'race-log' && <RaceLogPanel entries={data.race_log} />}
+            {panel === 'fastest-laps' && <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />}
+            {panel === 'gap' && <ReplayTrendChart data={trendData} mode="gap" currentLap={leaderLap} title="Gap evolution" />}
+            {panel === 'position' && <ReplayTrendChart data={trendData} mode="position" currentLap={leaderLap} title="Lap-by-lap position" />}
           </div>
         </div>
       </div>
@@ -146,6 +162,9 @@ function LiveConsole({
                 {FLAG_LABELS[flagCategory]}
               </span>
             )}
+            {data.chequered_flag_shown && !data.session_ended && (
+              <span className="live-chequered-hint">Cars on track are completing their final lap</span>
+            )}
             <span className="replay-clock-mode">{data.session_ended ? 'Ended' : 'Live'}</span>
             {clock.elapsedSeconds != null && (
               <div className="replay-clock">
@@ -190,7 +209,7 @@ function LiveConsole({
                 {visibleStandings.map((row) => {
                   const lastLap = lastLapByCar.get(row.car_number)
                   return (
-                    <tr key={row.car_number} className="replay-row">
+                    <tr key={row.car_number} className={row.in_pit ? 'replay-row in-pit' : 'replay-row'}>
                       <td className="num pos">{row.position ?? '—'}</td>
                       <td className="num cls-pos">{row.class_position ?? '—'}</td>
                       <td className="al">
@@ -198,15 +217,24 @@ function LiveConsole({
                       </td>
                       <td className="al">
                         <span className="car-num">#{row.car_number}</span>
+                        {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
                       </td>
                       <td className="al driver">{row.driver_name ?? '—'}</td>
                       <td className="al team">{getTeamDisplayName(row.team)}</td>
-                      <td className="num gap">{formatGap(row.gap_to_first_seconds)}</td>
-                      <td className="num interval">{formatGap(row.gap_to_next_seconds)}</td>
+                      <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
+                      <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
                       <td className="num">{row.total_laps || ''}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+                      {row.in_pit ? (
+                        <td className="num s-merged" colSpan={3}>
+                          <span className="pit-label">IN PIT</span>
+                        </td>
+                      ) : (
+                        <>
+                          <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
+                          <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
+                          <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+                        </>
+                      )}
                       <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
                       <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
                     </tr>
