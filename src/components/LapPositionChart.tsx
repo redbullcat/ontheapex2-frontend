@@ -250,6 +250,11 @@ export function LapPositionChart({
     const byCar = new Map<string, CarSeries>()
     for (const ranked of rankedByLap.values()) {
       for (const p of ranked) {
+        // The ranking pool always needs every car in the class (see
+        // rankedByLap above — that's the actual fix for the "always P1"
+        // bug), but focusCarNumber means only its own line should ever be
+        // drawn, not a full-field comparison.
+        if (focusCarNumber && p.car_number !== focusCarNumber) continue
         let car = byCar.get(p.car_number)
         if (!car) {
           car = { car_number: p.car_number, class: p.class, team: p.team, points: [] }
@@ -260,7 +265,7 @@ export function LapPositionChart({
     }
     for (const car of byCar.values()) car.points.sort((a, b) => a.lap_number - b.lap_number)
     return [...byCar.values()]
-  }, [rankedByLap])
+  }, [rankedByLap, focusCarNumber])
 
   const { minLap, maxLap, maxPosition } = useMemo(() => {
     let minLap = Infinity
@@ -275,9 +280,21 @@ export function LapPositionChart({
   }, [rankedByLap])
 
   const strokeColor = useCallback(
-    (car: { class: string; team: string | null }) =>
-      colorMode === 'team' ? getTeamColor(car.team) : `var(${classVar.get(car.class) ?? OTHER_VAR})`,
-    [colorMode, classVar],
+    (car: { class: string; team: string | null }) => {
+      // A single focused line has no other car to stay distinguishable
+      // from, so skip the hashed team/class color entirely — some team
+      // names hash to colors with poor contrast against the chart
+      // background (e.g. near-white), which is invisible with one line on
+      // screen even though it was never really noticeable buried among
+      // twenty overlapping ones.
+      // --replay-accent is only guaranteed defined where focusCarNumber is
+      // ever actually set (the car-detail panel, which always renders
+      // inside replay.css's scope) — the main app's own Position tab never
+      // passes this prop, so it never hits this branch.
+      if (focusCarNumber) return 'var(--replay-accent)'
+      return colorMode === 'team' ? getTeamColor(car.team) : `var(${classVar.get(car.class) ?? OTHER_VAR})`
+    },
+    [colorMode, classVar, focusCarNumber],
   )
 
   const pathsSelRef = useRef<d3.Selection<SVGPathElement, CarSeries, SVGGElement, unknown> | null>(null)
@@ -388,17 +405,24 @@ export function LapPositionChart({
 
     const finalLap = rankedByLap.get(maxLap)
     if (finalLap) {
-      const leaders = [...activeClasses]
-        .map((cls) => {
-          let best: RankedLap | null = null
-          for (const entry of finalLap) {
-            if (entry.class !== cls) continue
-            if (!best || entry.position < best.position) best = entry
-          }
-          return best
-        })
-        .filter((e): e is RankedLap => e !== null)
-        .sort((a, b) => a.position - b.position)
+      // finalLap/activeClasses still span the whole ranking pool (the
+      // class), not just the drawn line(s) — normally that's exactly what
+      // "one label per class leader" wants, but with focusCarNumber only
+      // one line is ever drawn, so the label must follow it instead of
+      // whichever car happens to be leading the class it's never shown.
+      const leaders = focusCarNumber
+        ? finalLap.filter((e) => e.car_number === focusCarNumber)
+        : [...activeClasses]
+            .map((cls) => {
+              let best: RankedLap | null = null
+              for (const entry of finalLap) {
+                if (entry.class !== cls) continue
+                if (!best || entry.position < best.position) best = entry
+              }
+              return best
+            })
+            .filter((e): e is RankedLap => e !== null)
+            .sort((a, b) => a.position - b.position)
 
       const minGap = 14
       const labelYs = leaders.map((l) => y(l.position))
@@ -512,7 +536,7 @@ export function LapPositionChart({
         pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber])
 
   // Cheap per-frame update: just the clip-rect width and marker positions,
   // driven by playback.current — deliberately not touching the dependency
