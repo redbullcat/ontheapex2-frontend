@@ -82,6 +82,61 @@ export interface LapRead {
   flag_at_fl: string | null
 }
 
+export interface LiveStanding {
+  position: number | null
+  car_number: string
+  class: string | null
+  team: string | null
+  driver_name: string | null
+  gap_to_first_seconds: number
+  gap_to_next_seconds: number
+}
+
+// A subset of LapRead's fields — live laps have no `id`/`session_id` (they
+// aren't persisted yet) and several columns (kph, elapsed, hour) aren't
+// populated by the live feed at all.
+export interface LiveLap {
+  car_number: string
+  lap_number: number
+  lap_time: string | null
+  lap_time_seconds: number | null
+  lap_improvement: boolean
+  crossing_finish_line_in_pit: string | null
+  s1: string | null
+  s2: string | null
+  s3: string | null
+  s1_seconds: number | null
+  s2_seconds: number | null
+  s3_seconds: number | null
+  s1_improvement: boolean
+  s2_improvement: boolean
+  s3_improvement: boolean
+  elapsed_seconds: number | null
+  top_speed: number | null
+  driver_name: string | null
+  class: string | null
+  team: string | null
+  manufacturer: string | null
+  flag_at_fl: string | null
+}
+
+export interface LiveWeather {
+  temperature: number | null
+  trackTemperature: number | null
+  humidity: number | null
+  windSpeedKph: number | null
+  windDirectionCode: string | null
+  sky: string | null
+}
+
+export interface LiveState {
+  griiip_session_id: number
+  current_flag: string | null
+  weather: LiveWeather | null
+  standings: LiveStanding[]
+  laps: LiveLap[]
+}
+
 export interface Stint {
   car_number: string
   team: string | null

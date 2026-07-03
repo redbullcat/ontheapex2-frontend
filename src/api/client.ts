@@ -1,4 +1,4 @@
-import type { EventSummary, HourlyPositions, LapRead, LeadStint, Series, SessionSummary, Stint } from './types'
+import type { EventSummary, HourlyPositions, LapRead, LeadStint, LiveState, Series, SessionSummary, Stint } from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
 
@@ -58,4 +58,11 @@ export function getStints(sessionId: number): Promise<Stint[]> {
 export async function getCombinedLaps(sessionIds: number[]): Promise<LapRead[]> {
   const pages = await Promise.all(sessionIds.map((id) => getLaps(id)))
   return pages.flat()
+}
+
+// `griiipSessionId` is the raw Griiip feed session id (`sid`), not our own
+// sessions.id — the live pipeline has no mapping onto a real session record
+// yet, see app/live/manager.py on the backend.
+export function getLiveState(griiipSessionId: number): Promise<LiveState> {
+  return get<LiveState>(`/api/live/${griiipSessionId}/state`)
 }
