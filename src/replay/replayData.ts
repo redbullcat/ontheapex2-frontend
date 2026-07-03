@@ -5,7 +5,6 @@ export interface CarMeta {
   car_number: string
   class: string
   team: string | null
-  driver_name: string | null
 }
 
 export type Sector = 1 | 2 | 3
@@ -16,6 +15,11 @@ export interface SectorEvent {
   sector: Sector
   lap: number
   value: number
+  // Endurance cars swap drivers mid-race, and each lap row already carries
+  // whoever was driving *that* lap — carried on every event (not just
+  // sector-3) so the leaderboard shows the current driver immediately as
+  // laps tick over, not a lap late.
+  driverName: string | null
   // Only set on sector-3 events — a sector-3 crossing is a lap completion,
   // so it carries the payload needed to update best/last lap and look up
   // the gap-to-leader for that lap in the same pass.
@@ -172,7 +176,7 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
     const sorted = [...rows].sort((a, b) => a.lap_number - b.lap_number)
     const last = sorted[sorted.length - 1]
     const carClass = last.class ?? 'Unknown'
-    cars.push({ car_number: car, class: carClass, team: last.team, driver_name: last.driver_name })
+    cars.push({ car_number: car, class: carClass, team: last.team })
     classes.add(carClass)
 
     const elapsedBySector = new Map<string, number>()
@@ -181,7 +185,15 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
     for (const lap of sorted) {
       if (lap.elapsed_seconds == null) continue
       const t3 = lap.elapsed_seconds
-      events.push({ time: t3, car, sector: 3, lap: lap.lap_number, value: lap.s3_seconds ?? t3, lapTimeSeconds: lap.lap_time_seconds })
+      events.push({
+        time: t3,
+        car,
+        sector: 3,
+        lap: lap.lap_number,
+        value: lap.s3_seconds ?? t3,
+        driverName: lap.driver_name,
+        lapTimeSeconds: lap.lap_time_seconds,
+      })
       elapsedBySector.set(`${lap.lap_number}:3`, t3)
       // t2/t1 are anchored backward from the finish line (t3), so deriving
       // either one needs every split between it and the finish to be known
@@ -191,11 +203,11 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
       // leaderboard just keeps showing whatever it last had for that cell.
       if (lap.s3_seconds != null && lap.s2_seconds != null) {
         const t2 = t3 - lap.s3_seconds
-        events.push({ time: t2, car, sector: 2, lap: lap.lap_number, value: lap.s2_seconds })
+        events.push({ time: t2, car, sector: 2, lap: lap.lap_number, value: lap.s2_seconds, driverName: lap.driver_name })
         elapsedBySector.set(`${lap.lap_number}:2`, t2)
         if (lap.s1_seconds != null) {
           const t1 = t2 - lap.s2_seconds
-          events.push({ time: t1, car, sector: 1, lap: lap.lap_number, value: lap.s1_seconds })
+          events.push({ time: t1, car, sector: 1, lap: lap.lap_number, value: lap.s1_seconds, driverName: lap.driver_name })
           elapsedBySector.set(`${lap.lap_number}:1`, t1)
         }
       }
