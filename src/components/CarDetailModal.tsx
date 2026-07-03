@@ -8,6 +8,7 @@ import { LapPositionChart } from './LapPositionChart'
 import { PitTimeChart } from './PitTimeChart'
 import { CarStintTable } from './CarStintTable'
 import { CarLapHistoryTable } from './CarLapHistoryTable'
+import { TimeLossTrace } from './TimeLossTrace'
 
 // `allLaps` is the whole field's laps as of "now" — for Live that's just
 // data.laps as-is, for Replay it's data.laps filtered down to
@@ -105,6 +106,9 @@ export function CarDetailModal({
 
         <p className="replay-panel-label">Position history</p>
         <LapPositionChart laps={allLaps} focusCarNumber={carNumber} rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'} />
+
+        <p className="replay-panel-label">Time-loss trace</p>
+        <TimeLossTrace laps={allLaps} carNumber={carNumber} />
 
         <p className="replay-panel-label">Pace</p>
         <PaceChart laps={carLaps} hideCarFilter />

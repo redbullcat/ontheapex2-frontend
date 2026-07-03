@@ -794,3 +794,68 @@ button.replay-play:hover {
    interpolates in pixel space between two points on a curve, which can
    cut straight across empty space instead of following the circle/track
    when the two points are far apart. */
+
+.time-loss-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.time-loss-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.time-loss-reference {
+  margin: 0;
+  font-size: 11px;
+  color: var(--replay-muted);
+}
+
+.time-loss-hint {
+  padding: 0;
+  font-size: 11px;
+}
+
+.time-loss-trace svg {
+  width: 100%;
+  display: block;
+}
+
+.time-loss-zero {
+  stroke: var(--replay-line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.time-loss-axis {
+  font-size: 10px;
+  font-family: var(--replay-mono);
+}
+.time-loss-axis path,
+.time-loss-axis line {
+  stroke: var(--replay-line);
+}
+.time-loss-axis text {
+  fill: var(--replay-muted);
+}
+
+.time-loss-segment {
+  fill: none;
+  stroke-width: 2.5;
+}
+.time-loss-losing {
+  stroke: var(--replay-flash);
+}
+.time-loss-gaining {
+  stroke: var(--replay-moved);
+}
+
+.time-loss-dot {
+  fill: var(--replay-ink);
+  stroke: var(--replay-surface);
+  stroke-width: 1.5;
+}
