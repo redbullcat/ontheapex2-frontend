@@ -53,6 +53,16 @@
   border-bottom: 1px solid var(--replay-line);
 }
 
+.replay-console-root {
+  background: var(--replay-surface);
+  min-height: 100vh;
+}
+
+.replay-popout-sync-hint {
+  font-size: 11px;
+  color: var(--replay-muted);
+}
+
 .replay-topbar {
   display: flex;
   align-items: center;
@@ -786,14 +796,15 @@ button.replay-play:hover {
   max-width: 100%;
 }
 
-/* No CSS position transition here — motion is smoothed in JS by animating
-   each car's underlying fraction (see hooks/useSmoothedFractions.ts) and
-   deriving cx/cy fresh from that every frame, for both the dot and its
-   label together. A CSS transition on cx/cy alone (a) doesn't apply to
-   the label at all, so it snaps ahead of the dot, and (b) linearly
-   interpolates in pixel space between two points on a curve, which can
-   cut straight across empty space instead of following the circle/track
-   when the two points are far apart. */
+/* No CSS position transition here — motion is smoothed by directly writing
+   cx/cy onto the DOM nodes from a plain interval loop (see
+   hooks/useFractionAnimation.ts), not through React state/re-renders, for
+   both a dot and its label together so they can never desync. A CSS
+   transition on cx/cy alone (a) doesn't apply to the label at all, so it
+   snaps ahead of the dot, and (b) linearly interpolates in pixel space
+   between two points on a curve, which can cut straight across empty
+   space instead of following the circle/track when the two points are
+   far apart. */
 
 .time-loss-trace {
   display: flex;
@@ -858,4 +869,122 @@ button.replay-play:hover {
   fill: var(--replay-ink);
   stroke: var(--replay-surface);
   stroke-width: 1.5;
+}
+
+/* Dashboard (react-grid-layout based panel grid) — see src/dashboard/ */
+.dashboard-root {
+  padding: 12px 22px 40px;
+}
+
+.dashboard-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboard-add-select {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--replay-line-strong);
+  font-size: 12px;
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+}
+
+.dashboard-grid-container {
+  width: 100%;
+}
+
+.dash-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dash-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  background: var(--replay-paper);
+  border-bottom: 1px solid var(--replay-line);
+  cursor: grab;
+  flex: none;
+  user-select: none;
+}
+.dash-panel-header:active {
+  cursor: grabbing;
+}
+
+.dash-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-panel-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.dash-panel-btn {
+  border: none;
+  background: transparent;
+  color: var(--replay-muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dash-panel-btn:hover {
+  background: var(--replay-line);
+  color: var(--replay-ink);
+}
+
+.dash-panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px;
+}
+
+/* react-grid-layout's own resize handle glyph doesn't pick up our theme
+   colors by default — retint to match rather than leave the library's
+   raw default styling. */
+.react-resizable-handle {
+  opacity: 0.5;
+}
+
+.car-detail-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.car-detail-add-btn {
+  font-family: var(--replay-mono);
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--replay-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.car-detail-add-btn:hover {
+  border-color: var(--replay-accent);
+  color: var(--replay-accent);
 }

@@ -12,7 +12,8 @@
   "dependencies": {
     "d3": "^7.9.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-grid-layout": "^2.2.3"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",

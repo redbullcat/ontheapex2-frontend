@@ -18,7 +18,6 @@ export function useReplayClock(min: number, max: number): ReplayClock {
   const [current, setCurrent] = useState(min)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState<number>(1)
-  const rafRef = useRef<number | null>(null)
   const lastTsRef = useRef<number | null>(null)
 
   // Bounds only really change once, when the session's data finishes
@@ -34,10 +33,21 @@ export function useReplayClock(min: number, max: number): ReplayClock {
       lastTsRef.current = null
       return
     }
-    const step = (ts: number) => {
-      if (lastTsRef.current == null) lastTsRef.current = ts
-      const dt = (ts - lastTsRef.current) / 1000
-      lastTsRef.current = ts
+    // setInterval rather than requestAnimationFrame — the clock readout
+    // and scrubber don't need display-refresh precision, and a fixed
+    // ~30fps cadence still reads perfectly smooth while roughly halving
+    // how often every panel watching `current` re-renders. That matters
+    // more now than it used to: with several dashboard panels mounted at
+    // once, rAF firing at full, sometimes-uncapped rate (observed under
+    // headless/CI Chromium in particular) was enough combined render
+    // pressure to trip React's "Maximum update depth exceeded" runaway-
+    // update detector, even though each individual update was legitimate.
+    const TICK_MS = 33
+    const id = window.setInterval(() => {
+      const now = performance.now()
+      if (lastTsRef.current == null) lastTsRef.current = now
+      const dt = (now - lastTsRef.current) / 1000
+      lastTsRef.current = now
       setCurrent((c) => {
         const next = c + dt * speed
         if (next >= max) {
@@ -46,12 +56,8 @@ export function useReplayClock(min: number, max: number): ReplayClock {
         }
         return next
       })
-      rafRef.current = requestAnimationFrame(step)
-    }
-    rafRef.current = requestAnimationFrame(step)
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-    }
+    }, TICK_MS)
+    return () => window.clearInterval(id)
   }, [playing, speed, max])
 
   const toggle = useCallback(() => {

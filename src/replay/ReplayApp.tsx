@@ -1,32 +1,33 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { getLaps } from '../api/client'
 import { useAsync } from '../hooks/useAsync'
 import { buildReplayData, type ReplayData } from './replayData'
 import { useReplayClock } from './useReplayClock'
 import { useReplaySnapshot } from './useReplayRows'
-import { ReplayLeaderboard } from './ReplayLeaderboard'
 import { ReplayTransport } from './ReplayTransport'
-import { ReplaySidebar } from './ReplaySidebar'
-import { ReplayFastestLapsPanel } from './ReplayFastestLapsPanel'
+import { renderReplayPanel, REPLAY_DEFAULT_PANELS, REPLAY_PANEL_DEFS, type ReplayPanelContext } from './replayPanels'
 import { formatClock } from './format'
-import { ClassFilter } from '../components/ClassFilter'
-import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { bucketFor } from '../lib/sessionBucket'
-import { RaceLogPanel } from '../live/RaceLogPanel'
-import { REPLAY_RACE_LOG_TYPES } from './raceLogSynth'
 import { BackLink } from '../components/BackLink'
 import { CarDetailModal } from '../components/CarDetailModal'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import type { RaceLogType, SessionType } from '../api/types'
+import type { SessionType } from '../api/types'
+import { DashboardGrid } from '../dashboard/DashboardGrid'
+import { useDashboardLayout } from '../dashboard/useDashboardLayout'
+import { useBroadcastChannel } from '../dashboard/useBroadcastChannel'
+import { buildPopoutUrl, openPopout } from '../dashboard/popout'
+import type { PanelInstance } from '../dashboard/types'
 import './replay.css'
 
 function readParam(name: string): string {
   return new URLSearchParams(window.location.search).get(name) ?? ''
 }
 
-function replayTimestampFormatter(elapsedTimeMillis: number): string {
-  return formatClock(elapsedTimeMillis / 1000)
+interface ClockSync {
+  current: number
+  playing: boolean
+  speed: number
 }
 
 export function ReplayApp() {
@@ -37,7 +38,8 @@ export function ReplayApp() {
   // defaults to treating it as a race — that's the safer default since
   // it's also what the entry point used to be gated to exclusively.
   const isRaceSession = rawType ? bucketFor(rawType as SessionType) === 'race' : true
-  const panel = readParam('panel')
+  const dashPanel = readParam('dashPanel')
+  const dashCar = readParam('dashCar')
 
   useDocumentTitle(`${title} — Replay · On The Apex`)
 
@@ -65,8 +67,8 @@ export function ReplayApp() {
       ) : lapsState.status === 'error' ? (
         <p className="replay-hint">Failed to load laps: {lapsState.error}</p>
       ) : data && data.events.length > 0 ? (
-        panel ? (
-          <StandalonePanel panel={panel} data={data} title={title} />
+        dashPanel ? (
+          <PoppedOutPanel sessionId={sessionId} data={data} title={title} isRaceSession={isRaceSession} kind={dashPanel} carNumber={dashCar || undefined} />
         ) : (
           <ReplayConsole title={title} data={data} sessionId={sessionId} isRaceSession={isRaceSession} />
         )
@@ -77,14 +79,52 @@ export function ReplayApp() {
   )
 }
 
-// A pop-out from the sidebar lands here with &panel=<tab> — render just
-// that one panel full-screen. Race log/fastest laps are meaningful as a
-// static, whole-session view outside the scrubbed clock (unlike inside the
-// sidebar, where they track the current playback position) — showing
-// everything is the more useful default for a dedicated tab/window.
-function StandalonePanel({ panel, data, title }: { panel: string; data: ReplayData; title: string }) {
-  const snapshot = useReplaySnapshot(data, data.maxTime)
+// A pop-out window for exactly one panel — mirrors the main dashboard's
+// clock via BroadcastChannel instead of running its own independent
+// playback, so it stays in lockstep with wherever the main tab has
+// scrubbed/played to rather than drifting on its own. Read-only: no
+// transport controls here, on purpose — two independently-driven clocks
+// for the same session would defeat the point of "synced together".
+function PoppedOutPanel({
+  sessionId,
+  data,
+  title,
+  isRaceSession,
+  kind,
+  carNumber,
+}: {
+  sessionId: string
+  data: ReplayData
+  title: string
+  isRaceSession: boolean
+  kind: string
+  carNumber?: string
+}) {
+  // No broadcast received yet (e.g. opened from a bookmark with no source
+  // tab running) falls back to showing the whole session, same as the
+  // pop-out's old default before this dashboard existed.
+  const [sync, setSync] = useState<ClockSync>({ current: data.maxTime, playing: false, speed: 1 })
+  useBroadcastChannel<ClockSync>(`replay-clock:${sessionId}`, setSync)
+
+  const snapshot = useReplaySnapshot(data, sync.current)
   const activeClasses = useMemo(() => new Set(data.classes), [data])
+  const visibleLaps = useMemo(
+    () => data.laps.filter((l) => l.elapsed_seconds != null && l.elapsed_seconds <= sync.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.laps, Math.floor(sync.current)],
+  )
+
+  const ctx: ReplayPanelContext = {
+    data,
+    rows: snapshot.rows,
+    activeClasses,
+    currentTime: sync.current,
+    leaderLap: snapshot.leaderLap,
+    title,
+    isRaceSession,
+    visibleLaps,
+  }
+  const panelTitle = REPLAY_PANEL_DEFS[kind]?.title ?? kind
 
   return (
     <div className="replay-console">
@@ -92,21 +132,13 @@ function StandalonePanel({ panel, data, title }: { panel: string; data: ReplayDa
         <div className="replay-session-id">
           <BackLink />
           <h2>
-            {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+            {title} — {panelTitle}
+            {carNumber ? ` — #${carNumber}` : ''}
           </h2>
+          <span className="replay-popout-sync-hint">{formatClock(sync.current)} · {sync.playing ? `playing ${sync.speed}x` : 'paused'} · synced to main tab</span>
         </div>
       </div>
-      <div className="replay-leaderboard-panel">
-        {panel === 'race-log' ? (
-          <RaceLogPanel
-            entries={data.raceLog}
-            availableTypes={REPLAY_RACE_LOG_TYPES as unknown as RaceLogType[]}
-            formatTimestamp={(entry) => replayTimestampFormatter(entry.elapsedTimeMillis)}
-          />
-        ) : (
-          <ReplayFastestLapsPanel rows={snapshot.rows} activeClasses={activeClasses} />
-        )}
-      </div>
+      <div className="replay-leaderboard-panel">{renderReplayPanel({ id: kind, kind, carNumber }, ctx)}</div>
     </div>
   )
 }
@@ -124,103 +156,93 @@ function ReplayConsole({
 }) {
   const clock = useReplayClock(data.minTime, data.maxTime)
   const snapshot = useReplaySnapshot(data, clock.current)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [gapVisibleCars, setGapVisibleCars] = useState<Set<string>>(new Set())
-  const [positionVisibleCars, setPositionVisibleCars] = useState<Set<string>>(new Set())
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedCar, setSelectedCar] = useState<string | null>(null)
 
-  // "As if live": only what's happened up to the current playback clock,
-  // matching what the leaderboard/sidebar already show — the car detail
-  // panel must not leak laps from later in the session just because the
-  // full dataset happens to already be loaded in memory. Only actually
-  // filters (an O(n) scan) while the panel is open.
-  const carDetailLaps = useMemo(() => {
-    if (!selectedCar) return []
-    return data.laps.filter((l) => l.elapsed_seconds != null && l.elapsed_seconds <= clock.current)
-    // Floor to the second so this doesn't re-filter every animation frame
-    // at high playback speeds — a car detail panel doesn't need
-    // sub-second freshness.
+  const broadcastClock = useBroadcastChannel<ClockSync>(`replay-clock:${sessionId}`)
+  const lastBroadcastRef = useRef(0)
+  useEffect(() => {
+    const now = performance.now()
+    // Every frame while playing is more than any pop-out window needs —
+    // throttled to a still-smooth ~6fps, plus always sent immediately on
+    // pause/speed changes below via the playing/speed deps.
+    if (clock.playing && now - lastBroadcastRef.current < 150) return
+    lastBroadcastRef.current = now
+    broadcastClock({ current: clock.current, playing: clock.playing, speed: clock.speed })
+  }, [clock.current, clock.playing, clock.speed, broadcastClock])
+
+  // "As if live": only what's happened up to the current playback clock —
+  // shared by every per-car dashboard panel, the same principle the old
+  // car detail modal's carDetailLaps already used. Floored to the second
+  // so this doesn't re-filter every animation frame at high playback
+  // speeds.
+  const visibleLaps = useMemo(
+    () => data.laps.filter((l) => l.elapsed_seconds != null && l.elapsed_seconds <= clock.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.laps, selectedCar, Math.floor(clock.current)])
+    [data.laps, Math.floor(clock.current)],
+  )
+  const carDetailLaps = useMemo(() => (selectedCar ? visibleLaps : []), [selectedCar, visibleLaps])
 
-  const activeClasses = useMemo(() => resolveClassSelection(classSelection, data.classes), [classSelection, data.classes])
-
-  // A chart's car filter only counts as a "highlight" once the user has
-  // actually narrowed it away from the default (everything) — otherwise
-  // every row would highlight, which isn't useful.
-  const highlightedCars = useMemo(() => {
-    const allCars = new Set(data.cars.map((c) => c.car_number))
-    const gapIsFiltered = gapVisibleCars.size > 0 && gapVisibleCars.size < allCars.size
-    const positionIsFiltered = positionVisibleCars.size > 0 && positionVisibleCars.size < allCars.size
-    if (!gapIsFiltered && !positionIsFiltered) return undefined
-    const merged = new Set<string>()
-    if (gapIsFiltered) for (const c of gapVisibleCars) merged.add(c)
-    if (positionIsFiltered) for (const c of positionVisibleCars) merged.add(c)
-    return merged
-  }, [data, gapVisibleCars, positionVisibleCars])
-
-  const onGapVisibleCarsChange = useCallback((cars: Set<string>) => setGapVisibleCars(cars), [])
-  const onPositionVisibleCarsChange = useCallback((cars: Set<string>) => setPositionVisibleCars(cars), [])
+  const activeClasses = useMemo(() => new Set(data.classes), [data])
 
   const flag = snapshot.flag
   const flagLabel = flag ? FLAG_LABELS[flag] : null
 
+  const ctx: ReplayPanelContext = {
+    data,
+    rows: snapshot.rows,
+    activeClasses,
+    currentTime: clock.current,
+    leaderLap: snapshot.leaderLap,
+    title,
+    isRaceSession,
+    visibleLaps,
+  }
+
+  const carOptions = useMemo(
+    () => data.cars.map((c) => ({ id: c.car_number, label: `#${c.car_number} — ${c.team ?? 'Unknown'}` })).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
+    [data],
+  )
+
+  const layoutState = useDashboardLayout(`dashboard:replay:${sessionId}`, REPLAY_DEFAULT_PANELS, REPLAY_PANEL_DEFS)
+
+  const handlePopOut = useCallback(
+    (panel: PanelInstance) => {
+      const url = buildPopoutUrl(panel, { session: sessionId, title, type: isRaceSession ? 'race' : 'practice' })
+      openPopout(url)
+    },
+    [sessionId, title, isRaceSession],
+  )
+
   return (
-    <div className="live-with-sidebar">
-      <div className="replay-console live-main">
-        <div className="replay-topbar">
-          <div className="replay-session-id">
-            <BackLink />
-            <h2>{title}</h2>
-            <span>{data.cars.length} cars</span>
-          </div>
-          <div className="replay-clock-block">
-            {flag && (
-              <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flag] } as CSSProperties}>
-                {flagLabel}
-              </span>
-            )}
-            <span className="replay-clock-mode">Replay</span>
-            <div className="replay-clock">
-              {formatClock(clock.current)}
-              <small> / {formatClock(data.maxTime)}</small>
-            </div>
+    <div className="replay-console-root">
+      <div className="replay-topbar">
+        <div className="replay-session-id">
+          <BackLink />
+          <h2>{title}</h2>
+          <span>{data.cars.length} cars</span>
+        </div>
+        <div className="replay-clock-block">
+          {flag && (
+            <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flag] } as CSSProperties}>
+              {flagLabel}
+            </span>
+          )}
+          <span className="replay-clock-mode">Replay</span>
+          <div className="replay-clock">
+            {formatClock(clock.current)}
+            <small> / {formatClock(data.maxTime)}</small>
           </div>
         </div>
-
-        <div className="replay-leaderboard-panel">
-          <p className="replay-panel-label">
-            Leaderboard — updates on every sector crossing
-            <span className="hint"> — blank = split not recorded · violet row = in the pits · purple time = session best in class · green time = personal best</span>
-          </p>
-          <div className="replay-trend-controls">
-            <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
-          </div>
-          <ReplayLeaderboard
-            rows={snapshot.rows}
-            activeClasses={activeClasses}
-            highlightedCars={highlightedCars}
-            onRowClick={setSelectedCar}
-          />
-        </div>
-
-        <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
       </div>
 
-      <ReplaySidebar
-        data={data}
-        rows={snapshot.rows}
-        activeClasses={activeClasses}
-        currentTime={clock.current}
-        leaderLap={snapshot.leaderLap}
-        isRaceSession={isRaceSession}
-        sessionId={sessionId}
-        title={title}
-        open={sidebarOpen}
-        onToggle={() => setSidebarOpen((o) => !o)}
-        onGapVisibleCarsChange={onGapVisibleCarsChange}
-        onPositionVisibleCarsChange={onPositionVisibleCarsChange}
+      <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
+
+      <DashboardGrid
+        panelDefs={REPLAY_PANEL_DEFS}
+        renderPanel={(panel) => renderReplayPanel(panel, ctx, setSelectedCar)}
+        carOptions={carOptions}
+        onPopOut={handlePopOut}
+        layoutState={layoutState}
       />
 
       {selectedCar && (
@@ -229,6 +251,7 @@ function ReplayConsole({
           allLaps={carDetailLaps}
           isRaceSession={isRaceSession}
           onClose={() => setSelectedCar(null)}
+          onAddToDashboard={(kind) => layoutState.addPanel(kind, selectedCar)}
         />
       )}
     </div>

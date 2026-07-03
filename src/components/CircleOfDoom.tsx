@@ -1,5 +1,6 @@
+import { useCallback, useRef } from 'react'
 import { getTeamColor } from '../lib/identityColors'
-import { useSmoothedFractions } from '../hooks/useSmoothedFractions'
+import { useFractionAnimation } from '../hooks/useFractionAnimation'
 
 // Modelled on PACETEQ ONE TIMING's "Circle of Doom": a linearized track laid
 // out as a circle, with each car placed by how far around the lap it's
@@ -51,7 +52,32 @@ export function CircleOfDoom({
   sectorFractions?: [number, number] | null
 }) {
   const anyLive = cars.some((c) => c.isLive)
-  const smoothed = useSmoothedFractions(cars)
+
+  // Car dots/labels move via direct DOM writes (see useFractionAnimation),
+  // never through React re-renders — cx/cy/x/y below are only the initial
+  // placement at mount, set once via the ref callbacks and then owned
+  // exclusively by the animation tick from then on. Two separate maps
+  // (rather than one keyed to a {circle, text} pair) because ref callbacks
+  // fire independently per element.
+  const circleRefs = useRef(new Map<string, SVGCircleElement>())
+  const textRefs = useRef(new Map<string, SVGTextElement>())
+
+  const onTick = useCallback((carNumber: string, fraction: number) => {
+    const { x, y } = pointOnCircle(fraction)
+    const circle = circleRefs.current.get(carNumber)
+    if (circle) {
+      circle.setAttribute('cx', String(x))
+      circle.setAttribute('cy', String(y))
+    }
+    const text = textRefs.current.get(carNumber)
+    if (text) {
+      text.setAttribute('x', String(x))
+      text.setAttribute('y', String(y))
+    }
+  }, [])
+
+  useFractionAnimation(cars, onTick)
+
   return (
     <div className="circle-of-doom">
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" role="img" aria-label="Circle of doom">
@@ -63,13 +89,46 @@ export function CircleOfDoom({
             <RadialTick fraction={sectorFractions[1]} label="S2" className="circle-of-doom-sector-tick" />
           </>
         )}
-        {smoothed.map((c) => {
-          const { x, y } = pointOnCircle(c.fraction)
+        {cars.map((c) => {
           const isFocus = c.car_number === focusCarNumber
+          // cx/cy/x/y are deliberately NOT passed as JSX props — if they
+          // were, React would reset them to c.fraction's raw position on
+          // every re-render (cars is a fresh array every frame while
+          // Replay plays), overwriting whatever the animation tick wrote
+          // in between and defeating the smoothing entirely. Set once
+          // here, guarded so ref-callback churn (a new inline closure
+          // every render) doesn't re-trigger it, then owned exclusively
+          // by useFractionAnimation's onTick from then on.
+          const initPosition = (el: Element | null, xAttr: string, yAttr: string) => {
+            if (!el || (el as HTMLElement).dataset.inited === '1') return
+            const { x, y } = pointOnCircle(c.fraction)
+            el.setAttribute(xAttr, String(x))
+            el.setAttribute(yAttr, String(y))
+            ;(el as HTMLElement).dataset.inited = '1'
+          }
           return (
             <g key={c.car_number} className={isFocus ? 'circle-of-doom-car circle-of-doom-car-focus' : 'circle-of-doom-car'}>
-              <circle cx={x} cy={y} r={isFocus ? 12 : 9} fill={getTeamColor(c.team)} stroke="#fff" strokeWidth={1.5} />
-              <text x={x} y={y} dy="0.32em" textAnchor="middle" className="circle-of-doom-label">
+              <circle
+                ref={(el) => {
+                  if (el) circleRefs.current.set(c.car_number, el)
+                  else circleRefs.current.delete(c.car_number)
+                  initPosition(el, 'cx', 'cy')
+                }}
+                r={isFocus ? 12 : 9}
+                fill={getTeamColor(c.team)}
+                stroke="#fff"
+                strokeWidth={1.5}
+              />
+              <text
+                ref={(el) => {
+                  if (el) textRefs.current.set(c.car_number, el)
+                  else textRefs.current.delete(c.car_number)
+                  initPosition(el, 'x', 'y')
+                }}
+                dy="0.32em"
+                textAnchor="middle"
+                className="circle-of-doom-label"
+              >
                 {c.car_number}
               </text>
             </g>

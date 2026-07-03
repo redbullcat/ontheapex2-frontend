@@ -4,6 +4,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // react-draggable/prop-types (pulled in by react-grid-layout) are CJS
+  // packages that read process.env.NODE_ENV directly rather than going
+  // through import.meta.env — there's no Node process global in the
+  // browser bundle otherwise, hence "process is not defined" at runtime.
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
+  },
   plugins: [
     react(),
     VitePWA({
