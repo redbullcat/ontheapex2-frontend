@@ -17,7 +17,7 @@ function TabContent({ tab, data }: { tab: TabKey; data: LiveState }) {
     case 'race-log':
       return <RaceLogPanel entries={data.race_log} />
     case 'fastest-laps':
-      return <FastestLapsTable laps={data.laps} />
+      return <FastestLapsTable laps={data.laps.filter((l) => l.is_valid)} />
     case 'track-map':
     case 'circle-of-doom':
       return <p className="replay-hint">Coming soon.</p>
