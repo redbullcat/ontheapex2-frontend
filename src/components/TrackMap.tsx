@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getTeamColor } from '../lib/identityColors'
+import { useSmoothedFractions } from '../hooks/useSmoothedFractions'
 
 export interface TrackMapCar {
   car_number: string
@@ -71,6 +72,10 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
     if (track && pathRef.current) setPathReady(true)
   }, [track])
 
+  // Called unconditionally, before the early returns below, so hook order
+  // stays stable across renders regardless of load state.
+  const smoothed = useSmoothedFractions(cars)
+
   if (track === undefined) return <p className="replay-hint">Loading track map…</p>
   if (track === null) return <p className="replay-hint">No track map available for this circuit.</p>
 
@@ -82,7 +87,7 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
         <g dangerouslySetInnerHTML={{ __html: track.innerSvg }} />
         <path ref={pathRef} d={track.mainPathD} fill="none" stroke="none" />
         {pathReady &&
-          cars.map((c) => {
+          smoothed.map((c) => {
             const el = pathRef.current
             if (!el) return null
             const total = el.getTotalLength()
