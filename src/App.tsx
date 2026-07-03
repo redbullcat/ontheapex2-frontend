@@ -305,12 +305,12 @@ function App() {
                 <>
                   <Tabs tabs={chartTabs} value={activeTab} onChange={setActiveTab} />
 
-                  {sessionSection === 'race' && !combinedBucket && currentSession && (
+                  {!combinedBucket && currentSession && (
                     <p className="replay-entry-point">
                       <a
                         href={`/replay?session=${sessionId}&title=${encodeURIComponent(
                           [currentSeriesLabel, currentEvent?.display_name, currentSession.label].filter(Boolean).join(' · '),
-                        )}`}
+                        )}&type=${currentSession.type}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

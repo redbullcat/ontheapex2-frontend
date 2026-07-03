@@ -5,21 +5,36 @@ import { buildReplayData, type ReplayData } from './replayData'
 import { useReplayClock } from './useReplayClock'
 import { useReplaySnapshot } from './useReplayRows'
 import { ReplayLeaderboard } from './ReplayLeaderboard'
-import { ReplayTrendChart } from './ReplayTrendChart'
 import { ReplayTransport } from './ReplayTransport'
+import { ReplaySidebar } from './ReplaySidebar'
+import { ReplayFastestLapsPanel } from './ReplayFastestLapsPanel'
 import { formatClock } from './format'
 import { ClassFilter } from '../components/ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
+import { bucketFor } from '../lib/sessionBucket'
+import { RaceLogPanel } from '../live/RaceLogPanel'
+import { REPLAY_RACE_LOG_TYPES } from './raceLogSynth'
+import type { RaceLogType, SessionType } from '../api/types'
 import './replay.css'
 
 function readParam(name: string): string {
   return new URLSearchParams(window.location.search).get(name) ?? ''
 }
 
+function replayTimestampFormatter(elapsedTimeMillis: number): string {
+  return formatClock(elapsedTimeMillis / 1000)
+}
+
 export function ReplayApp() {
   const sessionId = readParam('session')
   const title = readParam('title') || 'Live Timing Replay'
+  const rawType = readParam('type')
+  // Unset (e.g. an old bookmarked link from before this param existed)
+  // defaults to treating it as a race — that's the safer default since
+  // it's also what the entry point used to be gated to exclusively.
+  const isRaceSession = rawType ? bucketFor(rawType as SessionType) === 'race' : true
+  const panel = readParam('panel')
 
   // Mirrors the main app's stored theme so the two tabs stay visually
   // consistent — this view has no toggle of its own for v1.
@@ -45,7 +60,11 @@ export function ReplayApp() {
       ) : lapsState.status === 'error' ? (
         <p className="replay-hint">Failed to load laps: {lapsState.error}</p>
       ) : data && data.events.length > 0 ? (
-        <ReplayConsole title={title} data={data} />
+        panel ? (
+          <StandalonePanel panel={panel} data={data} title={title} />
+        ) : (
+          <ReplayConsole title={title} data={data} sessionId={sessionId} isRaceSession={isRaceSession} />
+        )
       ) : (
         <p className="replay-hint">No lap data for this session.</p>
       )}
@@ -53,13 +72,54 @@ export function ReplayApp() {
   )
 }
 
-function ReplayConsole({ title, data }: { title: string; data: ReplayData }) {
+// A pop-out from the sidebar lands here with &panel=<tab> — render just
+// that one panel full-screen. Race log/fastest laps are meaningful as a
+// static, whole-session view outside the scrubbed clock (unlike inside the
+// sidebar, where they track the current playback position) — showing
+// everything is the more useful default for a dedicated tab/window.
+function StandalonePanel({ panel, data, title }: { panel: string; data: ReplayData; title: string }) {
+  const snapshot = useReplaySnapshot(data, data.maxTime)
+  const activeClasses = useMemo(() => new Set(data.classes), [data])
+
+  return (
+    <div className="replay-console">
+      <div className="replay-topbar">
+        <h2>
+          {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+        </h2>
+      </div>
+      <div className="replay-leaderboard-panel">
+        {panel === 'race-log' ? (
+          <RaceLogPanel
+            entries={data.raceLog}
+            availableTypes={REPLAY_RACE_LOG_TYPES as unknown as RaceLogType[]}
+            formatTimestamp={(entry) => replayTimestampFormatter(entry.elapsedTimeMillis)}
+          />
+        ) : (
+          <ReplayFastestLapsPanel rows={snapshot.rows} activeClasses={activeClasses} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReplayConsole({
+  title,
+  data,
+  sessionId,
+  isRaceSession,
+}: {
+  title: string
+  data: ReplayData
+  sessionId: string
+  isRaceSession: boolean
+}) {
   const clock = useReplayClock(data.minTime, data.maxTime)
   const snapshot = useReplaySnapshot(data, clock.current)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [expandedChart, setExpandedChart] = useState<'gap' | 'position' | null>(null)
   const [gapVisibleCars, setGapVisibleCars] = useState<Set<string>>(new Set())
   const [positionVisibleCars, setPositionVisibleCars] = useState<Set<string>>(new Set())
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const activeClasses = useMemo(() => resolveClassSelection(classSelection, data.classes), [classSelection, data.classes])
 
@@ -84,60 +144,55 @@ function ReplayConsole({ title, data }: { title: string; data: ReplayData }) {
   const flagLabel = flag ? FLAG_LABELS[flag] : null
 
   return (
-    <div className="replay-console">
-      {expandedChart && <div className="replay-backdrop" onClick={() => setExpandedChart(null)} />}
-
-      <div className="replay-topbar">
-        <div className="replay-session-id">
-          <h2>{title}</h2>
-          <span>{data.cars.length} cars</span>
-        </div>
-        <div className="replay-clock-block">
-          {flag && (
-            <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flag] } as CSSProperties}>
-              {flagLabel}
-            </span>
-          )}
-          <span className="replay-clock-mode">Replay</span>
-          <div className="replay-clock">
-            {formatClock(clock.current)}
-            <small> / {formatClock(data.maxTime)}</small>
+    <div className="live-with-sidebar">
+      <div className="replay-console live-main">
+        <div className="replay-topbar">
+          <div className="replay-session-id">
+            <h2>{title}</h2>
+            <span>{data.cars.length} cars</span>
+          </div>
+          <div className="replay-clock-block">
+            {flag && (
+              <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flag] } as CSSProperties}>
+                {flagLabel}
+              </span>
+            )}
+            <span className="replay-clock-mode">Replay</span>
+            <div className="replay-clock">
+              {formatClock(clock.current)}
+              <small> / {formatClock(data.maxTime)}</small>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="replay-leaderboard-panel">
-        <p className="replay-panel-label">
-          Leaderboard — updates on every sector crossing
-          <span className="hint"> — blank = split not recorded · violet row = in the pits · purple time = session best in class · green time = personal best</span>
-        </p>
-        <div className="replay-trend-controls">
-          <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
+        <div className="replay-leaderboard-panel">
+          <p className="replay-panel-label">
+            Leaderboard — updates on every sector crossing
+            <span className="hint"> — blank = split not recorded · violet row = in the pits · purple time = session best in class · green time = personal best</span>
+          </p>
+          <div className="replay-trend-controls">
+            <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
+          </div>
+          <ReplayLeaderboard rows={snapshot.rows} activeClasses={activeClasses} highlightedCars={highlightedCars} />
         </div>
-        <ReplayLeaderboard rows={snapshot.rows} activeClasses={activeClasses} highlightedCars={highlightedCars} />
+
+        <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
       </div>
 
-      <ReplayTrendChart
+      <ReplaySidebar
         data={data}
-        mode="gap"
-        currentLap={snapshot.leaderLap}
-        title="Gap evolution — live"
-        onVisibleCarsChange={onGapVisibleCarsChange}
-        expanded={expandedChart === 'gap'}
-        onToggleExpand={() => setExpandedChart((c) => (c === 'gap' ? null : 'gap'))}
+        rows={snapshot.rows}
+        activeClasses={activeClasses}
+        currentTime={clock.current}
+        leaderLap={snapshot.leaderLap}
+        isRaceSession={isRaceSession}
+        sessionId={sessionId}
+        title={title}
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen((o) => !o)}
+        onGapVisibleCarsChange={onGapVisibleCarsChange}
+        onPositionVisibleCarsChange={onPositionVisibleCarsChange}
       />
-
-      <ReplayTrendChart
-        data={data}
-        mode="position"
-        currentLap={snapshot.leaderLap}
-        title="Lap-by-lap position — live"
-        onVisibleCarsChange={onPositionVisibleCarsChange}
-        expanded={expandedChart === 'position'}
-        onToggleExpand={() => setExpandedChart((c) => (c === 'position' ? null : 'position'))}
-      />
-
-      <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
     </div>
   )
 }

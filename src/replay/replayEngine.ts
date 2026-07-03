@@ -19,6 +19,8 @@ export interface RowState {
   s2Badge: BestBadge
   s3Badge: BestBadge
   bestLap: number | null
+  bestLapNumber: number | null
+  bestLapDriverName: string | null
   lastLap: number | null
   lastLapBadge: BestBadge
   gap: number | null
@@ -50,6 +52,8 @@ interface CarState {
   s2UpdatedAt: number
   s3UpdatedAt: number
   bestLap: number | null
+  bestLapNumber: number | null
+  bestLapDriverName: string | null
   lastLap: number | null
 }
 
@@ -110,6 +114,8 @@ export class ReplayEngine {
           s2UpdatedAt: -Infinity,
           s3UpdatedAt: -Infinity,
           bestLap: null,
+          bestLapNumber: null,
+          bestLapDriverName: null,
           lastLap: null,
         },
       ]),
@@ -176,7 +182,11 @@ export class ReplayEngine {
         this.updateBests(car, 3, e.value)
         car.lastLap = e.lapTimeSeconds ?? null
         if (car.lastLap != null) {
-          car.bestLap = car.bestLap == null ? car.lastLap : Math.min(car.bestLap, car.lastLap)
+          if (car.bestLap == null || car.lastLap < car.bestLap) {
+            car.bestLap = car.lastLap
+            car.bestLapNumber = e.lap
+            car.bestLapDriverName = e.driverName
+          }
           this.updateLapBests(car, car.lastLap)
         }
       }
@@ -270,6 +280,8 @@ export class ReplayEngine {
         s2Badge: this.badge(c.s2, this.sessionBestSector.get(`${c.meta.class}:2`), personalSector?.[1]),
         s3Badge: this.badge(c.s3, this.sessionBestSector.get(`${c.meta.class}:3`), personalSector?.[2]),
         bestLap: c.bestLap,
+        bestLapNumber: c.bestLapNumber,
+        bestLapDriverName: c.bestLapDriverName,
         lastLap: c.lastLap,
         lastLapBadge: this.badge(c.lastLap, this.sessionBestLap.get(c.meta.class), this.personalBestLap.get(c.meta.car_number)),
         gap,
