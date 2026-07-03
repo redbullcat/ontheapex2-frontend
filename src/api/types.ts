@@ -203,6 +203,17 @@ export interface LiveState {
   race_log: RaceLogEntry[]
 }
 
+// From GET /api/live/sessions — enough to build a "Live now" link without
+// already knowing the griiip session id.
+export interface LiveSessionSummary {
+  griiip_session_id: number
+  session_ended: boolean
+  series_name: string
+  event_name: string
+  session_name: string
+  session_type: string
+}
+
 export interface Stint {
   car_number: string
   team: string | null

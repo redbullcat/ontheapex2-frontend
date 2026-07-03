@@ -1,4 +1,14 @@
-import type { EventSummary, HourlyPositions, LapRead, LeadStint, LiveState, Series, SessionSummary, Stint } from './types'
+import type {
+  EventSummary,
+  HourlyPositions,
+  LapRead,
+  LeadStint,
+  LiveSessionSummary,
+  LiveState,
+  Series,
+  SessionSummary,
+  Stint,
+} from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
 
@@ -65,4 +75,10 @@ export async function getCombinedLaps(sessionIds: number[]): Promise<LapRead[]> 
 // yet, see app/live/manager.py on the backend.
 export function getLiveState(griiipSessionId: number): Promise<LiveState> {
   return get<LiveState>(`/api/live/${griiipSessionId}/state`)
+}
+
+// Every live session currently tracked by the backend process — powers the
+// sidebar's "Live now" entry point so it doesn't need a hand-typed sid.
+export function getLiveSessions(): Promise<LiveSessionSummary[]> {
+  return get<LiveSessionSummary[]>('/api/live/sessions')
 }
