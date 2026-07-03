@@ -84,12 +84,43 @@ export interface LapRead {
 
 export interface LiveStanding {
   position: number | null
+  class_position: number | null
   car_number: string
   class: string | null
   team: string | null
   driver_name: string | null
   gap_to_first_seconds: number
   gap_to_next_seconds: number
+  best_lap_seconds: number | null
+  last_lap_seconds: number | null
+  total_laps: number
+}
+
+export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
+
+export interface RaceLogEntry {
+  type: RaceLogType
+  raceLogItemId: string
+  lapNumber: number
+  ts: string
+  elapsedTimeMillis: number
+  pid: number
+  carNumber: string
+  classId: string
+  // Present depending on `type` — RCMessage has `text`, RaceFlag has `flag`,
+  // DriverSwap has previousDriverId/newDriverId, PitOut/FastestLap have
+  // totalTimeInPitMillis/lapTimeMillis. Left loose rather than a discriminated
+  // union since this is a passthrough of Griiip's own event shape.
+  text?: string
+  flag?: string
+  lapTimeMillis?: number
+  totalTimeInPitMillis?: number
+}
+
+export interface SessionClock {
+  start_time: string | null
+  time_limit_seconds: number | null
+  laps_limit: number | null
 }
 
 // A subset of LapRead's fields — live laps have no `id`/`session_id` (they
@@ -132,9 +163,11 @@ export interface LiveWeather {
 export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
+  session_clock: SessionClock | null
   weather: LiveWeather | null
   standings: LiveStanding[]
   laps: LiveLap[]
+  race_log: RaceLogEntry[]
 }
 
 export interface Stint {
