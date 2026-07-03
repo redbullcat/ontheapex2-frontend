@@ -13,6 +13,8 @@ import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 import { ReplayTrendChart } from '../replay/ReplayTrendChart'
 import { useLiveTrendData } from './liveTrendData'
 import { BackLink } from '../components/BackLink'
+import { CarDetailModal } from '../components/CarDetailModal'
+import { liveLapToLapRead } from '../lib/liveLapAdapter'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
@@ -152,6 +154,16 @@ function LiveConsole({
 }) {
   const flagCategory = classifyFlag(data.current_flag)
   const visibleStandings = data.standings.filter((r) => activeClasses.has(r.class ?? 'Unknown'))
+  const [selectedCar, setSelectedCar] = useState<string | null>(null)
+
+  // Live's own laps are already "as of now" by definition — no clock-based
+  // filtering needed the way Replay needs (see ReplayApp.tsx). Reshaped to
+  // LapRead's shape so the car detail panel's reused historical chart
+  // components (built for LapRead) work unmodified against live data too.
+  const carDetailLaps = useMemo(() => {
+    if (!selectedCar) return []
+    return data.laps.map((lap, i) => liveLapToLapRead(lap, i))
+  }, [data.laps, selectedCar])
 
   return (
     <div className="replay-root live-with-sidebar">
@@ -217,7 +229,11 @@ function LiveConsole({
                 {visibleStandings.map((row) => {
                   const lastLap = lastLapByCar.get(row.car_number)
                   return (
-                    <tr key={row.car_number} className={row.in_pit ? 'replay-row in-pit' : 'replay-row'}>
+                    <tr
+                      key={row.car_number}
+                      className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'}
+                      onClick={() => setSelectedCar(row.car_number)}
+                    >
                       <td className="num pos">{row.position ?? '—'}</td>
                       <td className="num cls-pos">{row.class_position ?? '—'}</td>
                       <td className="al">
@@ -262,6 +278,8 @@ function LiveConsole({
         open={sidebarOpen}
         onToggle={() => setSidebarOpen((o) => !o)}
       />
+
+      {selectedCar && <CarDetailModal carNumber={selectedCar} allLaps={carDetailLaps} onClose={() => setSelectedCar(null)} />}
     </div>
   )
 }

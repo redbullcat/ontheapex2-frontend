@@ -16,6 +16,7 @@ import { bucketFor } from '../lib/sessionBucket'
 import { RaceLogPanel } from '../live/RaceLogPanel'
 import { REPLAY_RACE_LOG_TYPES } from './raceLogSynth'
 import { BackLink } from '../components/BackLink'
+import { CarDetailModal } from '../components/CarDetailModal'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { RaceLogType, SessionType } from '../api/types'
 import './replay.css'
@@ -127,6 +128,21 @@ function ReplayConsole({
   const [gapVisibleCars, setGapVisibleCars] = useState<Set<string>>(new Set())
   const [positionVisibleCars, setPositionVisibleCars] = useState<Set<string>>(new Set())
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [selectedCar, setSelectedCar] = useState<string | null>(null)
+
+  // "As if live": only what's happened up to the current playback clock,
+  // matching what the leaderboard/sidebar already show — the car detail
+  // panel must not leak laps from later in the session just because the
+  // full dataset happens to already be loaded in memory. Only actually
+  // filters (an O(n) scan) while the panel is open.
+  const carDetailLaps = useMemo(() => {
+    if (!selectedCar) return []
+    return data.laps.filter((l) => l.elapsed_seconds != null && l.elapsed_seconds <= clock.current)
+    // Floor to the second so this doesn't re-filter every animation frame
+    // at high playback speeds — a car detail panel doesn't need
+    // sub-second freshness.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.laps, selectedCar, Math.floor(clock.current)])
 
   const activeClasses = useMemo(() => resolveClassSelection(classSelection, data.classes), [classSelection, data.classes])
 
@@ -181,7 +197,12 @@ function ReplayConsole({
           <div className="replay-trend-controls">
             <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
           </div>
-          <ReplayLeaderboard rows={snapshot.rows} activeClasses={activeClasses} highlightedCars={highlightedCars} />
+          <ReplayLeaderboard
+            rows={snapshot.rows}
+            activeClasses={activeClasses}
+            highlightedCars={highlightedCars}
+            onRowClick={setSelectedCar}
+          />
         </div>
 
         <ReplayTransport clock={clock} min={data.minTime} max={data.maxTime} />
@@ -201,6 +222,8 @@ function ReplayConsole({
         onGapVisibleCarsChange={onGapVisibleCarsChange}
         onPositionVisibleCarsChange={onPositionVisibleCarsChange}
       />
+
+      {selectedCar && <CarDetailModal carNumber={selectedCar} allLaps={carDetailLaps} onClose={() => setSelectedCar(null)} />}
     </div>
   )
 }

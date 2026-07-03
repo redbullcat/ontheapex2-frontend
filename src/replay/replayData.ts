@@ -42,6 +42,10 @@ export interface PitWindow {
 export interface ReplayData {
   cars: CarMeta[]
   classes: string[]
+  // Raw input, unfiltered by playback position — only for consumers that
+  // need to do their own "as of now" filtering (car-detail panel, see
+  // CarDetailModal), not for anything driven directly by the replay clock.
+  laps: LapRead[]
   events: SectorEvent[]
   pitWindowsByCar: Map<string, PitWindow[]>
   // Fixed-reference gap (vs. the eventual race winner) — used by the
@@ -169,6 +173,7 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
   return {
     cars,
     classes: [...classes].sort(),
+    laps,
     events,
     pitWindowsByCar,
     referenceCar,

@@ -170,6 +170,8 @@ export interface LiveLap {
   elapsed_seconds: number | null
   top_speed: number | null
   driver_name: string | null
+  pit_time: string | null
+  pit_time_seconds: number | null
   class: string | null
   team: string | null
   manufacturer: string | null
