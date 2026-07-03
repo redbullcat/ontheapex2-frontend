@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { LapRead } from '../api/types'
 import { getTeamDisplayName } from '../lib/identityColors'
-import { computeCarSummary } from '../lib/carDetail'
+import { computeCarSummary, computeCurrentBestLapRank } from '../lib/carDetail'
 import { formatLapTime } from '../replay/format'
 import { PaceChart } from './PaceChart'
 import { LapPositionChart } from './LapPositionChart'
@@ -16,17 +16,42 @@ import { CarLapHistoryTable } from './CarLapHistoryTable'
 // actually be known at this point in a real live session, matching the
 // explicit ask that Replay's car detail "act as if live."
 //
+// `isRaceSession` matters because "position"/"laps led" only mean anything
+// against a real running order — practice/qualifying sessions are
+// classified by best lap instead (see LapPositionChart's rankBy and
+// computeCurrentBestLapRank), same distinction the main app's own tabs
+// already make (App.tsx's NON_RACE_TABS excludes its Position tab
+// entirely for this exact reason).
+//
 // The three reused charts (PaceChart, LapPositionChart, PitTimeChart) are
-// the exact same components the main historical app uses — deliberately
-// unmodified, just fed a pre-filtered single-car laps array so their own
-// internal class/car filters have nothing to filter and they render as a
-// focused single-car view for free.
-export function CarDetailModal({ carNumber, allLaps, onClose }: { carNumber: string; allLaps: LapRead[]; onClose: () => void }) {
+// the exact same components the main historical app uses. PitTimeChart is
+// unmodified; PaceChart/LapPositionChart gained small opt-in props
+// (hideCarFilter / focusCarNumber+rankBy) so this panel can feed them
+// pre-filtered/focused data without duplicating either chart.
+export function CarDetailModal({
+  carNumber,
+  allLaps,
+  isRaceSession,
+  onClose,
+}: {
+  carNumber: string
+  allLaps: LapRead[]
+  isRaceSession: boolean
+  onClose: () => void
+}) {
   const carLaps = useMemo(
     () => allLaps.filter((l) => l.car_number === carNumber).sort((a, b) => a.lap_number - b.lap_number),
     [allLaps, carNumber],
   )
-  const summary = useMemo(() => computeCarSummary(carNumber, allLaps), [carNumber, allLaps])
+  const raceSummary = useMemo(
+    () => (isRaceSession ? computeCarSummary(carNumber, allLaps) : null),
+    [carNumber, allLaps, isRaceSession],
+  )
+  const bestLapRank = useMemo(
+    () => (isRaceSession ? null : computeCurrentBestLapRank(carNumber, allLaps)),
+    [carNumber, allLaps, isRaceSession],
+  )
+  const currentPosition = isRaceSession ? raceSummary?.currentPosition ?? null : bestLapRank
 
   const last = carLaps[carLaps.length - 1]
   const bestLapSeconds = useMemo(() => {
@@ -53,8 +78,8 @@ export function CarDetailModal({ carNumber, allLaps, onClose }: { carNumber: str
 
         <div className="stat-row">
           <div className="stat-tile">
-            <span className="stat-label">Position</span>
-            <span className="stat-value">{summary.currentPosition ?? '—'}</span>
+            <span className="stat-label">{isRaceSession ? 'Position' : 'Rank (best lap)'}</span>
+            <span className="stat-value">{currentPosition ?? '—'}</span>
           </div>
           <div className="stat-tile">
             <span className="stat-label">Laps</span>
@@ -64,10 +89,14 @@ export function CarDetailModal({ carNumber, allLaps, onClose }: { carNumber: str
             <span className="stat-label">Best lap</span>
             <span className="stat-value">{formatLapTime(bestLapSeconds)}</span>
           </div>
-          <div className="stat-tile">
-            <span className="stat-label">% race led</span>
-            <span className="stat-value">{summary.percentLed != null ? `${summary.percentLed.toFixed(1)}%` : '—'}</span>
-          </div>
+          {isRaceSession && (
+            <div className="stat-tile">
+              <span className="stat-label">% race led</span>
+              <span className="stat-value">
+                {raceSummary?.percentLed != null ? `${raceSummary.percentLed.toFixed(1)}%` : '—'}
+              </span>
+            </div>
+          )}
           <div className="stat-tile">
             <span className="stat-label">Pit stops</span>
             <span className="stat-value">{pitStopCount}</span>
@@ -75,10 +104,10 @@ export function CarDetailModal({ carNumber, allLaps, onClose }: { carNumber: str
         </div>
 
         <p className="replay-panel-label">Position history</p>
-        <LapPositionChart laps={carLaps} />
+        <LapPositionChart laps={allLaps} focusCarNumber={carNumber} rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'} />
 
         <p className="replay-panel-label">Pace</p>
-        <PaceChart laps={carLaps} />
+        <PaceChart laps={carLaps} hideCarFilter />
 
         <p className="replay-panel-label">Stint history</p>
         <CarStintTable laps={carLaps} />

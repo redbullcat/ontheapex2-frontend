@@ -15,6 +15,7 @@ import { useLiveTrendData } from './liveTrendData'
 import { BackLink } from '../components/BackLink'
 import { CarDetailModal } from '../components/CarDetailModal'
 import { liveLapToLapRead } from '../lib/liveLapAdapter'
+import { isLiveRaceSession } from './liveSessionType'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
@@ -154,6 +155,7 @@ function LiveConsole({
 }) {
   const flagCategory = classifyFlag(data.current_flag)
   const visibleStandings = data.standings.filter((r) => activeClasses.has(r.class ?? 'Unknown'))
+  const isRaceSession = isLiveRaceSession(data.session_type)
   const [selectedCar, setSelectedCar] = useState<string | null>(null)
 
   // Live's own laps are already "as of now" by definition — no clock-based
@@ -279,7 +281,14 @@ function LiveConsole({
         onToggle={() => setSidebarOpen((o) => !o)}
       />
 
-      {selectedCar && <CarDetailModal carNumber={selectedCar} allLaps={carDetailLaps} onClose={() => setSelectedCar(null)} />}
+      {selectedCar && (
+        <CarDetailModal
+          carNumber={selectedCar}
+          allLaps={carDetailLaps}
+          isRaceSession={isRaceSession}
+          onClose={() => setSelectedCar(null)}
+        />
+      )}
     </div>
   )
 }

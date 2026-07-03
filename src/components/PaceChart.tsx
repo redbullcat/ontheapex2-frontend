@@ -108,7 +108,11 @@ function formatSeconds(s: number): string {
   return `${m}:${sec.toFixed(3).padStart(6, '0')}`
 }
 
-export function PaceChart({ laps }: { laps: LapRead[] }) {
+// `hideCarFilter` is for the car-detail panel (see CarDetailModal), which
+// already only ever passes one car's laps in — "Add car" would just offer a
+// single, already-selected option, which reads as broken rather than
+// merely unused. Every other caller omits this and is unaffected.
+export function PaceChart({ laps, hideCarFilter }: { laps: LapRead[]; hideCarFilter?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
@@ -415,15 +419,17 @@ export function PaceChart({ laps }: { laps: LapRead[] }) {
         </label>
         <ChartExportButtons svgRef={svgRef} filename="pace_chart" />
       </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+      {!hideCarFilter && (
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
+        </div>
+      )}
       {groupBy === 'driver' && (
         <div className="chart-controls">
           <EntityFilter
