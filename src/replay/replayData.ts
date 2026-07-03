@@ -1,5 +1,6 @@
-import type { LapRead } from '../api/types'
+import type { LapRead, RaceLogEntry } from '../api/types'
 import { computeFlagPeriods, type FlagPeriod } from '../lib/flags'
+import { buildReplayRaceLog } from './raceLogSynth'
 
 export interface CarMeta {
   car_number: string
@@ -61,6 +62,10 @@ export interface ReplayData {
   // only once per lap.
   elapsedByLapSectorByCar: Map<string, Map<string, number>>
   flagPeriods: FlagPeriod[]
+  // Synthesized from laps/pit windows/flag periods — see raceLogSynth.ts.
+  // Same RaceLogEntry shape the live view uses, so the sidebar's race log
+  // panel is shared between both.
+  raceLog: RaceLogEntry[]
   minTime: number
   maxTime: number
 }
@@ -221,6 +226,7 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
   const { referenceCar, gapByLapAndCar } = computeReferenceAndGaps(laps)
   const positionByLapAndCar = computePositionByLap(laps)
   const flagPeriods = computeFlagPeriods(laps)
+  const raceLog = buildReplayRaceLog(laps, pitWindowsByCar)
 
   const minTime = events.length ? events[0].time : 0
   const maxTime = events.length ? events[events.length - 1].time : 0
@@ -237,6 +243,7 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
     positionByLapAndCar,
     elapsedByLapSectorByCar,
     flagPeriods,
+    raceLog,
     minTime,
     maxTime,
   }

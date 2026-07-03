@@ -1,16 +1,21 @@
 import { useState } from 'react'
 import type { LiveState } from '../api/types'
+import { CollapsibleSidebar, type SidebarTabDef } from '../components/CollapsibleSidebar'
 import { RaceLogPanel } from './RaceLogPanel'
 import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'track-map' | 'circle-of-doom'
 
-const TABS: { key: TabKey; label: string; comingSoon?: boolean }[] = [
+const TABS: SidebarTabDef[] = [
   { key: 'race-log', label: 'Race log' },
   { key: 'fastest-laps', label: 'Fastest laps' },
-  { key: 'track-map', label: 'Track map', comingSoon: true },
-  { key: 'circle-of-doom', label: 'Circle of doom', comingSoon: true },
+  { key: 'track-map', label: 'Track map' },
+  { key: 'circle-of-doom', label: 'Circle of doom' },
 ]
+
+// track-map/circle-of-doom have no working panel yet — no pop-out link
+// makes sense for a "Coming soon" placeholder.
+const POPOUT_TABS: TabKey[] = ['race-log', 'fastest-laps']
 
 function TabContent({ tab, data }: { tab: TabKey; data: LiveState }) {
   switch (tab) {
@@ -48,39 +53,15 @@ export function LiveSidebar({
   const [activeTab, setActiveTab] = useState<TabKey>('race-log')
 
   return (
-    <div className={`live-sidebar${open ? '' : ' live-sidebar-collapsed'}`}>
-      <button className="live-sidebar-toggle" onClick={onToggle} aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}>
-        {open ? '›' : '‹'}
-      </button>
-      {open && (
-        <div className="live-sidebar-content">
-          <div className="live-sidebar-tabs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                className={`live-sidebar-tab${activeTab === tab.key ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="live-sidebar-panel-header">
-            <a
-              className="live-sidebar-popout"
-              href={popOutUrl(activeTab, griiipSessionId, title)}
-              target="_blank"
-              rel="noreferrer"
-              title="Open in new tab"
-            >
-              ↗ Open in new tab
-            </a>
-          </div>
-          <div className="live-sidebar-body">
-            <TabContent tab={activeTab} data={data} />
-          </div>
-        </div>
-      )}
-    </div>
+    <CollapsibleSidebar
+      tabs={TABS}
+      activeTab={activeTab}
+      onTabChange={(key) => setActiveTab(key as TabKey)}
+      open={open}
+      onToggle={onToggle}
+      popOutUrl={POPOUT_TABS.includes(activeTab) ? popOutUrl(activeTab, griiipSessionId, title) : null}
+    >
+      <TabContent tab={activeTab} data={data} />
+    </CollapsibleSidebar>
   )
 }

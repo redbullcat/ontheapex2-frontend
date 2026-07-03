@@ -94,7 +94,7 @@ export interface LiveStanding {
   team: string | null
   driver_name: string | null
   gap_to_first_seconds: number
-  gap_to_next_seconds: number
+  gap_to_next_seconds: number | null
   best_lap_seconds: number | null
   last_lap_seconds: number | null
   last_lap_color: LiveTimeColor
@@ -173,6 +173,7 @@ export interface LiveWeather {
 export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
+  session_ended: boolean
   session_clock: SessionClock | null
   weather: LiveWeather | null
   standings: LiveStanding[]

@@ -139,10 +139,14 @@ function LiveConsole({
             <span>{data.standings.length} cars</span>
           </div>
           <div className="replay-clock-block">
-            <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flagCategory] } as CSSProperties}>
-              {FLAG_LABELS[flagCategory]}
-            </span>
-            <span className="replay-clock-mode">Live</span>
+            {data.session_ended ? (
+              <span className="live-chequered-pill">🏁 Session complete</span>
+            ) : (
+              <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flagCategory] } as CSSProperties}>
+                {FLAG_LABELS[flagCategory]}
+              </span>
+            )}
+            <span className="replay-clock-mode">{data.session_ended ? 'Ended' : 'Live'}</span>
             {clock.elapsedSeconds != null && (
               <div className="replay-clock">
                 {formatClock(clock.elapsedSeconds)}
@@ -158,7 +162,7 @@ function LiveConsole({
         </div>
 
         <div className="replay-leaderboard-panel">
-          <p className="replay-panel-label">Standings — polling every 2s</p>
+          <p className="replay-panel-label">{data.session_ended ? 'Final standings' : 'Standings — polling every 2s'}</p>
           <div className="replay-trend-controls">
             <ClassFilter classes={classes} selection={classSelection} onChange={setClassSelection} />
           </div>
