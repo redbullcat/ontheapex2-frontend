@@ -15,6 +15,8 @@ import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { bucketFor } from '../lib/sessionBucket'
 import { RaceLogPanel } from '../live/RaceLogPanel'
 import { REPLAY_RACE_LOG_TYPES } from './raceLogSynth'
+import { BackLink } from '../components/BackLink'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { RaceLogType, SessionType } from '../api/types'
 import './replay.css'
 
@@ -35,6 +37,8 @@ export function ReplayApp() {
   // it's also what the entry point used to be gated to exclusively.
   const isRaceSession = rawType ? bucketFor(rawType as SessionType) === 'race' : true
   const panel = readParam('panel')
+
+  useDocumentTitle(`${title} — Replay · On The Apex`)
 
   // Mirrors the main app's stored theme so the two tabs stay visually
   // consistent — this view has no toggle of its own for v1.
@@ -84,9 +88,12 @@ function StandalonePanel({ panel, data, title }: { panel: string; data: ReplayDa
   return (
     <div className="replay-console">
       <div className="replay-topbar">
-        <h2>
-          {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
-        </h2>
+        <div className="replay-session-id">
+          <BackLink />
+          <h2>
+            {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+          </h2>
+        </div>
       </div>
       <div className="replay-leaderboard-panel">
         {panel === 'race-log' ? (
@@ -148,6 +155,7 @@ function ReplayConsole({
       <div className="replay-console live-main">
         <div className="replay-topbar">
           <div className="replay-session-id">
+            <BackLink />
             <h2>{title}</h2>
             <span>{data.cars.length} cars</span>
           </div>

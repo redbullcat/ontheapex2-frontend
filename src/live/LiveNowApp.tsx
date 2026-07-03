@@ -12,6 +12,8 @@ import { RaceLogPanel } from './RaceLogPanel'
 import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 import { ReplayTrendChart } from '../replay/ReplayTrendChart'
 import { useLiveTrendData } from './liveTrendData'
+import { BackLink } from '../components/BackLink'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
@@ -29,6 +31,8 @@ export function LiveNowApp() {
   const griiipSessionId = Number(readParam('sid')) || null
   const title = readParam('title') || 'Live Now'
   const panel = readParam('panel')
+
+  useDocumentTitle(`${title} — Live · On The Apex`)
 
   useEffect(() => {
     const stored = window.localStorage.getItem('theme')
@@ -100,9 +104,12 @@ export function LiveNowApp() {
       <div className="replay-root">
         <div className="replay-console">
           <div className="replay-topbar">
-            <h2>
-              {title} — {POPOUT_TITLES[panel]}
-            </h2>
+            <div className="replay-session-id">
+              <BackLink />
+              <h2>
+                {title} — {POPOUT_TITLES[panel]}
+              </h2>
+            </div>
           </div>
           <div className="replay-leaderboard-panel">
             {panel === 'race-log' && <RaceLogPanel entries={data.race_log} />}
@@ -151,6 +158,7 @@ function LiveConsole({
       <div className="replay-console live-main">
         <div className="replay-topbar">
           <div className="replay-session-id">
+            <BackLink />
             <h2>{title}</h2>
             <span>{data.standings.length} cars</span>
           </div>

@@ -10,7 +10,9 @@ import {
   getStints,
 } from './api/client'
 import { useAsync } from './hooks/useAsync'
+import { useDocumentTitle } from './hooks/useDocumentTitle'
 import { Sidebar, type Theme } from './components/Sidebar'
+import { useLiveSessions } from './live/useLiveSessions'
 import { Tabs, type Tab } from './components/Tabs'
 import { SessionTypeTabs } from './components/SessionTypeTabs'
 import { bucketFor, type SessionBucket } from './lib/sessionBucket'
@@ -83,6 +85,7 @@ function App() {
   const [eventId, setEventId] = useState(() => readParam('event'))
   const [sessionId, setSessionId] = useState(() => readParam('session'))
   const [activeTab, setActiveTab] = useState(() => readParam('tab') || 'overview')
+  const liveSessions = useLiveSessions()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const stored = window.localStorage.getItem('sidebarOpen')
     return stored === null ? true : stored === 'true'
@@ -192,6 +195,19 @@ function App() {
     () => (sessionsState.status === 'success' ? sessionsState.data.find((s) => String(s.id) === sessionId) : undefined),
     [sessionsState, sessionId],
   )
+
+  // "Combine all Practice/Qualifying" pools laps from multiple sessions
+  // with no single griiip-comparable id, so there's nothing for Replay to
+  // open in that case — null hides the sidebar link entirely.
+  const replayUrl = useMemo(() => {
+    if (combinedBucket || !currentSession) return null
+    const title = [currentSeriesLabel, currentEvent?.display_name, currentSession.label].filter(Boolean).join(' · ')
+    return `/replay?session=${sessionId}&title=${encodeURIComponent(title)}&type=${currentSession.type}`
+  }, [combinedBucket, currentSession, currentSeriesLabel, currentEvent, sessionId])
+
+  useDocumentTitle(
+    [currentEvent?.display_name, currentSession?.label, 'On The Apex'].filter(Boolean).join(' · '),
+  )
   const sessionSection: SessionBucket | '' = combinedBucket || (currentSession ? bucketFor(currentSession.type) : '')
 
   // Default session once the event's sessions load: prefer Race, then
@@ -237,6 +253,8 @@ function App() {
           theme={theme}
           onThemeChange={setTheme}
           onOpenSettings={() => setSettingsOpen(true)}
+          replayUrl={replayUrl}
+          liveSessions={liveSessions}
           series={
             seriesState.status === 'success'
               ? seriesState.data.map((s) => ({ value: s.slug, label: s.display_name }))
@@ -304,20 +322,6 @@ function App() {
               {!hasSession ? null : (
                 <>
                   <Tabs tabs={chartTabs} value={activeTab} onChange={setActiveTab} />
-
-                  {!combinedBucket && currentSession && (
-                    <p className="replay-entry-point">
-                      <a
-                        href={`/replay?session=${sessionId}&title=${encodeURIComponent(
-                          [currentSeriesLabel, currentEvent?.display_name, currentSession.label].filter(Boolean).join(' · '),
-                        )}&type=${currentSession.type}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Open Live Timing Replay ↗
-                      </a>
-                    </p>
-                  )}
 
                   {activeTab === 'overview' && (
                 <section className="chart-section">
