@@ -223,7 +223,14 @@ function ReplayConsole({
         onPositionVisibleCarsChange={onPositionVisibleCarsChange}
       />
 
-      {selectedCar && <CarDetailModal carNumber={selectedCar} allLaps={carDetailLaps} onClose={() => setSelectedCar(null)} />}
+      {selectedCar && (
+        <CarDetailModal
+          carNumber={selectedCar}
+          allLaps={carDetailLaps}
+          isRaceSession={isRaceSession}
+          onClose={() => setSelectedCar(null)}
+        />
+      )}
     </div>
   )
 }

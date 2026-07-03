@@ -68,13 +68,43 @@ function positionAtLap(points: Point[], lap: number): number | null {
   return last.position
 }
 
-export function LapPositionChart({ laps }: { laps: LapRead[] }) {
+// `focusCarNumber` is for the car-detail panel (see CarDetailModal): ranking
+// still needs the whole field's laps (position is meaningless computed from
+// one car alone — every lap would trivially rank "1st"), but the view opens
+// scoped to that car's own class and with comparison against other cars
+// hidden, since a detail panel isn't the place to build a multi-car
+// comparison. Every other caller (the main app's own Position tab) omits
+// this and behaves exactly as before.
+//
+// `rankBy` defaults to 'elapsed' — real running order, which is only
+// meaningful for a race (this is exactly why the main app's own Position
+// tab is excluded for practice/qualifying, see App.tsx's NON_RACE_TABS).
+// 'bestLapSoFar' ranks by each car's best lap time recorded up to that
+// point instead — how practice/qualifying sessions are actually classified
+// — for the car-detail panel to use on those session types.
+export function LapPositionChart({
+  laps,
+  focusCarNumber,
+  rankBy = 'elapsed',
+}: {
+  laps: LapRead[]
+  focusCarNumber?: string
+  rankBy?: 'elapsed' | 'bestLapSoFar'
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [hover, setHover] = useState<HoverState | null>(null)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(() => {
+    if (!focusCarNumber) return null
+    const cls = laps.find((l) => l.car_number === focusCarNumber)?.class
+    return cls ? new Set([cls]) : null
+  })
   const [colorMode, setColorMode] = useState<ColorMode>('team')
+  // Deliberately NOT seeded to just focusCarNumber — ranking needs every
+  // car in the class to be in the pool, or every lap trivially ranks 1st
+  // again (the exact bug this prop exists to fix). "Add car" is hidden
+  // below instead of narrowed, so this stays "the whole class" for good.
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [showFlags, setShowFlags] = useState(false)
@@ -156,10 +186,46 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
   // Re-rank within the selected classes: for each lap, sort the selected
   // cars by elapsed time and assign 1..N, same convention as the hourly
   // chart and the original per-lap position matrix it was ported from.
+  //
+  // 'bestLapSoFar' walks every lap number in order (regardless of the
+  // visible lap-range window, so scrubbing that slider doesn't change what
+  // "best so far" means at a given lap) maintaining each car's running best
+  // lap time, then ranks by that instead of elapsed time.
   const rankedByLap = useMemo(() => {
     const m = new Map<number, RankedLap[]>()
-    for (const [lapNumber, rows] of lapsByNumber) {
+    const allLapNumbers = [...lapsByNumber.keys()].sort((a, b) => a - b)
+
+    if (rankBy === 'bestLapSoFar') {
+      const bestSoFar = new Map<string, { time: number; class: string; team: string | null }>()
+      for (const lapNumber of allLapNumbers) {
+        for (const r of lapsByNumber.get(lapNumber)!) {
+          if (r.lap_time_seconds == null) continue
+          if (!activeClasses.has(r.class ?? 'Unknown') || !activeCars.has(r.car_number)) continue
+          const prev = bestSoFar.get(r.car_number)
+          if (!prev || r.lap_time_seconds < prev.time) {
+            bestSoFar.set(r.car_number, { time: r.lap_time_seconds, class: r.class ?? 'Unknown', team: r.team })
+          }
+        }
+        if (lapNumber < effectiveLapRange[0] || lapNumber > effectiveLapRange[1]) continue
+        const sorted = [...bestSoFar.entries()].sort((a, b) => a[1].time - b[1].time)
+        m.set(
+          lapNumber,
+          sorted.map(([car_number, v], i) => ({
+            car_number,
+            class: v.class,
+            team: v.team,
+            lap_number: lapNumber,
+            position: i + 1,
+            lap_time_seconds: v.time,
+          })),
+        )
+      }
+      return m
+    }
+
+    for (const lapNumber of allLapNumbers) {
       if (lapNumber < effectiveLapRange[0] || lapNumber > effectiveLapRange[1]) continue
+      const rows = lapsByNumber.get(lapNumber)!
       const filtered = rows.filter(
         (r) =>
           r.elapsed_seconds != null &&
@@ -178,7 +244,7 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
       m.set(lapNumber, ranked)
     }
     return m
-  }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange])
+  }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange, rankBy])
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
@@ -570,15 +636,17 @@ export function LapPositionChart({ laps }: { laps: LapRead[] }) {
           formatValue={(v) => `Lap ${Math.round(v)}`}
         />
       </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+      {!focusCarNumber && (
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
+        </div>
+      )}
       {colorMode === 'class' && (
         <div className="legend">
           {legendClasses.map((cls) => (
