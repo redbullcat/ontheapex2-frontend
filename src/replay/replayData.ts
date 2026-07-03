@@ -36,8 +36,15 @@ export interface ReplayData {
   cars: CarMeta[]
   events: SectorEvent[]
   pitWindowsByCar: Map<string, PitWindow[]>
+  // Fixed-reference gap (vs. the eventual race winner) — used only by the
+  // gap-evolution trend strip, where a stable reference makes sense for a
+  // whole-session chart. The live leaderboard's Gap/Interval columns use
+  // elapsedByLapByCar below instead, computed against whoever is *currently*
+  // leading, since that's what "gap to leader" means on a running timing
+  // screen and it can hand off between cars as the race unfolds.
   referenceCar: string | null
   gapByLapAndCar: Map<number, Map<string, number>>
+  elapsedByLapByCar: Map<string, Map<number, number>>
   minTime: number
   maxTime: number
 }
@@ -125,11 +132,18 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
   const cars: CarMeta[] = []
   const events: SectorEvent[] = []
   const pitWindowsByCar = new Map<string, PitWindow[]>()
+  const elapsedByLapByCar = new Map<string, Map<number, number>>()
 
   for (const [car, rows] of byCar) {
     const sorted = [...rows].sort((a, b) => a.lap_number - b.lap_number)
     const last = sorted[sorted.length - 1]
     cars.push({ car_number: car, class: last.class ?? 'Unknown', team: last.team, driver_name: last.driver_name })
+
+    const elapsedByLap = new Map<number, number>()
+    for (const lap of sorted) {
+      if (lap.elapsed_seconds != null) elapsedByLap.set(lap.lap_number, lap.elapsed_seconds)
+    }
+    elapsedByLapByCar.set(car, elapsedByLap)
 
     for (const lap of sorted) {
       if (lap.elapsed_seconds == null) continue
@@ -163,5 +177,5 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
 
   cars.sort((a, b) => a.car_number.localeCompare(b.car_number, undefined, { numeric: true }))
 
-  return { cars, events, pitWindowsByCar, referenceCar, gapByLapAndCar, minTime, maxTime }
+  return { cars, events, pitWindowsByCar, referenceCar, gapByLapAndCar, elapsedByLapByCar, minTime, maxTime }
 }

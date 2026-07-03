@@ -5,7 +5,7 @@ export function ReplayTransport({ clock, min, max }: { clock: ReplayClock; min: 
   return (
     <div className="replay-transport">
       <div className="replay-scrub-row">
-        <span className="replay-scrub-time">{formatClock(min)}</span>
+        <span className="replay-scrub-time">{formatClock(clock.current)}</span>
         <div className="replay-scrubber">
           <input
             type="range"
