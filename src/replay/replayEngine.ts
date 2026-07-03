@@ -1,5 +1,6 @@
 import type { CarMeta, ReplayData } from './replayData'
 import type { FlagCategory } from '../lib/flags'
+import { fractionFromSegment } from '../lib/trackFraction'
 
 export type BestBadge = 'session' | 'personal' | null
 
@@ -38,6 +39,9 @@ export interface RowState {
   // How many places, from the last change (0 whenever positionDirection is
   // null).
   positionDelta: number
+  // 0..1 estimated fraction of the way around the current lap, for the
+  // Circle of Doom / track map — see lib/trackFraction.ts.
+  trackFraction: number
 }
 
 export interface ReplaySnapshot {
@@ -279,6 +283,12 @@ export class ReplayEngine {
       const prevGap = i > 0 ? gapFor(rows[i - 1]) : null
       const { pits, inPit, sincePit } = this.pitStateAt(c.meta.car_number, t, c.lap)
       const personalSector = this.personalBestSector.get(c.meta.car_number)
+      const segmentIndex = (c.sector % 3) as 0 | 1 | 2
+      const nextSectorNum = segmentIndex + 1
+      const expectedDuration =
+        personalSector?.[nextSectorNum - 1] ?? this.sessionBestSector.get(`${c.meta.class}:${nextSectorNum}`) ?? 30
+      const trackFraction =
+        c.lap === 0 ? 0 : fractionFromSegment(segmentIndex, Math.max(0, t - c.lastEventTime), expectedDuration)
       return {
         car_number: c.meta.car_number,
         class: c.meta.class,
@@ -309,6 +319,7 @@ export class ReplayEngine {
         positionChangedAt: this.positionChangedAtByCar.get(c.meta.car_number) ?? -Infinity,
         positionDirection: this.positionDirectionByCar.get(c.meta.car_number) ?? null,
         positionDelta: this.positionDeltaByCar.get(c.meta.car_number) ?? 0,
+        trackFraction,
       }
     })
 

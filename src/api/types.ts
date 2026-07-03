@@ -203,6 +203,10 @@ export interface LiveState {
   standings: LiveStanding[]
   laps: LiveLap[]
   race_log: RaceLogEntry[]
+  // car_number -> relative distance around the lap (0-1), from Griiip's
+  // cars-geo-locations channel — empty until that channel is confirmed to
+  // actually push against a real session (see backend app/live/state.py).
+  car_locations: Record<string, number>
 }
 
 // From GET /api/live/sessions — enough to build a "Live now" link without

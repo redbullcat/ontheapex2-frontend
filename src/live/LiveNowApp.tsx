@@ -281,6 +281,7 @@ function LiveConsole({
         title={title}
         open={sidebarOpen}
         onToggle={() => setSidebarOpen((o) => !o)}
+        delaySeconds={delaySeconds}
       />
 
       {selectedCar && (

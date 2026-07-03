@@ -8,6 +8,9 @@ import { ReplayFastestLapsPanel } from './ReplayFastestLapsPanel'
 import { ReplayTrendChart } from './ReplayTrendChart'
 import { formatClock } from './format'
 import type { RaceLogEntry, RaceLogType } from '../api/types'
+import { CircleOfDoom } from '../components/CircleOfDoom'
+import { TrackMap } from '../components/TrackMap'
+import { findTrackMapUrl } from '../lib/trackMaps'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'gap' | 'position' | 'track-map' | 'circle-of-doom'
 
@@ -46,6 +49,7 @@ export function ReplaySidebar({
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>('race-log')
   const [expandedChart, setExpandedChart] = useState<'gap' | 'position' | null>(null)
+  const trackMapUrl = useMemo(() => findTrackMapUrl(title), [title])
 
   const tabs: SidebarTabDef[] = useMemo(() => {
     const base: SidebarTabDef[] = [
@@ -116,7 +120,24 @@ export function ReplaySidebar({
           onToggleExpand={() => setExpandedChart((c) => (c === 'position' ? null : 'position'))}
         />
       )}
-      {(activeTab === 'track-map' || activeTab === 'circle-of-doom') && <p className="replay-hint">Coming soon.</p>}
+      {activeTab === 'circle-of-doom' && (
+        <CircleOfDoom
+          cars={rows
+            .filter((r) => activeClasses.has(r.class))
+            .map((r) => ({ car_number: r.car_number, team: r.team, fraction: r.trackFraction }))}
+        />
+      )}
+      {activeTab === 'track-map' &&
+        (trackMapUrl ? (
+          <TrackMap
+            trackUrl={trackMapUrl}
+            cars={rows
+              .filter((r) => activeClasses.has(r.class))
+              .map((r) => ({ car_number: r.car_number, team: r.team, fraction: r.trackFraction }))}
+          />
+        ) : (
+          <p className="replay-hint">No track map available for this circuit.</p>
+        ))}
       </CollapsibleSidebar>
     </>
   )
