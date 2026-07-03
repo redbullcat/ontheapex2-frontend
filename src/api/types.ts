@@ -82,6 +82,10 @@ export interface LapRead {
   flag_at_fl: string | null
 }
 
+// Griiip's own per-crossing classification: Green = personal best, Purple =
+// session best in class (also implies personal best), Gray = neither.
+export type LiveTimeColor = 'Green' | 'Purple' | 'Gray' | null
+
 export interface LiveStanding {
   position: number | null
   class_position: number | null
@@ -93,6 +97,7 @@ export interface LiveStanding {
   gap_to_next_seconds: number
   best_lap_seconds: number | null
   last_lap_seconds: number | null
+  last_lap_color: LiveTimeColor
   total_laps: number
 }
 
@@ -142,6 +147,10 @@ export interface LiveLap {
   s1_improvement: boolean
   s2_improvement: boolean
   s3_improvement: boolean
+  lap_color: LiveTimeColor
+  s1_color: LiveTimeColor
+  s2_color: LiveTimeColor
+  s3_color: LiveTimeColor
   elapsed_seconds: number | null
   top_speed: number | null
   driver_name: string | null
