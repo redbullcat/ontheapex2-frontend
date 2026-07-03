@@ -45,7 +45,7 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
   }, [laps, activeClasses])
 
   const fastestByCar = useMemo(() => {
-    const best = new Map<string, LapRead>()
+    const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null) continue
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
@@ -60,7 +60,7 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
   // instead, so every driver's best lap is visible even if a teammate is
   // quicker overall.
   const fastestByDriver = useMemo(() => {
-    const best = new Map<string, LapRead>()
+    const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null || !lap.driver_name) continue
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
