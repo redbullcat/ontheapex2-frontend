@@ -242,26 +242,34 @@ table.replay-board tr:last-child td {
   border-radius: 2px;
 }
 
+/* Takes over the Pos cell for 10s after a change — bold enough that a
+   viewer scanning the board actually catches it, unlike the earlier subtle
+   inline glyph next to a same-size number. */
 .position-arrow {
-  display: inline-block;
-  margin-left: 4px;
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
   animation: position-arrow-in 0.25s ease-out;
 }
 .position-arrow-up {
-  color: #3fae56;
+  background: #3fae56;
 }
 .position-arrow-down {
-  color: #e34948;
+  background: #e34948;
 }
 @keyframes position-arrow-in {
   from {
     opacity: 0;
-    transform: translateY(2px);
+    transform: scale(0.85);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 

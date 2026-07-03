@@ -43,8 +43,7 @@ function ReplayRow({
   return (
     <tr className={rowClass} onClick={onClick ? () => onClick(row.car_number) : undefined}>
       <td className="num pos">
-        {row.position}
-        {arrowVisible && <PositionChangeArrow direction={row.positionDirection} />}
+        {arrowVisible ? <PositionChangeArrow direction={row.positionDirection} delta={row.positionDelta} /> : row.position}
       </td>
       <td className="num cls-pos">{row.classPosition}</td>
       <td className="al">

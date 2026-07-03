@@ -303,7 +303,7 @@ function LiveConsole({
 // being called inside a loop callback where hook order isn't guaranteed
 // stable as rows are added/removed/filtered.
 function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLap: LiveLap | undefined; onClick: () => void }) {
-  const arrowDirection = usePositionArrow(row.position)
+  const arrow = usePositionArrow(row.position)
 
   return (
     <tr
@@ -311,8 +311,7 @@ function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLa
       onClick={onClick}
     >
       <td className="num pos">
-        {row.position ?? '—'}
-        {arrowDirection && <PositionChangeArrow direction={arrowDirection} />}
+        {arrow.direction ? <PositionChangeArrow direction={arrow.direction} delta={arrow.delta} /> : row.position ?? '—'}
       </td>
       <td className="num cls-pos">{row.class_position ?? '—'}</td>
       <td className="al">

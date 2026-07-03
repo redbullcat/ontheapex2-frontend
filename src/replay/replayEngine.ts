@@ -35,6 +35,9 @@ export interface RowState {
   // null once nothing's changed recently — see positionChangedAt for the
   // real "recently" cutoff, this only says which way the last change went.
   positionDirection: 'up' | 'down' | null
+  // How many places, from the last change (0 whenever positionDirection is
+  // null).
+  positionDelta: number
 }
 
 export interface ReplaySnapshot {
@@ -88,6 +91,7 @@ export class ReplayEngine {
   private lastPositionByCar = new Map<string, number>()
   private positionChangedAtByCar = new Map<string, number>()
   private positionDirectionByCar = new Map<string, 'up' | 'down'>()
+  private positionDeltaByCar = new Map<string, number>()
 
   // Running bests, updated incrementally as events land — "session" means
   // fastest in that car's class so far this session; "personal" means
@@ -130,6 +134,7 @@ export class ReplayEngine {
     this.lastPositionByCar = new Map()
     this.positionChangedAtByCar = new Map()
     this.positionDirectionByCar = new Map()
+    this.positionDeltaByCar = new Map()
     this.sessionBestSector = new Map()
     this.sessionBestLap = new Map()
     this.personalBestSector = new Map()
@@ -262,6 +267,7 @@ export class ReplayEngine {
       if (prevPos !== undefined && prevPos !== pos) {
         this.positionChangedAtByCar.set(car, t)
         this.positionDirectionByCar.set(car, pos < prevPos ? 'up' : 'down')
+        this.positionDeltaByCar.set(car, Math.abs(pos - prevPos))
       }
     }
     this.lastPositionByCar = newPositionByCar
@@ -302,6 +308,7 @@ export class ReplayEngine {
         classPosition: classPos,
         positionChangedAt: this.positionChangedAtByCar.get(c.meta.car_number) ?? -Infinity,
         positionDirection: this.positionDirectionByCar.get(c.meta.car_number) ?? null,
+        positionDelta: this.positionDeltaByCar.get(c.meta.car_number) ?? 0,
       }
     })
 

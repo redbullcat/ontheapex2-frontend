@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 
+export interface PositionArrowState {
+  direction: 'up' | 'down' | null
+  delta: number
+}
+
+const NONE: PositionArrowState = { direction: null, delta: 0 }
+
 // Live has no engine incrementally tracking this the way Replay does (see
-// replayEngine.ts's positionDirectionByCar) — each poll just hands over a
-// fresh position, so this compares it to whatever the last render saw.
-// Real setTimeout, not tied to the 2s poll cadence, so the arrow disappears
-// at an actual 10s regardless of how the polling happens to line up.
-export function usePositionArrow(position: number | null): 'up' | 'down' | null {
-  const [direction, setDirection] = useState<'up' | 'down' | null>(null)
+// replayEngine.ts's positionDirectionByCar/positionDeltaByCar) — each poll
+// just hands over a fresh position, so this compares it to whatever the
+// last render saw. Real setTimeout, not tied to the 2s poll cadence, so
+// the arrow disappears at an actual 10s regardless of how the polling
+// happens to line up.
+export function usePositionArrow(position: number | null): PositionArrowState {
+  const [state, setState] = useState<PositionArrowState>(NONE)
   const prev = useRef(position)
 
   useEffect(() => {
@@ -14,12 +22,13 @@ export function usePositionArrow(position: number | null): 'up' | 'down' | null 
       prev.current = position
       return
     }
-    const dir = position < prev.current ? 'up' : 'down'
+    const direction = position < prev.current ? 'up' : 'down'
+    const delta = Math.abs(position - prev.current)
     prev.current = position
-    setDirection(dir)
-    const t = setTimeout(() => setDirection(null), 10000)
+    setState({ direction, delta })
+    const t = setTimeout(() => setState(NONE), 10000)
     return () => clearTimeout(t)
   }, [position])
 
-  return direction
+  return state
 }
