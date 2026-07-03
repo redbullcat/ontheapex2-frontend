@@ -1,0 +1,5 @@
+.live-weather {
+  color: var(--replay-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
