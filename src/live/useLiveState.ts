@@ -21,6 +21,7 @@ export function useLiveState(griiipSessionId: number | null): LiveStateStatus {
   useEffect(() => {
     if (griiipSessionId == null) return
     let cancelled = false
+    let timer: ReturnType<typeof setInterval> | null = null
 
     async function poll() {
       if (inFlight.current) return
@@ -28,6 +29,12 @@ export function useLiveState(griiipSessionId: number | null): LiveStateStatus {
       try {
         const data = await getLiveState(griiipSessionId!)
         if (!cancelled) setState({ status: 'success', data, error: null })
+        // Nothing more will change once the session's over — stop hitting
+        // the endpoint every 2s for a frozen result.
+        if (data.session_ended && timer) {
+          clearInterval(timer)
+          timer = null
+        }
       } catch (err) {
         if (!cancelled) setState((prev) => ({ status: prev.data ? 'success' : 'error', data: prev.data, error: String(err) }))
       } finally {
@@ -36,10 +43,10 @@ export function useLiveState(griiipSessionId: number | null): LiveStateStatus {
     }
 
     poll()
-    const timer = setInterval(poll, POLL_INTERVAL_MS)
+    timer = setInterval(poll, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
-      clearInterval(timer)
+      if (timer) clearInterval(timer)
     }
   }, [griiipSessionId])
 

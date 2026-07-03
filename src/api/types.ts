@@ -173,6 +173,7 @@ export interface LiveWeather {
 export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
+  session_ended: boolean
   session_clock: SessionClock | null
   weather: LiveWeather | null
   standings: LiveStanding[]

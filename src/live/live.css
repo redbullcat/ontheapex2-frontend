@@ -135,3 +135,19 @@
 .live-sidebar-body {
   font-size: 13px;
 }
+
+.live-chequered-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--replay-ink);
+  background-image: repeating-conic-gradient(#000 0% 25%, #fff 0% 50%);
+  background-size: 10px 10px;
+  background-color: #fff;
+  border: 1px solid var(--replay-line-strong);
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+}
