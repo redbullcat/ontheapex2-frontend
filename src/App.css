@@ -223,6 +223,25 @@ header h1 {
   font-size: 14px;
 }
 
+.replay-entry-point {
+  margin: 12px 0 0;
+}
+.replay-entry-point a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #0b0b0b);
+  text-decoration: none;
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+.replay-entry-point a:hover {
+  border-color: var(--text-primary, #0b0b0b);
+}
+
 .chart-section {
   margin-top: 24px;
 }
