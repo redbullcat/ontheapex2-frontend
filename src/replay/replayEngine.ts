@@ -242,9 +242,12 @@ export class ReplayEngine {
     this.advanceTo(t)
     this.lastTime = t
 
-    const rows = [...this.cars.values()]
-      .filter((c) => c.lap > 0)
-      .sort((a, b) => {
+    // Every entered car is included from the very start, not just once it's
+    // crossed S1 for the first time — excluding lap-0 cars used to mean
+    // they vanished from the board entirely pre-race, then popped into
+    // existence already a third of the way around the lap the instant they
+    // crossed S1 instead of starting from the grid/S/F like everyone else.
+    const rows = [...this.cars.values()].sort((a, b) => {
         if (isAhead(a, b)) return -1
         if (isAhead(b, a)) return 1
         return a.meta.car_number.localeCompare(b.meta.car_number, undefined, { numeric: true })
@@ -285,8 +288,20 @@ export class ReplayEngine {
       const personalSector = this.personalBestSector.get(c.meta.car_number)
       const segmentIndex = (c.sector % 3) as 0 | 1 | 2
       const nextSectorNum = segmentIndex + 1
+      // This car's own most recently completed lap's time for that exact
+      // sector is a far better predictor of how long its current pass will
+      // take than its personal *best* — a best-case reference systematically
+      // underestimates (traffic, fuel load, tyre wear), which pins the
+      // fraction at its ceiling for the rest of the segment and reads as
+      // "stuck" until the real crossing event finally lands. Session-best
+      // and the flat fallback only come into play before this car (and
+      // ideally the whole field) has completed a single lap yet.
+      const lastKnownSector = nextSectorNum === 1 ? c.s1 : nextSectorNum === 2 ? c.s2 : c.s3
       const expectedDuration =
-        personalSector?.[nextSectorNum - 1] ?? this.sessionBestSector.get(`${c.meta.class}:${nextSectorNum}`) ?? 30
+        lastKnownSector ??
+        personalSector?.[nextSectorNum - 1] ??
+        this.sessionBestSector.get(`${c.meta.class}:${nextSectorNum}`) ??
+        40
       // Pinned to the start/finish line while in the pits (the best
       // approximation without real pit-lane geometry — most circuits' pit
       // entry sits right by it) rather than continuing to extrapolate
