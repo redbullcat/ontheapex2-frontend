@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getTeamColor } from '../lib/identityColors'
-import { useSmoothedFractions } from '../hooks/useSmoothedFractions'
+import { useFractionAnimation } from '../hooks/useFractionAnimation'
 
 export interface TrackMapCar {
   car_number: string
@@ -55,6 +55,7 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
   // same render pass, so a second state flip forces one more render once
   // it's actually attached and getPointAtLength/getTotalLength are usable.
   const [pathReady, setPathReady] = useState(false)
+  const circleRefs = useRef(new Map<string, SVGCircleElement>())
 
   useEffect(() => {
     let cancelled = false
@@ -72,9 +73,22 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
     if (track && pathRef.current) setPathReady(true)
   }, [track])
 
-  // Called unconditionally, before the early returns below, so hook order
-  // stays stable across renders regardless of load state.
-  const smoothed = useSmoothedFractions(cars)
+  // Car dots move via direct DOM writes (see useFractionAnimation), never
+  // through React re-renders — the JSX below only sets cx/cy once, at
+  // mount, via the ref callback's init guard; from then on this tick
+  // handler owns them exclusively. Called unconditionally, before the
+  // early returns below, so hook order stays stable across renders
+  // regardless of load state.
+  const onTick = useCallback((carNumber: string, fraction: number) => {
+    const el = pathRef.current
+    const circle = circleRefs.current.get(carNumber)
+    if (!el || !circle) return
+    const total = el.getTotalLength()
+    const { x, y } = el.getPointAtLength(fraction * total)
+    circle.setAttribute('cx', String(x))
+    circle.setAttribute('cy', String(y))
+  }, [])
+  useFractionAnimation(cars, onTick)
 
   if (track === undefined) return <p className="replay-hint">Loading track map…</p>
   if (track === null) return <p className="replay-hint">No track map available for this circuit.</p>
@@ -87,16 +101,29 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
         <g dangerouslySetInnerHTML={{ __html: track.innerSvg }} />
         <path ref={pathRef} d={track.mainPathD} fill="none" stroke="none" />
         {pathReady &&
-          smoothed.map((c) => {
-            const el = pathRef.current
-            if (!el) return null
-            const total = el.getTotalLength()
-            const { x, y } = el.getPointAtLength(c.fraction * total)
+          cars.map((c) => {
             const isFocus = c.car_number === focusCarNumber
             return (
-              <g key={c.car_number}>
-                <circle cx={x} cy={y} r={isFocus ? 10 : 6} fill={getTeamColor(c.team)} stroke="#fff" strokeWidth={1.2} />
-              </g>
+              <circle
+                key={c.car_number}
+                ref={(el) => {
+                  if (el) circleRefs.current.set(c.car_number, el)
+                  else circleRefs.current.delete(c.car_number)
+                  if (!el || el.dataset.inited === '1') return
+                  const pathEl = pathRef.current
+                  if (pathEl) {
+                    const total = pathEl.getTotalLength()
+                    const { x, y } = pathEl.getPointAtLength(c.fraction * total)
+                    el.setAttribute('cx', String(x))
+                    el.setAttribute('cy', String(y))
+                  }
+                  el.dataset.inited = '1'
+                }}
+                r={isFocus ? 10 : 6}
+                fill={getTeamColor(c.team)}
+                stroke="#fff"
+                strokeWidth={1.2}
+              />
             )
           })}
       </svg>

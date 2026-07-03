@@ -8,6 +8,23 @@ import { LapPositionChart } from './LapPositionChart'
 import { PitTimeChart } from './PitTimeChart'
 import { CarStintTable } from './CarStintTable'
 import { CarLapHistoryTable } from './CarLapHistoryTable'
+import { TimeLossTrace } from './TimeLossTrace'
+
+// Small header + an optional "add to dashboard" button, shared by every
+// section below — only rendered when the caller (a dashboard-capable view)
+// actually passed a handler; the modal works standalone without one too.
+function SectionLabel({ children, kind, onAdd }: { children: string; kind: string; onAdd?: (kind: string) => void }) {
+  return (
+    <p className="replay-panel-label car-detail-section-label">
+      {children}
+      {onAdd && (
+        <button type="button" className="car-detail-add-btn" onClick={() => onAdd(kind)} title="Add to dashboard">
+          + Add to dashboard
+        </button>
+      )}
+    </p>
+  )
+}
 
 // `allLaps` is the whole field's laps as of "now" — for Live that's just
 // data.laps as-is, for Replay it's data.laps filtered down to
@@ -33,11 +50,16 @@ export function CarDetailModal({
   allLaps,
   isRaceSession,
   onClose,
+  onAddToDashboard,
 }: {
   carNumber: string
   allLaps: LapRead[]
   isRaceSession: boolean
   onClose: () => void
+  // Lets each section below be pinned as its own independent, resizable
+  // dashboard panel for this car — omit to use the modal as a plain
+  // quick-glance popup with no dashboard behind it.
+  onAddToDashboard?: (panelKind: string) => void
 }) {
   const carLaps = useMemo(
     () => allLaps.filter((l) => l.car_number === carNumber).sort((a, b) => a.lap_number - b.lap_number),
@@ -103,19 +125,34 @@ export function CarDetailModal({
           </div>
         </div>
 
-        <p className="replay-panel-label">Position history</p>
+        <SectionLabel kind="car-position-history" onAdd={onAddToDashboard}>
+          Position history
+        </SectionLabel>
         <LapPositionChart laps={allLaps} focusCarNumber={carNumber} rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'} />
 
-        <p className="replay-panel-label">Pace</p>
+        <SectionLabel kind="car-time-loss" onAdd={onAddToDashboard}>
+          Time-loss trace
+        </SectionLabel>
+        <TimeLossTrace laps={allLaps} carNumber={carNumber} />
+
+        <SectionLabel kind="car-pace" onAdd={onAddToDashboard}>
+          Pace
+        </SectionLabel>
         <PaceChart laps={carLaps} hideCarFilter />
 
-        <p className="replay-panel-label">Stint history</p>
+        <SectionLabel kind="car-stints" onAdd={onAddToDashboard}>
+          Stint history
+        </SectionLabel>
         <CarStintTable laps={carLaps} />
 
-        <p className="replay-panel-label">Pit stops</p>
+        <SectionLabel kind="car-pit-stops" onAdd={onAddToDashboard}>
+          Pit stops
+        </SectionLabel>
         <PitTimeChart laps={carLaps} />
 
-        <p className="replay-panel-label">Full lap history</p>
+        <SectionLabel kind="car-lap-history" onAdd={onAddToDashboard}>
+          Full lap history
+        </SectionLabel>
         <CarLapHistoryTable laps={carLaps} />
       </div>
     </>
