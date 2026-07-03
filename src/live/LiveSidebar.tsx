@@ -15,6 +15,7 @@ import { CircleOfDoom } from '../components/CircleOfDoom'
 import { TrackMap } from '../components/TrackMap'
 import { findTrackMapUrl } from '../lib/trackMaps'
 import { computeLiveTrackPositions } from './liveTrackPosition'
+import { computeSectorFractions } from '../lib/trackFraction'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'pace' | 'pit-stops' | 'stints' | 'gap' | 'position' | 'race-stats' | 'track-map' | 'circle-of-doom'
 
@@ -56,6 +57,7 @@ export function LiveSidebar({
     const teamByCar = new Map(data.standings.map((s) => [s.car_number, s.team]))
     return positions.map((p) => ({ ...p, team: teamByCar.get(p.car_number) ?? null }))
   }, [data, delaySeconds, activeTab])
+  const sectorFractions = useMemo(() => computeSectorFractions(data.laps), [data.laps])
 
   const isRaceSession = isLiveRaceSession(data.session_type)
   const trendData = useLiveTrendData(data.laps)
@@ -130,7 +132,7 @@ export function LiveSidebar({
           />
         )}
         {activeTab === 'race-stats' && <RaceStats laps={adaptedLaps} />}
-        {activeTab === 'circle-of-doom' && <CircleOfDoom cars={trackCars} />}
+        {activeTab === 'circle-of-doom' && <CircleOfDoom cars={trackCars} sectorFractions={sectorFractions} />}
         {activeTab === 'track-map' &&
           (trackMapUrl ? (
             <TrackMap trackUrl={trackMapUrl} cars={trackCars} />

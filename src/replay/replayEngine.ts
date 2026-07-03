@@ -287,8 +287,12 @@ export class ReplayEngine {
       const nextSectorNum = segmentIndex + 1
       const expectedDuration =
         personalSector?.[nextSectorNum - 1] ?? this.sessionBestSector.get(`${c.meta.class}:${nextSectorNum}`) ?? 30
+      // Pinned to the start/finish line while in the pits (the best
+      // approximation without real pit-lane geometry — most circuits' pit
+      // entry sits right by it) rather than continuing to extrapolate
+      // forward as if the car were still circulating.
       const trackFraction =
-        c.lap === 0 ? 0 : fractionFromSegment(segmentIndex, Math.max(0, t - c.lastEventTime), expectedDuration)
+        c.lap === 0 || inPit ? 0 : fractionFromSegment(segmentIndex, Math.max(0, t - c.lastEventTime), expectedDuration)
       return {
         car_number: c.meta.car_number,
         class: c.meta.class,
