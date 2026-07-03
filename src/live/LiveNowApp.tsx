@@ -209,7 +209,7 @@ function LiveConsole({
                 {visibleStandings.map((row) => {
                   const lastLap = lastLapByCar.get(row.car_number)
                   return (
-                    <tr key={row.car_number} className="replay-row">
+                    <tr key={row.car_number} className={row.in_pit ? 'replay-row in-pit' : 'replay-row'}>
                       <td className="num pos">{row.position ?? '—'}</td>
                       <td className="num cls-pos">{row.class_position ?? '—'}</td>
                       <td className="al">
@@ -221,12 +221,20 @@ function LiveConsole({
                       </td>
                       <td className="al driver">{row.driver_name ?? '—'}</td>
                       <td className="al team">{getTeamDisplayName(row.team)}</td>
-                      <td className="num gap">{formatGap(row.gap_to_first_seconds)}</td>
-                      <td className="num interval">{formatGap(row.gap_to_next_seconds)}</td>
+                      <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
+                      <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
                       <td className="num">{row.total_laps || ''}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
-                      <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+                      {row.in_pit ? (
+                        <td className="num s-merged" colSpan={3}>
+                          <span className="pit-label">IN PIT</span>
+                        </td>
+                      ) : (
+                        <>
+                          <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
+                          <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
+                          <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+                        </>
+                      )}
                       <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
                       <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
                     </tr>

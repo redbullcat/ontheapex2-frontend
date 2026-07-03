@@ -95,6 +95,13 @@ export interface LiveStanding {
   driver_name: string | null
   gap_to_first_seconds: number
   gap_to_next_seconds: number | null
+  // Lap-deficit form of the two gaps above, e.g. "+1 Lap" instead of a
+  // seconds figure once a car's actually a lap or more behind — null
+  // whenever the deficit is zero (never actually observed non-null in a
+  // capture yet, only ever seen in practice sessions where it doesn't
+  // apply; see app/live/state.py's standings_as_list).
+  gap_to_first_laps: number | null
+  gap_to_next_laps: number | null
   best_lap_seconds: number | null
   last_lap_seconds: number | null
   last_lap_color: LiveTimeColor
@@ -103,6 +110,10 @@ export interface LiveStanding {
   // after the chequered flag came out (motorsport convention — see
   // chequered_flag_shown below). Always false until the flag has been shown.
   taken_chequered_flag: boolean
+  // Real-time (car-location-on-track channel), not inferred from lap
+  // boundaries — can flip mid-lap, before the car's current lap even
+  // completes.
+  in_pit: boolean
 }
 
 export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'

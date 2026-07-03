@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { SessionClock } from '../api/types'
 
-// The feed has no live "remaining time" push (confirmed against a real
-// session-clock channel message — it only carries elapsedTimeMillis), so
-// this ticks locally off the browser's own clock against the session's
-// known start time + limit from the bootstrap.
+// The feed has no live "remaining time"/countdown push, so this still ticks
+// locally off the browser's own clock — but the backend now keeps
+// clock.start_time synced against the live session-clock channel (see
+// app/live/state.py's _handle_session_clock), correcting for a session that
+// actually started later than the bootstrap originally said. Re-keying the
+// effect on start_time means a correction resets the local tick cleanly.
 export function useSessionClock(clock: SessionClock | null): { elapsedSeconds: number | null; remainingSeconds: number | null } {
   const [now, setNow] = useState(() => Date.now())
 
