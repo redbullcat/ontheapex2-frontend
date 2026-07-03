@@ -39,6 +39,7 @@ export interface ReplaySnapshot {
 
 interface CarState {
   meta: CarMeta
+  driverName: string | null
   lap: number
   sector: number
   lastEventTime: number
@@ -98,6 +99,7 @@ export class ReplayEngine {
         meta.car_number,
         {
           meta,
+          driverName: null,
           lap: 0,
           sector: 0,
           lastEventTime: -Infinity,
@@ -159,6 +161,7 @@ export class ReplayEngine {
       car.lap = e.lap
       car.sector = e.sector
       car.lastEventTime = e.time
+      car.driverName = e.driverName
       if (e.sector === 1) {
         car.s1 = e.value
         car.s1UpdatedAt = e.time
@@ -255,7 +258,7 @@ export class ReplayEngine {
         car_number: c.meta.car_number,
         class: c.meta.class,
         team: c.meta.team,
-        driver_name: c.meta.driver_name,
+        driver_name: c.driverName,
         lap: c.lap,
         s1: c.s1,
         s2: c.s2,
