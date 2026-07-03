@@ -6,8 +6,11 @@ import { getTeamDisplayName } from '../lib/identityColors'
 import { classifyFlag, FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { ClassFilter } from '../components/ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
-import { RACE_LOG_TYPE_LABELS, formatRaceLogEntry } from './raceLog'
-import type { LiveLap, RaceLogType } from '../api/types'
+import { colorBadgeClass } from './liveColors'
+import { LiveSidebar } from './LiveSidebar'
+import { RaceLogPanel } from './RaceLogPanel'
+import { FastestLapsTable } from '../components/FastestLapsTable'
+import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
 
@@ -15,15 +18,15 @@ function readParam(name: string): string {
   return new URLSearchParams(window.location.search).get(name) ?? ''
 }
 
-const ALL_LOG_TYPES: RaceLogType[] = ['RCMessage', 'RaceFlag', 'DriverSwap', 'FastestLap', 'PitIn', 'PitOut']
-
 // This is a first cut, deliberately simpler than the historical Replay
 // console in a few ways that need a live session to build against safely:
-// no tap-to-inspect car detail modal, no track map / circle-of-doom, and no
-// tyre compound/age (unconfirmed data source — see app/live/state.py notes).
+// no tap-to-inspect car detail modal, no working track map / circle-of-doom
+// yet (placeholder tabs in the sidebar), and no tyre compound/age
+// (unconfirmed data source — see app/live/state.py notes).
 export function LiveNowApp() {
   const griiipSessionId = Number(readParam('sid')) || null
   const title = readParam('title') || 'Live Now'
+  const panel = readParam('panel')
 
   useEffect(() => {
     const stored = window.localStorage.getItem('theme')
@@ -33,7 +36,7 @@ export function LiveNowApp() {
 
   const live = useLiveState(griiipSessionId)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [logTypeFilter, setLogTypeFilter] = useState<Set<RaceLogType>>(new Set(ALL_LOG_TYPES))
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const data = live.data
   const classes = useMemo(() => [...new Set((data?.standings ?? []).map((r) => r.class ?? 'Unknown'))].sort(), [data])
@@ -50,17 +53,6 @@ export function LiveNowApp() {
     }
     return map
   }, [data])
-
-  const visibleLog = useMemo(() => (data?.race_log ?? []).filter((e) => logTypeFilter.has(e.type)).slice(0, 60), [data, logTypeFilter])
-
-  function toggleLogType(t: RaceLogType) {
-    setLogTypeFilter((prev) => {
-      const next = new Set(prev)
-      if (next.has(t)) next.delete(t)
-      else next.add(t)
-      return next.size === 0 ? new Set(ALL_LOG_TYPES) : next
-    })
-  }
 
   if (griiipSessionId == null) {
     return (
@@ -88,12 +80,59 @@ export function LiveNowApp() {
     )
   }
 
+  // A pop-out from the sidebar lands here with &panel=<tab> — render just
+  // that one panel full-screen instead of the whole console.
+  if (panel === 'race-log' || panel === 'fastest-laps') {
+    return (
+      <div className="replay-root">
+        <div className="replay-console">
+          <div className="replay-topbar">
+            <h2>
+              {title} — {panel === 'race-log' ? 'Race log' : 'Fastest laps'}
+            </h2>
+          </div>
+          <div className="replay-leaderboard-panel">
+            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <FastestLapsTable laps={data.laps} />}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return <LiveConsole data={data} title={title} griiipSessionId={griiipSessionId} classSelection={classSelection} setClassSelection={setClassSelection} classes={classes} activeClasses={activeClasses} clock={clock} lastLapByCar={lastLapByCar} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+}
+
+function LiveConsole({
+  data,
+  title,
+  griiipSessionId,
+  classSelection,
+  setClassSelection,
+  classes,
+  activeClasses,
+  clock,
+  lastLapByCar,
+  sidebarOpen,
+  setSidebarOpen,
+}: {
+  data: LiveState
+  title: string
+  griiipSessionId: number
+  classSelection: ClassSelection
+  setClassSelection: (s: ClassSelection) => void
+  classes: string[]
+  activeClasses: Set<string>
+  clock: { elapsedSeconds: number | null; remainingSeconds: number | null }
+  lastLapByCar: Map<string, LiveLap>
+  sidebarOpen: boolean
+  setSidebarOpen: (fn: (open: boolean) => boolean) => void
+}) {
   const flagCategory = classifyFlag(data.current_flag)
   const visibleStandings = data.standings.filter((r) => activeClasses.has(r.class ?? 'Unknown'))
 
   return (
-    <div className="replay-root">
-      <div className="replay-console">
+    <div className="replay-root live-with-sidebar">
+      <div className="replay-console live-main">
         <div className="replay-topbar">
           <div className="replay-session-id">
             <h2>{title}</h2>
@@ -161,11 +200,11 @@ export function LiveNowApp() {
                       <td className="num gap">{formatGap(row.gap_to_first_seconds)}</td>
                       <td className="num interval">{formatGap(row.gap_to_next_seconds)}</td>
                       <td className="num">{row.total_laps || ''}</td>
-                      <td className={'num' + (lastLap?.s1_improvement ? ' badge-personal' : '')}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
-                      <td className={'num' + (lastLap?.s2_improvement ? ' badge-personal' : '')}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
-                      <td className={'num' + (lastLap?.s3_improvement ? ' badge-personal' : '')}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+                      <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
+                      <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
+                      <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
                       <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
-                      <td className="num last">{formatLapTime(row.last_lap_seconds)}</td>
+                      <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
                     </tr>
                   )
                 })}
@@ -174,32 +213,15 @@ export function LiveNowApp() {
             {visibleStandings.length === 0 && <p className="replay-hint">No cars in this class have started yet.</p>}
           </div>
         </div>
-
-        <div className="replay-leaderboard-panel">
-          <p className="replay-panel-label">
-            Race log
-            <span className="hint"> — race control, flags, driver swaps, fastest laps, pit in/out</span>
-          </p>
-          <div className="live-log-filters">
-            {ALL_LOG_TYPES.map((t) => (
-              <label className="class-filter-item" key={t}>
-                <input type="checkbox" checked={logTypeFilter.has(t)} onChange={() => toggleLogType(t)} />
-                <span>{RACE_LOG_TYPE_LABELS[t]}</span>
-              </label>
-            ))}
-          </div>
-          <ul className="live-log-list">
-            {visibleLog.map((entry, i) => (
-              <li key={`${entry.raceLogItemId}-${i}`} className={`live-log-item live-log-${entry.type}`}>
-                <span className="live-log-time">{new Date(entry.ts).toLocaleTimeString()}</span>
-                <span className="live-log-type">{RACE_LOG_TYPE_LABELS[entry.type]}</span>
-                <span className="live-log-text">{formatRaceLogEntry(entry)}</span>
-              </li>
-            ))}
-            {visibleLog.length === 0 && <p className="replay-hint">No events yet for the selected filters.</p>}
-          </ul>
-        </div>
       </div>
+
+      <LiveSidebar
+        data={data}
+        griiipSessionId={griiipSessionId}
+        title={title}
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen((o) => !o)}
+      />
     </div>
   )
 }

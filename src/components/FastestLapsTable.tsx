@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import type { LapRead } from '../api/types'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { getTeamDisplayName } from '../lib/identityColors'
@@ -12,7 +11,19 @@ function formatLapTime(seconds: number): string {
   return `${m}:${s.toFixed(3).padStart(6, '0')}`
 }
 
-export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
+// Narrowed to just the fields this table actually uses (rather than the
+// full LapRead) so both historical laps and live laps (which have no
+// id/session_id — see api/types.ts's LiveLap) can be passed in directly.
+export interface FastestLapsTableLap {
+  car_number: string
+  lap_number: number
+  lap_time_seconds: number | null
+  driver_name: string | null
+  class: string | null
+  team: string | null
+}
+
+export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
 
   const allClasses = useMemo(() => {
@@ -81,7 +92,7 @@ export function FastestLapsTable({ laps }: { laps: LapRead[] }) {
               </thead>
               <tbody>
                 {fastestLaps.map((lap, i) => (
-                  <tr key={lap.id}>
+                  <tr key={`${lap.car_number}-${lap.lap_number}`}>
                     <td>{i + 1}</td>
                     <td>{formatLapTime(lap.lap_time_seconds!)}</td>
                     <td>#{lap.car_number}</td>

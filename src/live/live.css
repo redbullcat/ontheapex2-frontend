@@ -47,3 +47,91 @@
 .live-log-RaceFlag .live-log-type {
   color: var(--replay-flash);
 }
+
+.live-with-sidebar {
+  display: flex;
+  align-items: flex-start;
+}
+
+.live-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-sidebar {
+  position: relative;
+  flex-shrink: 0;
+  width: 520px;
+  border-left: 1px solid var(--replay-line);
+  background: var(--replay-surface);
+  min-height: 100vh;
+}
+
+.live-sidebar-collapsed {
+  width: 28px;
+}
+
+.live-sidebar-toggle {
+  position: absolute;
+  top: 12px;
+  left: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--replay-line);
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  z-index: 2;
+}
+
+.live-sidebar-content {
+  padding: 20px 16px 16px 24px;
+}
+
+.live-sidebar-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--replay-line);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.live-sidebar-tab {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--replay-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--replay-muted);
+  cursor: pointer;
+}
+
+.live-sidebar-tab.active {
+  background: var(--replay-accent-soft);
+  color: var(--replay-accent);
+  border-color: var(--replay-accent);
+}
+
+.live-sidebar-panel-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.live-sidebar-popout {
+  font-size: 12px;
+  color: var(--replay-accent);
+  text-decoration: none;
+}
+
+.live-sidebar-popout:hover {
+  text-decoration: underline;
+}
+
+.live-sidebar-body {
+  font-size: 13px;
+}
