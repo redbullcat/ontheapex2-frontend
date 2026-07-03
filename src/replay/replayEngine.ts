@@ -27,6 +27,8 @@ export interface RowState {
 interface CarState {
   meta: CarMeta
   lap: number
+  sector: number
+  lastEventTime: number
   s1: number | null
   s2: number | null
   s3: number | null
@@ -35,7 +37,8 @@ interface CarState {
   s3UpdatedAt: number
   bestLap: number | null
   lastLap: number | null
-  gap: number | null
+  lastCompletedLap: number | null
+  elapsedAtLastCompletedLap: number | null
 }
 
 // Drives the leaderboard from the precomputed event timeline. Advancing
@@ -65,6 +68,8 @@ export class ReplayEngine {
         {
           meta,
           lap: 0,
+          sector: 0,
+          lastEventTime: -Infinity,
           s1: null,
           s2: null,
           s3: null,
@@ -73,7 +78,8 @@ export class ReplayEngine {
           s3UpdatedAt: -Infinity,
           bestLap: null,
           lastLap: null,
-          gap: null,
+          lastCompletedLap: null,
+          elapsedAtLastCompletedLap: null,
         },
       ]),
     )
@@ -91,6 +97,8 @@ export class ReplayEngine {
       this.eventPtr++
       if (!car) continue
       car.lap = e.lap
+      car.sector = e.sector
+      car.lastEventTime = e.time
       if (e.sector === 1) {
         car.s1 = e.value
         car.s1UpdatedAt = e.time
@@ -102,7 +110,8 @@ export class ReplayEngine {
         car.s3UpdatedAt = e.time
         car.lastLap = e.lapTimeSeconds ?? null
         if (car.lastLap != null) car.bestLap = car.bestLap == null ? car.lastLap : Math.min(car.bestLap, car.lastLap)
-        car.gap = this.data.gapByLapAndCar.get(e.lap)?.get(e.car) ?? car.gap
+        car.lastCompletedLap = e.lap
+        car.elapsedAtLastCompletedLap = e.time
       }
     }
   }
@@ -133,9 +142,48 @@ export class ReplayEngine {
     this.advanceTo(t)
     this.lastTime = t
 
+    // The current race leader — most laps completed, ties broken by who
+    // reached that lap first — recomputed every tick since the actual
+    // leader can change over the race. This is deliberately *not* the
+    // gap-evolution strip's fixed reference car: "gap to leader" on a
+    // running timing screen means gap to whoever's in front right now.
+    let leader: CarState | null = null
+    for (const c of this.cars.values()) {
+      if (c.lastCompletedLap == null) continue
+      if (
+        !leader ||
+        c.lastCompletedLap > leader.lastCompletedLap! ||
+        (c.lastCompletedLap === leader.lastCompletedLap && c.elapsedAtLastCompletedLap! < leader.elapsedAtLastCompletedLap!)
+      ) {
+        leader = c
+      }
+    }
+    const leaderElapsedByLap = leader ? this.data.elapsedByLapByCar.get(leader.meta.car_number) : undefined
+
+    // Gap is only meaningful once a car has completed at least one lap —
+    // before that (everyone still on lap 1) it's null for the whole field,
+    // and the sort below falls through to sector/event-time ordering
+    // instead of comparing gaps that don't exist yet.
+    const gapFor = (c: CarState): number | null => {
+      if (c.lastCompletedLap == null || c.elapsedAtLastCompletedLap == null || !leaderElapsedByLap) return null
+      const leaderAtSameLap = leaderElapsedByLap.get(c.lastCompletedLap)
+      if (leaderAtSameLap == null) return null
+      return c.elapsedAtLastCompletedLap - leaderAtSameLap
+    }
+
     const rows = [...this.cars.values()]
       .filter((c) => c.lap > 0)
-      .sort((a, b) => b.lap - a.lap || (a.gap ?? Infinity) - (b.gap ?? Infinity) || a.meta.car_number.localeCompare(b.meta.car_number))
+      .sort((a, b) => {
+        const gapA = gapFor(a)
+        const gapB = gapFor(b)
+        return (
+          b.lap - a.lap ||
+          b.sector - a.sector ||
+          (gapA ?? Infinity) - (gapB ?? Infinity) ||
+          a.lastEventTime - b.lastEventTime ||
+          a.meta.car_number.localeCompare(b.meta.car_number, undefined, { numeric: true })
+        )
+      })
 
     const classCounts = new Map<string, number>()
 
@@ -152,7 +200,8 @@ export class ReplayEngine {
     return rows.map((c, i) => {
       const classPos = (classCounts.get(c.meta.class) ?? 0) + 1
       classCounts.set(c.meta.class, classPos)
-      const prevGap = i > 0 ? rows[i - 1].gap : null
+      const gap = gapFor(c)
+      const prevGap = i > 0 ? gapFor(rows[i - 1]) : null
       const { pits, inPit, sincePit } = this.pitStateAt(c.meta.car_number, t, c.lap)
       return {
         car_number: c.meta.car_number,
@@ -168,8 +217,8 @@ export class ReplayEngine {
         s3UpdatedAt: c.s3UpdatedAt,
         bestLap: c.bestLap,
         lastLap: c.lastLap,
-        gap: c.gap,
-        interval: c.gap != null && prevGap != null ? c.gap - prevGap : null,
+        gap,
+        interval: gap != null && prevGap != null ? gap - prevGap : null,
         pits,
         sincePit,
         inPit,
