@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { useLiveState } from './useLiveState'
+import { useDelayedLiveState } from './useDelayedLiveState'
+import { useLiveDelay } from './useLiveDelay'
+import { DelaySettings } from './DelaySettings'
+import { ConnectionStatusBar } from './ConnectionStatusBar'
 import { useSessionClock } from './useSessionClock'
 import { formatGap, formatLapTime, formatClock, formatSplit } from '../replay/format'
 import { getTeamDisplayName } from '../lib/identityColors'
@@ -16,8 +19,10 @@ import { BackLink } from '../components/BackLink'
 import { CarDetailModal } from '../components/CarDetailModal'
 import { liveLapToLapRead } from '../lib/liveLapAdapter'
 import { isLiveRaceSession } from './liveSessionType'
+import { usePositionArrow } from './usePositionArrow'
+import { PositionChangeArrow } from '../components/PositionChangeArrow'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import type { LiveLap, LiveState } from '../api/types'
+import type { LiveLap, LiveStanding, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
 
@@ -43,7 +48,8 @@ export function LiveNowApp() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [])
 
-  const live = useLiveState(griiipSessionId)
+  const [delaySeconds, setDelaySeconds] = useLiveDelay()
+  const live = useDelayedLiveState(griiipSessionId, delaySeconds)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -125,7 +131,25 @@ export function LiveNowApp() {
     )
   }
 
-  return <LiveConsole data={data} title={title} griiipSessionId={griiipSessionId} classSelection={classSelection} setClassSelection={setClassSelection} classes={classes} activeClasses={activeClasses} clock={clock} lastLapByCar={lastLapByCar} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+  return (
+    <LiveConsole
+      data={data}
+      title={title}
+      griiipSessionId={griiipSessionId}
+      classSelection={classSelection}
+      setClassSelection={setClassSelection}
+      classes={classes}
+      activeClasses={activeClasses}
+      clock={clock}
+      lastLapByCar={lastLapByCar}
+      sidebarOpen={sidebarOpen}
+      setSidebarOpen={setSidebarOpen}
+      delaySeconds={delaySeconds}
+      setDelaySeconds={setDelaySeconds}
+      lastFetchAt={live.lastFetchAt}
+      liveStatus={live.status}
+    />
+  )
 }
 
 function LiveConsole({
@@ -140,6 +164,10 @@ function LiveConsole({
   lastLapByCar,
   sidebarOpen,
   setSidebarOpen,
+  delaySeconds,
+  setDelaySeconds,
+  lastFetchAt,
+  liveStatus,
 }: {
   data: LiveState
   title: string
@@ -152,6 +180,10 @@ function LiveConsole({
   lastLapByCar: Map<string, LiveLap>
   sidebarOpen: boolean
   setSidebarOpen: (fn: (open: boolean) => boolean) => void
+  delaySeconds: number
+  setDelaySeconds: (n: number) => void
+  lastFetchAt: number | null
+  liveStatus: 'loading' | 'success' | 'error'
 }) {
   const flagCategory = classifyFlag(data.current_flag)
   const visibleStandings = data.standings.filter((r) => activeClasses.has(r.class ?? 'Unknown'))
@@ -228,44 +260,14 @@ function LiveConsole({
                 </tr>
               </thead>
               <tbody>
-                {visibleStandings.map((row) => {
-                  const lastLap = lastLapByCar.get(row.car_number)
-                  return (
-                    <tr
-                      key={row.car_number}
-                      className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'}
-                      onClick={() => setSelectedCar(row.car_number)}
-                    >
-                      <td className="num pos">{row.position ?? '—'}</td>
-                      <td className="num cls-pos">{row.class_position ?? '—'}</td>
-                      <td className="al">
-                        <span className="class-chip">{row.class ?? '—'}</span>
-                      </td>
-                      <td className="al">
-                        <span className="car-num">#{row.car_number}</span>
-                        {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
-                      </td>
-                      <td className="al driver">{row.driver_name ?? '—'}</td>
-                      <td className="al team">{getTeamDisplayName(row.team)}</td>
-                      <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
-                      <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
-                      <td className="num">{row.total_laps || ''}</td>
-                      {row.in_pit ? (
-                        <td className="num s-merged" colSpan={3}>
-                          <span className="pit-label">IN PIT</span>
-                        </td>
-                      ) : (
-                        <>
-                          <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
-                          <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
-                          <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
-                        </>
-                      )}
-                      <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
-                      <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
-                    </tr>
-                  )
-                })}
+                {visibleStandings.map((row) => (
+                  <LiveStandingsRow
+                    key={row.car_number}
+                    row={row}
+                    lastLap={lastLapByCar.get(row.car_number)}
+                    onClick={() => setSelectedCar(row.car_number)}
+                  />
+                ))}
               </tbody>
             </table>
             {visibleStandings.length === 0 && <p className="replay-hint">No cars in this class have started yet.</p>}
@@ -289,6 +291,54 @@ function LiveConsole({
           onClose={() => setSelectedCar(null)}
         />
       )}
+
+      <ConnectionStatusBar lastFetchAt={lastFetchAt} liveStatus={liveStatus} />
+      <DelaySettings delaySeconds={delaySeconds} onChange={setDelaySeconds} />
     </div>
+  )
+}
+
+// Its own component (not inlined in the .map() above) so usePositionArrow —
+// a per-row hook — has a stable identity per car via the key, rather than
+// being called inside a loop callback where hook order isn't guaranteed
+// stable as rows are added/removed/filtered.
+function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLap: LiveLap | undefined; onClick: () => void }) {
+  const arrow = usePositionArrow(row.position)
+
+  return (
+    <tr
+      className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'}
+      onClick={onClick}
+    >
+      <td className="num pos">
+        {arrow.direction ? <PositionChangeArrow direction={arrow.direction} delta={arrow.delta} /> : row.position ?? '—'}
+      </td>
+      <td className="num cls-pos">{row.class_position ?? '—'}</td>
+      <td className="al">
+        <span className="class-chip">{row.class ?? '—'}</span>
+      </td>
+      <td className="al">
+        <span className="car-num">#{row.car_number}</span>
+        {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
+      </td>
+      <td className="al driver">{row.driver_name ?? '—'}</td>
+      <td className="al team">{getTeamDisplayName(row.team)}</td>
+      <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
+      <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
+      <td className="num">{row.total_laps || ''}</td>
+      {row.in_pit ? (
+        <td className="num s-merged" colSpan={3}>
+          <span className="pit-label">IN PIT</span>
+        </td>
+      ) : (
+        <>
+          <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
+          <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
+          <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+        </>
+      )}
+      <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
+      <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
+    </tr>
   )
 }

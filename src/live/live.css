@@ -25,3 +25,144 @@
   color: var(--replay-muted);
   white-space: nowrap;
 }
+
+/* Delay-sync popup, fixed bottom-right (see live/DelaySettings.tsx) */
+.live-delay-widget {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.live-delay-toggle {
+  font-family: var(--replay-mono);
+  font-size: 12px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: var(--replay-ink);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+.live-delay-toggle:hover {
+  border-color: var(--replay-accent);
+  color: var(--replay-accent);
+}
+
+.live-delay-popover {
+  width: 240px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  padding: 12px 14px;
+}
+
+.live-delay-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--replay-ink);
+}
+
+.live-delay-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-delay-controls button {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--replay-line-strong);
+  background: transparent;
+  color: var(--replay-ink);
+  cursor: pointer;
+  font-size: 14px;
+}
+.live-delay-controls button:hover {
+  border-color: var(--replay-accent);
+  color: var(--replay-accent);
+}
+.live-delay-controls input {
+  width: 56px;
+  text-align: center;
+  font-family: var(--replay-mono);
+  font-size: 13px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--replay-line-strong);
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+}
+.live-delay-unit {
+  font-size: 11px;
+  color: var(--replay-muted);
+}
+
+.live-delay-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--replay-muted);
+  line-height: 1.4;
+}
+
+/* Connection/clock status bar, fixed bottom-left (see live/ConnectionStatusBar.tsx) */
+.live-status-bar {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: var(--replay-mono);
+  font-size: 12px;
+  color: var(--replay-muted);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.live-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  transition: background-color 0.4s ease;
+}
+.live-status-good {
+  background: #3fae56;
+}
+.live-status-stale {
+  background: #fab219;
+}
+.live-status-bad {
+  background: #e34948;
+}
+
+.live-status-clock {
+  color: var(--replay-ink);
+  font-weight: 600;
+  padding-left: 8px;
+  border-left: 1px solid var(--replay-line);
+}
+
+@media (max-width: 720px) {
+  .live-status-bar,
+  .live-delay-widget {
+    position: static;
+    margin: 12px 16px;
+  }
+  .live-delay-widget {
+    align-items: flex-start;
+  }
+}
