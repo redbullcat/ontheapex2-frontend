@@ -25,7 +25,15 @@ function badgeClass(badge: RowState['s1Badge']): string {
   return ''
 }
 
-function ReplayRow({ row, highlighted }: { row: RowState; highlighted: boolean }) {
+function ReplayRow({
+  row,
+  highlighted,
+  onClick,
+}: {
+  row: RowState
+  highlighted: boolean
+  onClick?: (carNumber: string) => void
+}) {
   const s1Flash = useFlash(row.s1UpdatedAt)
   const s2Flash = useFlash(row.s2UpdatedAt)
   const s3Flash = useFlash(row.s3UpdatedAt)
@@ -36,12 +44,13 @@ function ReplayRow({ row, highlighted }: { row: RowState; highlighted: boolean }
     row.inPit ? 'in-pit' : '',
     moved ? 'moved' : '',
     highlighted ? 'highlighted' : '',
+    onClick ? 'clickable' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <tr className={rowClass}>
+    <tr className={rowClass} onClick={onClick ? () => onClick(row.car_number) : undefined}>
       <td className="num pos">{row.position}</td>
       <td className="num cls-pos">{row.classPosition}</td>
       <td className="al">
@@ -78,10 +87,12 @@ export function ReplayLeaderboard({
   rows,
   activeClasses,
   highlightedCars,
+  onRowClick,
 }: {
   rows: RowState[]
   activeClasses: Set<string>
   highlightedCars?: Set<string>
+  onRowClick?: (carNumber: string) => void
 }) {
   const visible = rows.filter((r) => activeClasses.has(r.class))
   return (
@@ -109,7 +120,7 @@ export function ReplayLeaderboard({
         </thead>
         <tbody>
           {visible.map((r) => (
-            <ReplayRow key={r.car_number} row={r} highlighted={highlightedCars?.has(r.car_number) ?? false} />
+            <ReplayRow key={r.car_number} row={r} highlighted={highlightedCars?.has(r.car_number) ?? false} onClick={onRowClick} />
           ))}
         </tbody>
       </table>
