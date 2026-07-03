@@ -9,7 +9,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { colorBadgeClass } from './liveColors'
 import { LiveSidebar } from './LiveSidebar'
 import { RaceLogPanel } from './RaceLogPanel'
-import { FastestLapsTable } from '../components/FastestLapsTable'
+import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 import type { LiveLap, LiveState } from '../api/types'
 import '../replay/replay.css'
 import './live.css'
@@ -92,7 +92,7 @@ export function LiveNowApp() {
             </h2>
           </div>
           <div className="replay-leaderboard-panel">
-            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <FastestLapsTable laps={data.laps.filter((l) => l.is_valid)} />}
+            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { LiveState } from '../api/types'
 import { RaceLogPanel } from './RaceLogPanel'
-import { FastestLapsTable } from '../components/FastestLapsTable'
+import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'track-map' | 'circle-of-doom'
 
@@ -17,7 +17,7 @@ function TabContent({ tab, data }: { tab: TabKey; data: LiveState }) {
     case 'race-log':
       return <RaceLogPanel entries={data.race_log} />
     case 'fastest-laps':
-      return <FastestLapsTable laps={data.laps.filter((l) => l.is_valid)} />
+      return <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />
     case 'track-map':
     case 'circle-of-doom':
       return <p className="replay-hint">Coming soon.</p>
