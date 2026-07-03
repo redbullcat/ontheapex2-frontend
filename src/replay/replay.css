@@ -754,15 +754,22 @@ button.replay-play:hover {
   stroke-width: 2;
 }
 
+.circle-of-doom-sector-tick {
+  stroke: var(--replay-muted, #999);
+  stroke-width: 1.5;
+}
+
+.circle-of-doom-tick-label {
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--replay-muted);
+}
+
 .circle-of-doom-label {
   font-size: 8px;
   font-weight: 700;
   fill: #fff;
   pointer-events: none;
-}
-
-.circle-of-doom-car {
-  transition: transform 0.4s ease-out;
 }
 
 .circle-of-doom-car-focus circle {
@@ -779,6 +786,13 @@ button.replay-play:hover {
   max-width: 100%;
 }
 
+/* Replay drives these continuously at animation-frame rate (real position
+   already advances smoothly every render); Live only gets a new value
+   every poll (~1-2s). A short transition smooths Live's discrete jumps
+   into a glide without noticeably lagging Replay's continuous updates —
+   a longer one fights the constant stream of new targets and reads as a
+   springy wobble instead of steady motion. */
+.circle-of-doom-car circle,
 .track-map circle {
-  transition: cx 0.4s ease-out, cy 0.4s ease-out;
+  transition: cx 0.15s linear, cy 0.15s linear;
 }

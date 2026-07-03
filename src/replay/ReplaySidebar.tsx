@@ -11,6 +11,7 @@ import type { RaceLogEntry, RaceLogType } from '../api/types'
 import { CircleOfDoom } from '../components/CircleOfDoom'
 import { TrackMap } from '../components/TrackMap'
 import { findTrackMapUrl } from '../lib/trackMaps'
+import { computeSectorFractions } from '../lib/trackFraction'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'gap' | 'position' | 'track-map' | 'circle-of-doom'
 
@@ -50,6 +51,7 @@ export function ReplaySidebar({
   const [activeTab, setActiveTab] = useState<TabKey>('race-log')
   const [expandedChart, setExpandedChart] = useState<'gap' | 'position' | null>(null)
   const trackMapUrl = useMemo(() => findTrackMapUrl(title), [title])
+  const sectorFractions = useMemo(() => computeSectorFractions(data.laps), [data.laps])
 
   const tabs: SidebarTabDef[] = useMemo(() => {
     const base: SidebarTabDef[] = [
@@ -125,6 +127,7 @@ export function ReplaySidebar({
           cars={rows
             .filter((r) => activeClasses.has(r.class))
             .map((r) => ({ car_number: r.car_number, team: r.team, fraction: r.trackFraction }))}
+          sectorFractions={sectorFractions}
         />
       )}
       {activeTab === 'track-map' &&

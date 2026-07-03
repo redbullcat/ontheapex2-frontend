@@ -1,5 +1,5 @@
 import type { LiveLap, LiveState, SessionClock } from '../api/types'
-import { fractionFromSegment } from '../lib/trackFraction'
+import { fractionFromSegment, median } from '../lib/trackFraction'
 
 export interface LiveTrackCar {
   car_number: string
@@ -27,11 +27,6 @@ function interpolatedFraction(carNumber: string, laps: LiveLap[], nowSeconds: nu
   const last = completed[completed.length - 1] ?? null
   const lapStart = last?.elapsed_seconds ?? 0
 
-  const median = (vals: number[]): number | null => {
-    if (!vals.length) return null
-    const sorted = [...vals].sort((a, b) => a - b)
-    return sorted[Math.floor(sorted.length / 2)]
-  }
   // The car's *own last lap time* is by far the best predictor of how long
   // its current lap will take — using a personal-best or field-best
   // reference instead systematically underestimates (fuel load, traffic,
@@ -46,11 +41,19 @@ function interpolatedFraction(carNumber: string, laps: LiveLap[], nowSeconds: nu
 
 export function computeLiveTrackPositions(data: LiveState, delaySeconds: number): LiveTrackCar[] {
   const nowSeconds = sessionElapsedSeconds(data.session_clock, delaySeconds)
-  const carNumbers = new Set(data.standings.map((s) => s.car_number))
-  return [...carNumbers].map((car_number) => {
+  const inPitByCar = new Map(data.standings.map((s) => [s.car_number, s.in_pit]))
+  return data.standings.map(({ car_number }) => {
     const real = data.car_locations?.[car_number]
+    // Trust real GPS as-is even in the pits — it already shows wherever the
+    // pit lane actually is. It's only the *interpolated* estimate that has
+    // no idea a stationary car has stopped progressing through its lap, so
+    // pin that one to the start/finish line (the best approximation without
+    // real pit-lane geometry — most circuits' pit entry sits right by it).
     if (real != null) {
       return { car_number, fraction: real, isLive: true }
+    }
+    if (inPitByCar.get(car_number)) {
+      return { car_number, fraction: 0, isLive: false }
     }
     return {
       car_number,
