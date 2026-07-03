@@ -732,3 +732,53 @@ button.replay-play:hover {
 .live-sidebar-body {
   font-size: 13px;
 }
+
+.circle-of-doom,
+.track-map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.circle-of-doom-track {
+  fill: none;
+  stroke: var(--replay-line, #ccc);
+  stroke-width: 3;
+  stroke-dasharray: 2 6;
+}
+
+.circle-of-doom-start {
+  stroke: var(--replay-ink, #999);
+  stroke-width: 2;
+}
+
+.circle-of-doom-label {
+  font-size: 8px;
+  font-weight: 700;
+  fill: #fff;
+  pointer-events: none;
+}
+
+.circle-of-doom-car {
+  transition: transform 0.4s ease-out;
+}
+
+.circle-of-doom-car-focus circle {
+  stroke: var(--replay-accent);
+  stroke-width: 2.5;
+}
+
+.circle-of-doom-hint {
+  text-align: center;
+  max-width: 280px;
+}
+
+.track-map svg {
+  max-width: 100%;
+}
+
+.track-map circle {
+  transition: cx 0.4s ease-out, cy 0.4s ease-out;
+}

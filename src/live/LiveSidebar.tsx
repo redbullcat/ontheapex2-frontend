@@ -11,6 +11,10 @@ import { PaceChart } from '../components/PaceChart'
 import { PitTimeChart } from '../components/PitTimeChart'
 import { StintLengthDistribution } from '../components/StintLengthDistribution'
 import { RaceStats } from '../components/RaceStats'
+import { CircleOfDoom } from '../components/CircleOfDoom'
+import { TrackMap } from '../components/TrackMap'
+import { findTrackMapUrl } from '../lib/trackMaps'
+import { computeLiveTrackPositions } from './liveTrackPosition'
 
 type TabKey = 'race-log' | 'fastest-laps' | 'pace' | 'pit-stops' | 'stints' | 'gap' | 'position' | 'race-stats' | 'track-map' | 'circle-of-doom'
 
@@ -34,15 +38,24 @@ export function LiveSidebar({
   title,
   open,
   onToggle,
+  delaySeconds,
 }: {
   data: LiveState
   griiipSessionId: number
   title: string
   open: boolean
   onToggle: () => void
+  delaySeconds: number
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>('race-log')
   const [expandedChart, setExpandedChart] = useState<'gap' | 'position' | null>(null)
+  const trackMapUrl = useMemo(() => findTrackMapUrl(title), [title])
+  const trackCars = useMemo(() => {
+    if (activeTab !== 'circle-of-doom' && activeTab !== 'track-map') return []
+    const positions = computeLiveTrackPositions(data, delaySeconds)
+    const teamByCar = new Map(data.standings.map((s) => [s.car_number, s.team]))
+    return positions.map((p) => ({ ...p, team: teamByCar.get(p.car_number) ?? null }))
+  }, [data, delaySeconds, activeTab])
 
   const isRaceSession = isLiveRaceSession(data.session_type)
   const trendData = useLiveTrendData(data.laps)
@@ -117,7 +130,13 @@ export function LiveSidebar({
           />
         )}
         {activeTab === 'race-stats' && <RaceStats laps={adaptedLaps} />}
-        {(activeTab === 'track-map' || activeTab === 'circle-of-doom') && <p className="replay-hint">Coming soon.</p>}
+        {activeTab === 'circle-of-doom' && <CircleOfDoom cars={trackCars} />}
+        {activeTab === 'track-map' &&
+          (trackMapUrl ? (
+            <TrackMap trackUrl={trackMapUrl} cars={trackCars} />
+          ) : (
+            <p className="replay-hint">No track map available for this circuit.</p>
+          ))}
       </CollapsibleSidebar>
     </>
   )
