@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ReplayEngine, type RowState } from './replayEngine'
+import { ReplayEngine, type ReplaySnapshot } from './replayEngine'
 import type { ReplayData } from './replayData'
 
-export function useReplayRows(data: ReplayData, currentT: number): RowState[] {
+const EMPTY: ReplaySnapshot = { rows: [], flag: null, leaderLap: 0 }
+
+export function useReplaySnapshot(data: ReplayData, currentT: number): ReplaySnapshot {
   const engine = useMemo(() => new ReplayEngine(data), [data])
-  const [rows, setRows] = useState<RowState[]>(() => engine.getRows(currentT))
+  const [snapshot, setSnapshot] = useState<ReplaySnapshot>(() => engine.getSnapshot(currentT))
 
   useEffect(() => {
-    setRows(engine.getRows(currentT))
+    setSnapshot(engine.getSnapshot(currentT))
   }, [engine, currentT])
 
-  return rows
+  return snapshot ?? EMPTY
 }

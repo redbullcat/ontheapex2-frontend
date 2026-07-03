@@ -1,4 +1,7 @@
 import type { CarMeta, ReplayData } from './replayData'
+import type { FlagCategory } from '../lib/flags'
+
+export type BestBadge = 'session' | 'personal' | null
 
 export interface RowState {
   car_number: string
@@ -12,8 +15,12 @@ export interface RowState {
   s1UpdatedAt: number
   s2UpdatedAt: number
   s3UpdatedAt: number
+  s1Badge: BestBadge
+  s2Badge: BestBadge
+  s3Badge: BestBadge
   bestLap: number | null
   lastLap: number | null
+  lastLapBadge: BestBadge
   gap: number | null
   interval: number | null
   pits: number
@@ -22,6 +29,12 @@ export interface RowState {
   position: number
   classPosition: number
   positionChangedAt: number
+}
+
+export interface ReplaySnapshot {
+  rows: RowState[]
+  flag: FlagCategory | null
+  leaderLap: number
 }
 
 interface CarState {
@@ -37,8 +50,18 @@ interface CarState {
   s3UpdatedAt: number
   bestLap: number | null
   lastLap: number | null
-  lastCompletedLap: number | null
-  elapsedAtLastCompletedLap: number | null
+}
+
+// A car is "ahead" of another if it's completed more of the current lap
+// (higher lap, then higher sector within that lap), or — tied on both —
+// reached that exact checkpoint earlier. This alone fully orders the field
+// without needing a gap value at all, which sidesteps the lap-1 problem:
+// gap doesn't exist yet for anyone before the first lap completes, but
+// sector/event-time progress always does.
+function isAhead(a: CarState, b: CarState): boolean {
+  if (a.lap !== b.lap) return a.lap > b.lap
+  if (a.sector !== b.sector) return a.sector > b.sector
+  return a.lastEventTime < b.lastEventTime
 }
 
 // Drives the leaderboard from the precomputed event timeline. Advancing
@@ -55,6 +78,14 @@ export class ReplayEngine {
   private lastTime = -Infinity
   private lastPositionByCar = new Map<string, number>()
   private positionChangedAtByCar = new Map<string, number>()
+
+  // Running bests, updated incrementally as events land — "session" means
+  // fastest in that car's class so far this session; "personal" means
+  // fastest that specific car has done so far.
+  private sessionBestSector = new Map<string, number>() // `${class}:${sector}`
+  private sessionBestLap = new Map<string, number>() // class
+  private personalBestSector = new Map<string, [number | null, number | null, number | null]>() // car -> [s1,s2,s3]
+  private personalBestLap = new Map<string, number>() // car
 
   constructor(data: ReplayData) {
     this.data = data
@@ -78,8 +109,6 @@ export class ReplayEngine {
           s3UpdatedAt: -Infinity,
           bestLap: null,
           lastLap: null,
-          lastCompletedLap: null,
-          elapsedAtLastCompletedLap: null,
         },
       ]),
     )
@@ -87,6 +116,37 @@ export class ReplayEngine {
     this.lastTime = -Infinity
     this.lastPositionByCar = new Map()
     this.positionChangedAtByCar = new Map()
+    this.sessionBestSector = new Map()
+    this.sessionBestLap = new Map()
+    this.personalBestSector = new Map()
+    this.personalBestLap = new Map()
+  }
+
+  private updateBests(car: CarState, sector: 1 | 2 | 3, value: number) {
+    const cls = car.meta.class
+    const sectorKey = `${cls}:${sector}`
+    this.sessionBestSector.set(sectorKey, Math.min(this.sessionBestSector.get(sectorKey) ?? Infinity, value))
+
+    let personal = this.personalBestSector.get(car.meta.car_number)
+    if (!personal) {
+      personal = [null, null, null]
+      this.personalBestSector.set(car.meta.car_number, personal)
+    }
+    const idx = sector - 1
+    personal[idx] = personal[idx] == null ? value : Math.min(personal[idx]!, value)
+  }
+
+  private updateLapBests(car: CarState, lapTime: number) {
+    const cls = car.meta.class
+    this.sessionBestLap.set(cls, Math.min(this.sessionBestLap.get(cls) ?? Infinity, lapTime))
+    this.personalBestLap.set(car.meta.car_number, Math.min(this.personalBestLap.get(car.meta.car_number) ?? Infinity, lapTime))
+  }
+
+  private badge(value: number | null, sessionBest: number | undefined, personalBest: number | null | undefined): BestBadge {
+    if (value == null) return null
+    if (sessionBest != null && value <= sessionBest) return 'session'
+    if (personalBest != null && value <= personalBest) return 'personal'
+    return null
   }
 
   private advanceTo(t: number) {
@@ -102,16 +162,20 @@ export class ReplayEngine {
       if (e.sector === 1) {
         car.s1 = e.value
         car.s1UpdatedAt = e.time
+        this.updateBests(car, 1, e.value)
       } else if (e.sector === 2) {
         car.s2 = e.value
         car.s2UpdatedAt = e.time
+        this.updateBests(car, 2, e.value)
       } else {
         car.s3 = e.value
         car.s3UpdatedAt = e.time
+        this.updateBests(car, 3, e.value)
         car.lastLap = e.lapTimeSeconds ?? null
-        if (car.lastLap != null) car.bestLap = car.bestLap == null ? car.lastLap : Math.min(car.bestLap, car.lastLap)
-        car.lastCompletedLap = e.lap
-        car.elapsedAtLastCompletedLap = e.time
+        if (car.lastLap != null) {
+          car.bestLap = car.bestLap == null ? car.lastLap : Math.min(car.bestLap, car.lastLap)
+          this.updateLapBests(car, car.lastLap)
+        }
       }
     }
   }
@@ -133,57 +197,40 @@ export class ReplayEngine {
     return { pits, inPit, sincePit }
   }
 
+  private flagAt(leaderLap: number): FlagCategory | null {
+    if (leaderLap <= 0) return null
+    for (const p of this.data.flagPeriods) {
+      if (leaderLap >= p.startLap && leaderLap <= p.endLap) return p.category
+    }
+    return null
+  }
+
   // Recomputes the full leaderboard snapshot as of time t. Safe to call
   // every animation frame — advancing is incremental, sorting ~35 rows and
   // scanning each car's (small) pit-stop list fresh every time is cheap
   // enough not to bother caching.
-  getRows(t: number): RowState[] {
+  getSnapshot(t: number): ReplaySnapshot {
     if (t < this.lastTime) this.reset()
     this.advanceTo(t)
     this.lastTime = t
 
-    // The current race leader — most laps completed, ties broken by who
-    // reached that lap first — recomputed every tick since the actual
-    // leader can change over the race. This is deliberately *not* the
-    // gap-evolution strip's fixed reference car: "gap to leader" on a
-    // running timing screen means gap to whoever's in front right now.
-    let leader: CarState | null = null
-    for (const c of this.cars.values()) {
-      if (c.lastCompletedLap == null) continue
-      if (
-        !leader ||
-        c.lastCompletedLap > leader.lastCompletedLap! ||
-        (c.lastCompletedLap === leader.lastCompletedLap && c.elapsedAtLastCompletedLap! < leader.elapsedAtLastCompletedLap!)
-      ) {
-        leader = c
-      }
-    }
-    const leaderElapsedByLap = leader ? this.data.elapsedByLapByCar.get(leader.meta.car_number) : undefined
-
-    // Gap is only meaningful once a car has completed at least one lap —
-    // before that (everyone still on lap 1) it's null for the whole field,
-    // and the sort below falls through to sector/event-time ordering
-    // instead of comparing gaps that don't exist yet.
-    const gapFor = (c: CarState): number | null => {
-      if (c.lastCompletedLap == null || c.elapsedAtLastCompletedLap == null || !leaderElapsedByLap) return null
-      const leaderAtSameLap = leaderElapsedByLap.get(c.lastCompletedLap)
-      if (leaderAtSameLap == null) return null
-      return c.elapsedAtLastCompletedLap - leaderAtSameLap
-    }
-
     const rows = [...this.cars.values()]
       .filter((c) => c.lap > 0)
       .sort((a, b) => {
-        const gapA = gapFor(a)
-        const gapB = gapFor(b)
-        return (
-          b.lap - a.lap ||
-          b.sector - a.sector ||
-          (gapA ?? Infinity) - (gapB ?? Infinity) ||
-          a.lastEventTime - b.lastEventTime ||
-          a.meta.car_number.localeCompare(b.meta.car_number, undefined, { numeric: true })
-        )
+        if (isAhead(a, b)) return -1
+        if (isAhead(b, a)) return 1
+        return a.meta.car_number.localeCompare(b.meta.car_number, undefined, { numeric: true })
       })
+
+    const leader = rows[0] ?? null
+    const leaderElapsedBySector = leader ? this.data.elapsedByLapSectorByCar.get(leader.meta.car_number) : undefined
+
+    const gapFor = (c: CarState): number | null => {
+      if (!leaderElapsedBySector || c.lap === 0 || c.sector === 0) return null
+      const leaderAtSameCheckpoint = leaderElapsedBySector.get(`${c.lap}:${c.sector}`)
+      if (leaderAtSameCheckpoint == null) return null
+      return c.lastEventTime - leaderAtSameCheckpoint
+    }
 
     const classCounts = new Map<string, number>()
 
@@ -197,12 +244,13 @@ export class ReplayEngine {
     }
     this.lastPositionByCar = newPositionByCar
 
-    return rows.map((c, i) => {
+    const rowStates = rows.map((c, i) => {
       const classPos = (classCounts.get(c.meta.class) ?? 0) + 1
       classCounts.set(c.meta.class, classPos)
       const gap = gapFor(c)
       const prevGap = i > 0 ? gapFor(rows[i - 1]) : null
       const { pits, inPit, sincePit } = this.pitStateAt(c.meta.car_number, t, c.lap)
+      const personalSector = this.personalBestSector.get(c.meta.car_number)
       return {
         car_number: c.meta.car_number,
         class: c.meta.class,
@@ -215,8 +263,12 @@ export class ReplayEngine {
         s1UpdatedAt: c.s1UpdatedAt,
         s2UpdatedAt: c.s2UpdatedAt,
         s3UpdatedAt: c.s3UpdatedAt,
+        s1Badge: this.badge(c.s1, this.sessionBestSector.get(`${c.meta.class}:1`), personalSector?.[0]),
+        s2Badge: this.badge(c.s2, this.sessionBestSector.get(`${c.meta.class}:2`), personalSector?.[1]),
+        s3Badge: this.badge(c.s3, this.sessionBestSector.get(`${c.meta.class}:3`), personalSector?.[2]),
         bestLap: c.bestLap,
         lastLap: c.lastLap,
+        lastLapBadge: this.badge(c.lastLap, this.sessionBestLap.get(c.meta.class), this.personalBestLap.get(c.meta.car_number)),
         gap,
         interval: gap != null && prevGap != null ? gap - prevGap : null,
         pits,
@@ -227,5 +279,7 @@ export class ReplayEngine {
         positionChangedAt: this.positionChangedAtByCar.get(c.meta.car_number) ?? -Infinity,
       }
     })
+
+    return { rows: rowStates, flag: leader ? this.flagAt(leader.lap) : null, leaderLap: leader?.lap ?? 0 }
   }
 }
