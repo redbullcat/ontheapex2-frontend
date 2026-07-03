@@ -132,6 +132,7 @@ export interface SessionClock {
 // aren't persisted yet) and several columns (kph, elapsed, hour) aren't
 // populated by the live feed at all.
 export interface LiveLap {
+  is_valid: boolean
   car_number: string
   lap_number: number
   lap_time: string | null

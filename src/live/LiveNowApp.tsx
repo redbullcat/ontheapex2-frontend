@@ -92,7 +92,7 @@ export function LiveNowApp() {
             </h2>
           </div>
           <div className="replay-leaderboard-panel">
-            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <FastestLapsTable laps={data.laps} />}
+            {panel === 'race-log' ? <RaceLogPanel entries={data.race_log} /> : <FastestLapsTable laps={data.laps.filter((l) => l.is_valid)} />}
           </div>
         </div>
       </div>
