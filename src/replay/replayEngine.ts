@@ -31,6 +31,10 @@ export interface RowState {
   position: number
   classPosition: number
   positionChangedAt: number
+  // 'up' = gained places (lower position number), 'down' = lost places.
+  // null once nothing's changed recently — see positionChangedAt for the
+  // real "recently" cutoff, this only says which way the last change went.
+  positionDirection: 'up' | 'down' | null
 }
 
 export interface ReplaySnapshot {
@@ -83,6 +87,7 @@ export class ReplayEngine {
   private lastTime = -Infinity
   private lastPositionByCar = new Map<string, number>()
   private positionChangedAtByCar = new Map<string, number>()
+  private positionDirectionByCar = new Map<string, 'up' | 'down'>()
 
   // Running bests, updated incrementally as events land — "session" means
   // fastest in that car's class so far this session; "personal" means
@@ -124,6 +129,7 @@ export class ReplayEngine {
     this.lastTime = -Infinity
     this.lastPositionByCar = new Map()
     this.positionChangedAtByCar = new Map()
+    this.positionDirectionByCar = new Map()
     this.sessionBestSector = new Map()
     this.sessionBestLap = new Map()
     this.personalBestSector = new Map()
@@ -253,7 +259,10 @@ export class ReplayEngine {
     rows.forEach((c, i) => newPositionByCar.set(c.meta.car_number, i + 1))
     for (const [car, pos] of newPositionByCar) {
       const prevPos = this.lastPositionByCar.get(car)
-      if (prevPos !== undefined && prevPos !== pos) this.positionChangedAtByCar.set(car, t)
+      if (prevPos !== undefined && prevPos !== pos) {
+        this.positionChangedAtByCar.set(car, t)
+        this.positionDirectionByCar.set(car, pos < prevPos ? 'up' : 'down')
+      }
     }
     this.lastPositionByCar = newPositionByCar
 
@@ -292,6 +301,7 @@ export class ReplayEngine {
         position: i + 1,
         classPosition: classPos,
         positionChangedAt: this.positionChangedAtByCar.get(c.meta.car_number) ?? -Infinity,
+        positionDirection: this.positionDirectionByCar.get(c.meta.car_number) ?? null,
       }
     })
 

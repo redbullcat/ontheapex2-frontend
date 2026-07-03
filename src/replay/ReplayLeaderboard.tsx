@@ -1,23 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
 import type { RowState } from './replayEngine'
 import { getTeamDisplayName } from '../lib/identityColors'
 import { formatGap, formatLapTime, formatSplit } from './format'
+import { useFlash } from '../hooks/useFlash'
+import { PositionChangeArrow } from '../components/PositionChangeArrow'
 
-// True for ~700ms of real wall-clock time whenever `value` changes —
-// deliberately real time, not sim time, so the flash reads the same at 1x
-// or 30x replay speed even though many sim-seconds can pass in one frame.
-function useFlash(value: number): boolean {
-  const [flash, setFlash] = useState(false)
-  const prev = useRef(value)
-  useEffect(() => {
-    if (prev.current === value) return
-    prev.current = value
-    setFlash(true)
-    const t = setTimeout(() => setFlash(false), 700)
-    return () => clearTimeout(t)
-  }, [value])
-  return flash
-}
+// Arrow shown for much longer (10s) than the cell's own 700ms flash pulse —
+// the flash draws the eye the instant it happens, the arrow gives a few
+// extra seconds to actually notice which way and confirm it before it fades.
+const ARROW_VISIBLE_MS = 10000
 
 function badgeClass(badge: RowState['s1Badge']): string {
   if (badge === 'session') return ' badge-session'
@@ -38,6 +28,7 @@ function ReplayRow({
   const s2Flash = useFlash(row.s2UpdatedAt)
   const s3Flash = useFlash(row.s3UpdatedAt)
   const moved = useFlash(row.positionChangedAt)
+  const arrowVisible = useFlash(row.positionChangedAt, ARROW_VISIBLE_MS)
 
   const rowClass = [
     'replay-row',
@@ -51,7 +42,10 @@ function ReplayRow({
 
   return (
     <tr className={rowClass} onClick={onClick ? () => onClick(row.car_number) : undefined}>
-      <td className="num pos">{row.position}</td>
+      <td className="num pos">
+        {row.position}
+        {arrowVisible && <PositionChangeArrow direction={row.positionDirection} />}
+      </td>
       <td className="num cls-pos">{row.classPosition}</td>
       <td className="al">
         <span className="class-chip">{row.class}</span>
