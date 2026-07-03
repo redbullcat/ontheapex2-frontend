@@ -27,14 +27,19 @@ function interpolatedFraction(carNumber: string, laps: LiveLap[], nowSeconds: nu
   const last = completed[completed.length - 1] ?? null
   const lapStart = last?.elapsed_seconds ?? 0
 
-  const bestOf = (get: (l: LiveLap) => number | null, source: LiveLap[]): number | null => {
-    const vals = source.map(get).filter((v): v is number => v != null && v > 0)
-    return vals.length ? Math.min(...vals) : null
+  const median = (vals: number[]): number | null => {
+    if (!vals.length) return null
+    const sorted = [...vals].sort((a, b) => a - b)
+    return sorted[Math.floor(sorted.length / 2)]
   }
+  // The car's *own last lap time* is by far the best predictor of how long
+  // its current lap will take — using a personal-best or field-best
+  // reference instead systematically underestimates (fuel load, traffic,
+  // tyre wear), which pins the fraction at its 0.999 ceiling for most of
+  // the lap and reads as "stuck". Only fall back to the field's typical lap
+  // when this car hasn't completed one yet.
   const refLapTime =
-    (bestOf((l) => l.s1_seconds, carLaps) ?? bestOf((l) => l.s1_seconds, laps) ?? 30) +
-    (bestOf((l) => l.s2_seconds, carLaps) ?? bestOf((l) => l.s2_seconds, laps) ?? 30) +
-    (bestOf((l) => l.s3_seconds, carLaps) ?? bestOf((l) => l.s3_seconds, laps) ?? 30)
+    last?.lap_time_seconds ?? median(laps.map((l) => l.lap_time_seconds).filter((v): v is number => v != null && v > 0)) ?? 90
 
   return fractionFromSegment(0, Math.max(0, nowSeconds - lapStart), refLapTime)
 }

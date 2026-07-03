@@ -10,16 +10,20 @@ export interface TrackMapCar {
 
 interface ParsedTrack {
   viewBox: string
-  d: string
+  // Raw inner markup (all <path> elements — corner markers, sector ticks
+  // etc, not just the outline) rendered as-is so this matches what
+  // SectorAnalysisChart's plain <img src={trackMapUrl}> shows.
+  innerSvg: string
+  // These files bundle ~30 paths (a few dozen small corner/sector-tick
+  // marks alongside the actual circuit outline) — the outline is reliably
+  // the single longest `d` string, everything else is a few dozen
+  // characters. Used as a separate, invisible path purely to drive
+  // getTotalLength/getPointAtLength for car placement.
+  mainPathD: string
 }
 
 const trackCache = new Map<string, Promise<ParsedTrack | null>>()
 
-// Bundled track SVGs (see lib/trackMaps.ts) are a single continuous <path>
-// each — fetched as raw text (not <img>) so we can read the path's `d` and
-// drive an offscreen path element for getPointAtLength, the same technique
-// SectorAnalysisChart's static overlay uses, just animated per car instead
-// of per-sector-gap.
 function loadTrack(url: string): Promise<ParsedTrack | null> {
   let cached = trackCache.get(url)
   if (!cached) {
@@ -28,9 +32,14 @@ function loadTrack(url: string): Promise<ParsedTrack | null> {
       .then((text) => {
         if (!text) return null
         const viewBoxMatch = text.match(/viewBox="([^"]+)"/)
-        const dMatch = text.match(/<path[^>]*\sd="([^"]+)"/)
-        if (!viewBoxMatch || !dMatch) return null
-        return { viewBox: viewBoxMatch[1], d: dMatch[1] }
+        const svgOpenMatch = text.match(/<svg[^>]*>/)
+        const svgCloseIndex = text.lastIndexOf('</svg>')
+        if (!viewBoxMatch || !svgOpenMatch || svgCloseIndex === -1) return null
+        const innerSvg = text.slice(svgOpenMatch.index! + svgOpenMatch[0].length, svgCloseIndex)
+        const dMatches = [...text.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
+        if (dMatches.length === 0) return null
+        const mainPathD = dMatches.reduce((longest, d) => (d.length > longest.length ? d : longest), dMatches[0])
+        return { viewBox: viewBoxMatch[1], innerSvg, mainPathD }
       })
     trackCache.set(url, cached)
   }
@@ -70,19 +79,21 @@ export function TrackMap({ trackUrl, cars, focusCarNumber }: { trackUrl: string;
   return (
     <div className="track-map">
       <svg viewBox={track.viewBox} width="100%" role="img" aria-label="Track map">
-        <path ref={pathRef} d={track.d} fill="none" stroke="var(--replay-track-line, #5757e7)" strokeWidth={6} />
-        {pathReady && cars.map((c) => {
-          const el = pathRef.current
-          if (!el) return null
-          const total = el.getTotalLength()
-          const { x, y } = el.getPointAtLength(c.fraction * total)
-          const isFocus = c.car_number === focusCarNumber
-          return (
-            <g key={c.car_number}>
-              <circle cx={x} cy={y} r={isFocus ? 10 : 6} fill={getTeamColor(c.team)} stroke="#fff" strokeWidth={1.2} />
-            </g>
-          )
-        })}
+        <g dangerouslySetInnerHTML={{ __html: track.innerSvg }} />
+        <path ref={pathRef} d={track.mainPathD} fill="none" stroke="none" />
+        {pathReady &&
+          cars.map((c) => {
+            const el = pathRef.current
+            if (!el) return null
+            const total = el.getTotalLength()
+            const { x, y } = el.getPointAtLength(c.fraction * total)
+            const isFocus = c.car_number === focusCarNumber
+            return (
+              <g key={c.car_number}>
+                <circle cx={x} cy={y} r={isFocus ? 10 : 6} fill={getTeamColor(c.team)} stroke="#fff" strokeWidth={1.2} />
+              </g>
+            )
+          })}
       </svg>
       <p className="replay-hint">
         {anyLive
