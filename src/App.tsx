@@ -183,6 +183,11 @@ function App() {
     [eventsForYear, eventId],
   )
 
+  const currentSeriesLabel = useMemo(
+    () => (seriesState.status === 'success' ? seriesState.data.find((s) => s.slug === seriesSlug)?.display_name : undefined),
+    [seriesState, seriesSlug],
+  )
+
   const currentSession = useMemo(
     () => (sessionsState.status === 'success' ? sessionsState.data.find((s) => String(s.id) === sessionId) : undefined),
     [sessionsState, sessionId],
@@ -299,6 +304,20 @@ function App() {
               {!hasSession ? null : (
                 <>
                   <Tabs tabs={chartTabs} value={activeTab} onChange={setActiveTab} />
+
+                  {sessionSection === 'race' && !combinedBucket && currentSession && (
+                    <p className="replay-entry-point">
+                      <a
+                        href={`/replay?session=${sessionId}&title=${encodeURIComponent(
+                          [currentSeriesLabel, currentEvent?.display_name, currentSession.label].filter(Boolean).join(' · '),
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open Live Timing Replay ↗
+                      </a>
+                    </p>
+                  )}
 
                   {activeTab === 'overview' && (
                 <section className="chart-section">
