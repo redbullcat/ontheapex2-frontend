@@ -146,6 +146,9 @@ function LiveConsole({
                 {FLAG_LABELS[flagCategory]}
               </span>
             )}
+            {data.chequered_flag_shown && !data.session_ended && (
+              <span className="live-chequered-hint">Cars on track are completing their final lap</span>
+            )}
             <span className="replay-clock-mode">{data.session_ended ? 'Ended' : 'Live'}</span>
             {clock.elapsedSeconds != null && (
               <div className="replay-clock">
@@ -198,6 +201,7 @@ function LiveConsole({
                       </td>
                       <td className="al">
                         <span className="car-num">#{row.car_number}</span>
+                        {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
                       </td>
                       <td className="al driver">{row.driver_name ?? '—'}</td>
                       <td className="al team">{getTeamDisplayName(row.team)}</td>

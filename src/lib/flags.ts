@@ -2,8 +2,10 @@ import type { LapRead } from '../api/types'
 
 // Raw FLAG_AT_FL codes seen across timing feeds: GF/FF are green-flag
 // running, FCY is full-course yellow, SF/SC mark a safety car period, RF is
-// a red flag. Anything else is bucketed as unknown rather than assumed safe.
-export type FlagCategory = 'green' | 'fcy' | 'safety-car' | 'red' | 'unknown'
+// a red flag, CH is the live-only chequered-flag code (see app/live/state.py
+// on the backend — not a historical FLAG_AT_FL value). Anything else is
+// bucketed as unknown rather than assumed safe.
+export type FlagCategory = 'green' | 'fcy' | 'safety-car' | 'red' | 'chequered' | 'unknown'
 
 export function classifyFlag(flag: string | null): FlagCategory {
   if (!flag) return 'green'
@@ -12,6 +14,7 @@ export function classifyFlag(flag: string | null): FlagCategory {
   if (f === 'FCY' || f === 'YF' || f === 'YC') return 'fcy'
   if (f === 'SF' || f === 'SC') return 'safety-car'
   if (f === 'RF' || f === 'RC') return 'red'
+  if (f === 'CH') return 'chequered'
   return 'unknown'
 }
 
@@ -20,6 +23,7 @@ export const FLAG_LABELS: Record<FlagCategory, string> = {
   fcy: 'Full Course Yellow',
   'safety-car': 'Safety Car',
   red: 'Red Flag',
+  chequered: 'Chequered Flag',
   unknown: 'Unknown',
 }
 
@@ -28,13 +32,14 @@ export const FLAG_COLORS: Record<FlagCategory, string> = {
   fcy: '#fab219',
   'safety-car': '#ff8a00',
   red: '#e34948',
+  chequered: '#1a1a1a',
   unknown: '#898781',
 }
 
 // Severity order used to pick one flag per lap when different cars on track
 // report different codes for the same lap (e.g. cars crossing the line just
 // before/after a flag change) — the more severe condition wins.
-const SEVERITY: FlagCategory[] = ['green', 'unknown', 'fcy', 'safety-car', 'red']
+const SEVERITY: FlagCategory[] = ['green', 'unknown', 'fcy', 'safety-car', 'red', 'chequered']
 
 function dominantCategory(rows: LapRead[]): FlagCategory {
   let best: FlagCategory = 'green'

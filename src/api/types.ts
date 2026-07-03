@@ -99,6 +99,10 @@ export interface LiveStanding {
   last_lap_seconds: number | null
   last_lap_color: LiveTimeColor
   total_laps: number
+  // True once this car has completed the one lap it's entitled to finish
+  // after the chequered flag came out (motorsport convention — see
+  // chequered_flag_shown below). Always false until the flag has been shown.
+  taken_chequered_flag: boolean
 }
 
 export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
@@ -174,6 +178,10 @@ export interface LiveState {
   griiip_session_id: number
   current_flag: string | null
   session_ended: boolean
+  // True once the chequered flag has been shown this session — distinct
+  // from session_ended, since cars on track when it drops get to complete
+  // their current lap first (see LiveStanding.taken_chequered_flag).
+  chequered_flag_shown: boolean
   session_clock: SessionClock | null
   weather: LiveWeather | null
   standings: LiveStanding[]
