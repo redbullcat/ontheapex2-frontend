@@ -786,13 +786,11 @@ button.replay-play:hover {
   max-width: 100%;
 }
 
-/* Replay drives these continuously at animation-frame rate (real position
-   already advances smoothly every render); Live only gets a new value
-   every poll (~1-2s). A short transition smooths Live's discrete jumps
-   into a glide without noticeably lagging Replay's continuous updates —
-   a longer one fights the constant stream of new targets and reads as a
-   springy wobble instead of steady motion. */
-.circle-of-doom-car circle,
-.track-map circle {
-  transition: cx 0.15s linear, cy 0.15s linear;
-}
+/* No CSS position transition here — motion is smoothed in JS by animating
+   each car's underlying fraction (see hooks/useSmoothedFractions.ts) and
+   deriving cx/cy fresh from that every frame, for both the dot and its
+   label together. A CSS transition on cx/cy alone (a) doesn't apply to
+   the label at all, so it snaps ahead of the dot, and (b) linearly
+   interpolates in pixel space between two points on a curve, which can
+   cut straight across empty space instead of following the circle/track
+   when the two points are far apart. */

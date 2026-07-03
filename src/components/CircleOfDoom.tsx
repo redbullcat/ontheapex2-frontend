@@ -1,4 +1,5 @@
 import { getTeamColor } from '../lib/identityColors'
+import { useSmoothedFractions } from '../hooks/useSmoothedFractions'
 
 // Modelled on PACETEQ ONE TIMING's "Circle of Doom": a linearized track laid
 // out as a circle, with each car placed by how far around the lap it's
@@ -50,6 +51,7 @@ export function CircleOfDoom({
   sectorFractions?: [number, number] | null
 }) {
   const anyLive = cars.some((c) => c.isLive)
+  const smoothed = useSmoothedFractions(cars)
   return (
     <div className="circle-of-doom">
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" role="img" aria-label="Circle of doom">
@@ -61,7 +63,7 @@ export function CircleOfDoom({
             <RadialTick fraction={sectorFractions[1]} label="S2" className="circle-of-doom-sector-tick" />
           </>
         )}
-        {cars.map((c) => {
+        {smoothed.map((c) => {
           const { x, y } = pointOnCircle(c.fraction)
           const isFocus = c.car_number === focusCarNumber
           return (
