@@ -3,10 +3,11 @@ import { useRaceNotes } from '../hooks/useRaceNotes'
 import { useNotesColumns } from '../hooks/useNotesColumns'
 import { createRaceNote, hourBucket, GENERAL_COLUMN_ID, type PendingNoteLink, type RaceNote } from '../lib/raceNotes'
 import { buildNotesTimeline } from '../lib/raceNotesGrid'
-import { computeFlagEvents } from '../lib/flagEvents'
+import { computeFlagTimeline } from '../lib/flagEvents'
 import { downloadRaceNotesHtml, downloadRaceNotesMarkdown } from '../lib/raceNotesExport'
 import { formatClock } from '../replay/format'
 import { getTeamDisplayName } from '../lib/identityColors'
+import type { RaceLogEntry } from '../api/types'
 
 interface LapLike {
   car_number: string
@@ -56,6 +57,7 @@ export function RaceNotesPanel({
   title,
   laps,
   classes,
+  raceLog,
   currentElapsedSeconds,
   currentRemainingSeconds,
   carOptions,
@@ -67,6 +69,11 @@ export function RaceNotesPanel({
   title: string
   laps: LapLike[]
   classes: string[]
+  // Raw for Live (`data.race_log`), synthesized from lap flag data for
+  // Replay (see replay/raceLogSynth.ts) — the authoritative chronological
+  // source for flag-period/restart detection (see lib/flagEvents.ts for why
+  // this replaced grouping laps by lap_number).
+  raceLog: RaceLogEntry[]
   currentElapsedSeconds: number | null
   currentRemainingSeconds: number | null
   carOptions: CarOption[]
@@ -88,7 +95,7 @@ export function RaceNotesPanel({
   const totalDuration =
     currentElapsedSeconds != null && currentRemainingSeconds != null ? currentElapsedSeconds + currentRemainingSeconds : null
 
-  const flagEvents = useMemo(() => computeFlagEvents(laps), [laps])
+  const { cautions, restarts } = useMemo(() => computeFlagTimeline(raceLog), [raceLog])
 
   // Suggest a column whenever the linked/selected car changes — matching a
   // column whose label is that car's class, falling back to General. Left
@@ -137,7 +144,7 @@ export function RaceNotesPanel({
     setNewColumnName('')
   }
 
-  const timeline = buildNotesTimeline(notes, columns, flagEvents)
+  const timeline = buildNotesTimeline(notes, columns, cautions, restarts, totalDuration)
   const columnCount = columns.length + 1
 
   return (
@@ -238,6 +245,10 @@ export function RaceNotesPanel({
                   <tr className="race-notes-flag-row" key={`flag-${i}`}>
                     <td colSpan={columnCount + 2}>{row.label}</td>
                   </tr>
+                ) : row.type === 'restart' ? (
+                  <tr className="race-notes-restart-row" key={`restart-${i}`}>
+                    <td colSpan={columnCount + 2}>{row.label}</td>
+                  </tr>
                 ) : (
                   <tr key={`hour-${row.hour}`}>
                     <td className="race-notes-hour">{row.hour}</td>
@@ -266,7 +277,7 @@ export function RaceNotesPanel({
         <button
           type="button"
           className="replay-btn"
-          onClick={() => downloadRaceNotesMarkdown(notes, columns, flagEvents, title)}
+          onClick={() => downloadRaceNotesMarkdown(notes, columns, cautions, restarts, totalDuration, title)}
           disabled={notes.length === 0}
         >
           Export Markdown
@@ -274,7 +285,7 @@ export function RaceNotesPanel({
         <button
           type="button"
           className="replay-btn"
-          onClick={() => downloadRaceNotesHtml(notes, columns, flagEvents, title)}
+          onClick={() => downloadRaceNotesHtml(notes, columns, cautions, restarts, totalDuration, title)}
           disabled={notes.length === 0}
         >
           Export HTML

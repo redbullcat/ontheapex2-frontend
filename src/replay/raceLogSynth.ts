@@ -1,6 +1,6 @@
 import type { LapRead, RaceLogEntry } from '../api/types'
 import type { PitWindow } from './replayData'
-import { FLAG_LABELS, computeFlagPeriods } from '../lib/flags'
+import { FLAG_CODES, computeFlagPeriods } from '../lib/flags'
 
 // Historical CSV data has no discrete event stream the way the live feed's
 // race-log channel does (see app/live/state.py) — this derives an
@@ -107,37 +107,25 @@ function fastestLapEvents(laps: LapRead[]): RaceLogEntry[] {
   return entries
 }
 
-// Flag periods are lap-number ranges (see lib/flags.ts), not timestamped —
-// approximates each period's start time as the earliest elapsed_seconds
-// any car recorded for that lap number.
+// Flag periods (see lib/flags.ts) are timestamped by elapsed time already —
+// each period's start becomes one race-log entry; computeFlagTimeline's
+// chronological walk treats the next period's start as closing the previous
+// one, so no explicit "end" entry is needed. If the data ends mid-caution
+// (e.g. a session-ending red flag with no recorded return to green), leaving
+// it without a trailing green entry is correct: computeFlagTimeline flushes
+// it as still-open rather than inventing a resolution that never happened.
 function flagEvents(laps: LapRead[]): RaceLogEntry[] {
-  const periods = computeFlagPeriods(laps)
-  if (periods.length === 0) return []
-
-  const earliestElapsedByLap = new Map<number, number>()
-  for (const lap of laps) {
-    if (lap.lap_number == null || lap.elapsed_seconds == null) continue
-    const prev = earliestElapsedByLap.get(lap.lap_number)
-    if (prev == null || lap.elapsed_seconds < prev) earliestElapsedByLap.set(lap.lap_number, lap.elapsed_seconds)
-  }
-
-  const entries: RaceLogEntry[] = []
-  for (const period of periods) {
-    const elapsed = earliestElapsedByLap.get(period.startLap)
-    if (elapsed == null) continue
-    entries.push({
-      type: 'RaceFlag',
-      raceLogItemId: `replay-flag-${period.startLap}-${period.category}`,
-      lapNumber: period.startLap,
-      ts: '',
-      elapsedTimeMillis: elapsed * 1000,
-      pid: 0,
-      carNumber: '',
-      classId: '',
-      flag: FLAG_LABELS[period.category],
-    })
-  }
-  return entries
+  return computeFlagPeriods(laps).map((period) => ({
+    type: 'RaceFlag',
+    raceLogItemId: `replay-flag-${period.startLap}-${period.category}`,
+    lapNumber: period.startLap,
+    ts: '',
+    elapsedTimeMillis: period.startElapsedSeconds * 1000,
+    pid: 0,
+    carNumber: '',
+    classId: '',
+    flag: FLAG_CODES[period.category],
+  }))
 }
 
 export function buildReplayRaceLog(laps: LapRead[], pitWindowsByCar: Map<string, PitWindow[]>): RaceLogEntry[] {

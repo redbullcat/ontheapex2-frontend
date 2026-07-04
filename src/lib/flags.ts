@@ -16,6 +16,19 @@ export function classifyFlag(flag: string | null): FlagCategory {
   return 'unknown'
 }
 
+// Canonical raw code per category — for synthesizing a race-log `flag`
+// value (see replay/raceLogSynth.ts) that will round-trip cleanly back
+// through classifyFlag, rather than the human-readable FLAG_LABELS text
+// which classifyFlag doesn't recognize (it would come back 'unknown').
+export const FLAG_CODES: Record<FlagCategory, string> = {
+  green: 'GF',
+  fcy: 'FCY',
+  'safety-car': 'SC',
+  red: 'RF',
+  chequered: 'CH',
+  unknown: 'UNKNOWN',
+}
+
 export const FLAG_LABELS: Record<FlagCategory, string> = {
   green: 'Green',
   fcy: 'Full Course Yellow',
@@ -42,6 +55,7 @@ const SEVERITY: FlagCategory[] = ['green', 'unknown', 'fcy', 'safety-car', 'red'
 interface FlagLapLike {
   lap_number: number
   flag_at_fl: string | null
+  elapsed_seconds: number | null
 }
 
 function dominantCategory<T extends FlagLapLike>(rows: T[]): FlagCategory {
@@ -57,29 +71,56 @@ export interface FlagPeriod {
   startLap: number
   endLap: number
   category: FlagCategory
+  startElapsedSeconds: number
+  endElapsedSeconds: number
 }
 
+// Endurance races run several classes at once, and at any real-world moment
+// they can be dozens of laps apart — so grouping by raw lap_number (as this
+// used to) conflates unrelated moments across the field and fragments a
+// single caution into several spurious periods. Bucketing by elapsed time
+// instead groups laps that actually happened at (roughly) the same instant,
+// regardless of which class or how many laps down a car is.
+const BUCKET_SECONDS = 30
+
 // Generic over the lap shape so both Replay's LapRead[] and Live's
-// LiveLap[] work unmodified — only lap_number/flag_at_fl are ever read.
+// LiveLap[] work unmodified — only lap_number/flag_at_fl/elapsed_seconds
+// are ever read.
 export function computeFlagPeriods<T extends FlagLapLike>(laps: T[]): FlagPeriod[] {
-  const byLap = new Map<number, T[]>()
-  for (const lap of laps) {
-    if (lap.lap_number == null) continue
-    const arr = byLap.get(lap.lap_number)
+  const relevant = laps.filter((l) => l.lap_number != null && l.elapsed_seconds != null)
+  if (relevant.length === 0) return []
+
+  const byBucket = new Map<number, T[]>()
+  for (const lap of relevant) {
+    const bucket = Math.floor(lap.elapsed_seconds! / BUCKET_SECONDS)
+    const arr = byBucket.get(bucket)
     if (arr) arr.push(lap)
-    else byLap.set(lap.lap_number, [lap])
+    else byBucket.set(bucket, [lap])
   }
-  const lapNumbers = [...byLap.keys()].sort((a, b) => a - b)
+  const buckets = [...byBucket.keys()].sort((a, b) => a - b)
 
   const periods: FlagPeriod[] = []
   let current: FlagPeriod | null = null
-  for (const lapNumber of lapNumbers) {
-    const category = dominantCategory(byLap.get(lapNumber)!)
+  for (const bucket of buckets) {
+    const rows = byBucket.get(bucket)!
+    const category = dominantCategory(rows)
+    const minLap = Math.min(...rows.map((r) => r.lap_number))
+    const maxLap = Math.max(...rows.map((r) => r.lap_number))
+    const minElapsed = Math.min(...rows.map((r) => r.elapsed_seconds!))
+    const maxElapsed = Math.max(...rows.map((r) => r.elapsed_seconds!))
     if (current && current.category === category) {
-      current.endLap = lapNumber
+      // Different classes can be dozens of laps apart, so a later bucket in
+      // the same merged period can have either a smaller min or a larger max
+      // than buckets seen so far — widen the range both ways rather than
+      // just extending endLap upward (which could otherwise show something
+      // nonsensical like "Laps 137-118" if a back-marker class's lap number
+      // came in lower than the period's original startLap).
+      current.startLap = Math.min(current.startLap, minLap)
+      current.endLap = Math.max(current.endLap, maxLap)
+      current.endElapsedSeconds = maxElapsed
     } else {
       if (current) periods.push(current)
-      current = { startLap: lapNumber, endLap: lapNumber, category }
+      current = { startLap: minLap, endLap: maxLap, category, startElapsedSeconds: minElapsed, endElapsedSeconds: maxElapsed }
     }
   }
   if (current) periods.push(current)

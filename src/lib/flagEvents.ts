@@ -1,51 +1,79 @@
-import { computeFlagPeriods, type FlagCategory } from './flags'
-
-interface FlagEventLapLike {
-  lap_number: number
-  flag_at_fl: string | null
-  elapsed_seconds: number | null
-}
+import type { RaceLogEntry } from '../api/types'
+import { classifyFlag, type FlagCategory } from './flags'
 
 export interface FlagEvent {
   category: FlagCategory
   // 1-based count of this category so far this session — "FCY #2", "SC #1".
   occurrence: number
   startLap: number
-  endLap: number
-  // Earliest/latest elapsed_seconds recorded for the start/end lap numbers
-  // across all cars — an approximation of when the period began/ended in
-  // race time, since the flag itself isn't tied to one specific car.
-  startElapsedSeconds: number | null
+  // Null when the session/data ends mid-caution (e.g. a red flag that stops
+  // the session early) — there's no lap to report as the end since one
+  // never arrived.
+  endLap: number | null
+  startElapsedSeconds: number
   endElapsedSeconds: number | null
 }
 
-// Every non-green flag period (FCY, safety car, red flag) this session,
-// numbered per category, for the race-notes timeline to surface as its own
-// full-width row — see RaceNotesPanel.
-export function computeFlagEvents<T extends FlagEventLapLike>(laps: T[]): FlagEvent[] {
-  const periods = computeFlagPeriods(laps).filter((p) => p.category !== 'green')
+export interface RestartEvent {
+  lapNumber: number
+  elapsedSeconds: number
+}
 
-  const elapsedByLap = new Map<number, number[]>()
-  for (const lap of laps) {
-    if (lap.elapsed_seconds == null) continue
-    const arr = elapsedByLap.get(lap.lap_number)
-    if (arr) arr.push(lap.elapsed_seconds)
-    else elapsedByLap.set(lap.lap_number, [lap.elapsed_seconds])
+// Flag periods come from the timing feed's own race-log channel (raw
+// `RaceLogEntry[]` for Live, synthesized from computeFlagPeriods for Replay
+// — see replay/raceLogSynth.ts) rather than grouping laps by lap_number:
+// endurance races run several classes at once, wildly different lap counts
+// apart at the same real-world moment, so a lap-number-keyed grouping
+// conflates unrelated moments across the field into spurious extra periods.
+// Walking the race log chronologically by elapsedTimeMillis instead gives
+// exactly one period per actual real-time flag change.
+export function computeFlagTimeline(entries: RaceLogEntry[]): { cautions: FlagEvent[]; restarts: RestartEvent[] } {
+  const flagEntries = entries
+    .filter((e) => e.type === 'RaceFlag')
+    .slice()
+    .sort((a, b) => a.elapsedTimeMillis - b.elapsedTimeMillis)
+
+  const cautions: FlagEvent[] = []
+  const restarts: RestartEvent[] = []
+  const counts = new Map<FlagCategory, number>()
+  let open: FlagEvent | null = null
+
+  function closeOpen(entry: RaceLogEntry) {
+    if (!open) return
+    open.endLap = entry.lapNumber
+    open.endElapsedSeconds = entry.elapsedTimeMillis / 1000
+    cautions.push(open)
+    open = null
   }
 
-  const counts = new Map<FlagCategory, number>()
-  return periods.map((p) => {
-    const occurrence = (counts.get(p.category) ?? 0) + 1
-    counts.set(p.category, occurrence)
-    const startTimes = elapsedByLap.get(p.startLap) ?? []
-    const endTimes = elapsedByLap.get(p.endLap) ?? []
-    return {
-      category: p.category,
-      occurrence,
-      startLap: p.startLap,
-      endLap: p.endLap,
-      startElapsedSeconds: startTimes.length ? Math.min(...startTimes) : null,
-      endElapsedSeconds: endTimes.length ? Math.max(...endTimes) : null,
+  for (const entry of flagEntries) {
+    const category: FlagCategory = classifyFlag(entry.flag ?? null)
+    if (category === 'green' || category === 'chequered') {
+      const wasOpen = open != null
+      closeOpen(entry)
+      if (category === 'green' && wasOpen) {
+        restarts.push({ lapNumber: entry.lapNumber, elapsedSeconds: entry.elapsedTimeMillis / 1000 })
+      }
+      continue
     }
-  })
+    if (open && open.category === category) continue
+    closeOpen(entry)
+    const occurrence: number = (counts.get(category) ?? 0) + 1
+    counts.set(category, occurrence)
+    open = {
+      category,
+      occurrence,
+      startLap: entry.lapNumber,
+      endLap: null,
+      startElapsedSeconds: entry.elapsedTimeMillis / 1000,
+      endElapsedSeconds: null,
+    }
+  }
+  // A session can end mid-caution with no closing green entry ever arriving
+  // (the exact real-world case this was built for — a red flag minutes from
+  // the end that stopped the session early) — flush it as still-open rather
+  // than silently dropping the final period.
+  if (open) cautions.push(open)
+
+  return { cautions, restarts }
 }
