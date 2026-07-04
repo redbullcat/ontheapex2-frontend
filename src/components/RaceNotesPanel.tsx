@@ -17,6 +17,8 @@ interface LapLike {
   team: string | null
   driver_name: string | null
   flag_at_fl: string | null
+  lap_time_seconds?: number | null
+  is_valid?: boolean
 }
 
 export interface CarOption {
@@ -64,6 +66,7 @@ export function RaceNotesPanel({
   pendingLink,
   onConsumeLink,
   getRaceLocalTimestamp,
+  isRaceSession,
 }: {
   sessionKey: string
   title: string
@@ -84,6 +87,11 @@ export function RaceNotesPanel({
   // the nearest lap's recorded `hour` field. Null (rather than omitted)
   // when the caller has no such source at all.
   getRaceLocalTimestamp: (elapsedSeconds: number | null) => string | null
+  // Qualifying/practice sessions rank the auto-captured position snapshot by
+  // best lap time instead of race progress — see
+  // lib/fieldStateAtMoment.ts's own comment for why lap-count/elapsed-time
+  // ranking produces nonsense positions outside of an actual race.
+  isRaceSession: boolean
 }) {
   const { notes, addNote, removeNote } = useRaceNotes(sessionKey)
   const { columns, addColumn, removeColumn, renameColumn } = useNotesColumns(sessionKey, classes)
@@ -130,6 +138,7 @@ export function RaceNotesPanel({
         remainingSeconds,
         raceLocalTimestamp: getRaceLocalTimestamp(elapsedSeconds),
         columnId,
+        isRaceSession,
       }),
     )
     setText('')

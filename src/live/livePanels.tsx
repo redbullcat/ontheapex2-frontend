@@ -50,6 +50,7 @@ export interface LivePanelContext {
   pendingNoteLink: PendingNoteLink | null
   onRequestNoteLink: (carNumber: string, lapNumber: number) => void
   onConsumeNoteLink: () => void
+  isRaceSession: boolean
 }
 
 export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
@@ -73,7 +74,7 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'top-speed': { kind: 'top-speed', title: 'Top speed', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
   'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
-  'race-notes': { kind: 'race-notes', title: 'Race notes', category: 'field', defaultSize: { w: 12, h: 12 } },
+  'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -131,6 +132,7 @@ function LiveStandingsRow({
       </td>
       <td className="al driver">{row.driver_name ?? '—'}</td>
       <td className="al team">{getTeamDisplayName(row.team)}</td>
+      <td className="al manufacturer">{row.manufacturer ?? '—'}</td>
       <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
       <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
       <td className="num">{row.total_laps || ''}</td>
@@ -182,9 +184,13 @@ function LeaderboardPanel({
   const teamByCar = useMemo(() => new Map(data.standings.map((s) => [s.car_number, s.team])), [data.standings])
   const boardRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ x: number; y: number; car: string } | null>(null)
+  // Viewport (clientX/Y), not container-relative — the tooltip is rendered
+  // with position: fixed (see .car-hover-tooltip) so it isn't clipped by
+  // .replay-board-wrap's horizontal scroll container, which forces its own
+  // vertical overflow to `auto` too and would otherwise cut off the tooltip
+  // for any row below the very top of the visible scroll area.
   const handleHoverCar = (car: string, e: MouseEvent) => {
-    const rect = boardRef.current?.getBoundingClientRect()
-    setHover({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), car })
+    setHover({ x: e.clientX, y: e.clientY, car })
   }
 
   const filterControls = (
@@ -206,6 +212,7 @@ function LeaderboardPanel({
               <th className="al">Car</th>
               <th className="al">Driver</th>
               <th className="al">Team</th>
+              <th className="al">Manufacturer</th>
               <th>Gap</th>
               <th>Int</th>
               <th>Lap</th>
@@ -363,6 +370,7 @@ export function renderLivePanel(
             .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))}
           pendingLink={ctx.pendingNoteLink}
           onConsumeLink={ctx.onConsumeNoteLink}
+          isRaceSession={ctx.isRaceSession}
           getRaceLocalTimestamp={(elapsedSeconds) => {
             // Live races happen in real time, so "now" (adjusted for the
             // viewer's own stream delay) is the circuit's wall clock — and

@@ -1,18 +1,23 @@
-// Raw FLAG_AT_FL codes seen across timing feeds: GF/FF are green-flag
-// running, FCY is full-course yellow, SF/SC mark a safety car period, RF is
-// a red flag, CH is the live-only chequered-flag code (see app/live/state.py
-// on the backend — not a historical FLAG_AT_FL value). Anything else is
-// bucketed as unknown rather than assumed safe.
+// Two different flag vocabularies feed this: historical FLAG_AT_FL codes
+// (GF/FF green, FCY full-course yellow, SF/SC safety car, RF red, CH the
+// live-only chequered code — see app/live/state.py) for per-lap data, and
+// Live's raw race_log channel, which — confirmed against a real captured
+// session — sends full English words instead ("Green", "Yellow", "Red",
+// "SafetyCar", "Chequered"), not any of the short codes above. Recognizing
+// only the codes meant every real Live flag event came back 'unknown'
+// (surfacing as a bogus "Unknown #1" row at the very start of every
+// session, from the session-start placeholder entry). Anything matching
+// neither vocabulary is bucketed as unknown rather than assumed safe.
 export type FlagCategory = 'green' | 'fcy' | 'safety-car' | 'red' | 'chequered' | 'unknown'
 
 export function classifyFlag(flag: string | null): FlagCategory {
   if (!flag) return 'green'
-  const f = flag.toUpperCase()
-  if (f === 'GF' || f === 'FF') return 'green'
-  if (f === 'FCY' || f === 'YF' || f === 'YC') return 'fcy'
-  if (f === 'SF' || f === 'SC') return 'safety-car'
-  if (f === 'RF' || f === 'RC') return 'red'
-  if (f === 'CH') return 'chequered'
+  const f = flag.toUpperCase().replace(/[\s_-]/g, '')
+  if (f === 'GF' || f === 'FF' || f === 'GREEN') return 'green'
+  if (f === 'FCY' || f === 'YF' || f === 'YC' || f === 'YELLOW' || f === 'FULLCOURSEYELLOW') return 'fcy'
+  if (f === 'SF' || f === 'SC' || f === 'SAFETYCAR' || f === 'VSC') return 'safety-car'
+  if (f === 'RF' || f === 'RC' || f === 'RED') return 'red'
+  if (f === 'CH' || f === 'CHEQUERED' || f === 'CHECKERED') return 'chequered'
   return 'unknown'
 }
 

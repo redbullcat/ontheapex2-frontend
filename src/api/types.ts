@@ -92,6 +92,7 @@ export interface LiveStanding {
   car_number: string
   class: string | null
   team: string | null
+  manufacturer: string | null
   driver_name: string | null
   gap_to_first_seconds: number
   gap_to_next_seconds: number | null

@@ -4,10 +4,13 @@ import { useLiveDelay } from './useLiveDelay'
 import { DelaySettings } from './DelaySettings'
 import { ConnectionStatusBar } from './ConnectionStatusBar'
 import { useSessionClock } from './useSessionClock'
+import { useCountdownTo } from './useCountdownTo'
 import { formatClock } from '../replay/format'
 import { classifyFlag, FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { renderLivePanel, LIVE_DEFAULT_PANELS, LIVE_PANEL_DEFS, type LivePanelContext } from './livePanels'
 import { BackLink } from '../components/BackLink'
+import { ThemeToggleButton } from '../components/ThemeToggleButton'
+import { useTheme, type Theme } from '../hooks/useTheme'
 import { CarDetailModal } from '../components/CarDetailModal'
 import { liveLapToLapRead } from '../lib/liveLapAdapter'
 import { isLiveRaceSession } from './liveSessionType'
@@ -34,15 +37,11 @@ export function LiveNowApp() {
 
   useDocumentTitle(`${title} — Live · On The Apex`)
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem('theme')
-    const theme = stored === 'light' || stored === 'dark' ? stored : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [])
+  const [theme, setTheme] = useTheme()
 
-  const [delaySeconds, setDelaySeconds] = useLiveDelay()
+  const [delaySeconds, setDelaySeconds] = useLiveDelay(griiipSessionId)
   const live = useDelayedLiveState(griiipSessionId, delaySeconds)
-  const clock = useSessionClock(live.data?.session_clock ?? null)
+  const clock = useSessionClock(live.data?.session_clock ?? null, delaySeconds)
 
   if (griiipSessionId == null) {
     return (
@@ -93,6 +92,8 @@ export function LiveNowApp() {
       setDelaySeconds={setDelaySeconds}
       lastFetchAt={live.lastFetchAt}
       liveStatus={live.status}
+      theme={theme}
+      setTheme={setTheme}
     />
   )
 }
@@ -134,6 +135,7 @@ function PoppedOutLivePanel({
     pendingNoteLink: null,
     onRequestNoteLink: () => {},
     onConsumeNoteLink: () => {},
+    isRaceSession: isLiveRaceSession(data.session_type),
   }
   const panelTitle = LIVE_PANEL_DEFS[kind]?.title ?? kind
 
@@ -165,6 +167,8 @@ function LiveConsole({
   setDelaySeconds,
   lastFetchAt,
   liveStatus,
+  theme,
+  setTheme,
 }: {
   data: LiveState
   title: string
@@ -174,9 +178,21 @@ function LiveConsole({
   setDelaySeconds: (n: number) => void
   lastFetchAt: number | null
   liveStatus: 'loading' | 'success' | 'error'
+  theme: Theme
+  setTheme: (t: Theme) => void
 }) {
   const flagCategory = classifyFlag(data.current_flag)
   const isRaceSession = isLiveRaceSession(data.session_type)
+  // No flag has been observed yet — a genuinely running session always has
+  // one (backend now discards a bootstrap "Chequered" that's just leftover
+  // from a previous session at discovery time, see app/live/manager.py), so
+  // null here means the session hasn't actually started. Shown as its own
+  // "Due to start" state with a countdown rather than defaulting to Green
+  // (misleadingly implying racing is underway) or Chequered (implying it's
+  // already over) — and the elapsed clock stays off until a real flag
+  // arrives, so it doesn't start counting a session that hasn't begun.
+  const dueToStart = data.current_flag == null && !data.session_ended
+  const countdownSeconds = useCountdownTo(dueToStart ? data.session_clock?.start_time ?? null : null)
   const [selectedCar, setSelectedCar] = useState<string | null>(null)
   const [pendingNoteLink, setPendingNoteLink] = useState<PendingNoteLink | null>(null)
 
@@ -217,6 +233,7 @@ function LiveConsole({
     pendingNoteLink,
     onRequestNoteLink: handleRequestNoteLink,
     onConsumeNoteLink: handleConsumeNoteLink,
+    isRaceSession,
   }
 
   const carOptions = useMemo(
@@ -242,12 +259,15 @@ function LiveConsole({
       <div className="replay-topbar">
         <div className="replay-session-id">
           <BackLink />
+          <ThemeToggleButton theme={theme} onChange={setTheme} />
           <h2>{title}</h2>
           <span>{data.standings.length} cars</span>
         </div>
         <div className="replay-clock-block">
           {data.session_ended ? (
             <span className="live-chequered-pill">🏁 Session complete</span>
+          ) : dueToStart ? (
+            <span className="live-due-to-start-pill">Due to start</span>
           ) : (
             <span className="replay-flag-pill" style={{ '--flag-color': FLAG_COLORS[flagCategory] } as CSSProperties}>
               {FLAG_LABELS[flagCategory]}
@@ -257,11 +277,21 @@ function LiveConsole({
             <span className="live-chequered-hint">Cars on track are completing their final lap</span>
           )}
           <span className="replay-clock-mode">{data.session_ended ? 'Ended' : 'Live'}</span>
-          {clock.elapsedSeconds != null && (
+          {dueToStart ? (
             <div className="replay-clock">
-              {formatClock(clock.elapsedSeconds)}
-              {clock.remainingSeconds != null && <small> · {formatClock(clock.remainingSeconds)} left</small>}
+              {countdownSeconds == null
+                ? 'Waiting for session to start…'
+                : countdownSeconds > 0
+                  ? `Starts in ${formatClock(countdownSeconds)}`
+                  : 'Starting…'}
             </div>
+          ) : (
+            clock.elapsedSeconds != null && (
+              <div className="replay-clock">
+                {formatClock(clock.elapsedSeconds)}
+                {clock.remainingSeconds != null && <small> · {formatClock(clock.remainingSeconds)} left</small>}
+              </div>
+            )
           )}
           {data.weather && (
             <span className="live-weather">

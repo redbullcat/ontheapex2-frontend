@@ -5,6 +5,8 @@ interface LapLike {
   class: string | null
   team: string | null
   driver_name: string | null
+  lap_time_seconds?: number | null
+  is_valid?: boolean
 }
 
 export interface CarStateAtMoment {
@@ -23,24 +25,48 @@ export interface CarStateAtMoment {
 }
 
 // Reconstructs "who's where" as of a given elapsed-seconds cutoff (or every
-// lap given, if the cutoff is null — i.e. "right now") by taking each car's
-// most recent lap at/before the cutoff and ranking by race progress: more
-// laps completed always outranks fewer, and only cars tied on lap count are
+// lap given, if the cutoff is null — i.e. "right now").
+//
+// Race sessions (`rankByBestLap` false): rank by race progress — more laps
+// completed always outranks fewer, and only cars tied on lap count are
 // broken by elapsed time — same priority replayEngine.ts's isAhead() uses
 // for the live leaderboard's own position field. Ranking by elapsed_seconds
 // alone (ascending) is wrong here: a leader who's completed more laps has
 // necessarily run for *longer* (a bigger elapsed_seconds sum) than a
 // back-marker on fewer laps, so that naive comparison ranks the back-marker
 // ahead of the actual leader.
-export function computeFieldStateAtMoment(laps: LapLike[], elapsedCutoff: number | null): CarStateAtMoment[] {
+//
+// Qualifying/practice sessions (`rankByBestLap` true): "who's ahead on laps
+// completed" is meaningless here — cars run out-laps, a flying lap, an
+// in-lap, then sit in the pits for minutes before the next run, so lap
+// count/elapsed progress has no relationship to the actual timesheet
+// classification. Rank by each car's best lap time set so far instead
+// (ascending, faster wins), the same convention already used for
+// LapPositionChart's 'bestLapSoFar' rankBy mode.
+export function computeFieldStateAtMoment(laps: LapLike[], elapsedCutoff: number | null, rankByBestLap = false): CarStateAtMoment[] {
   const latestByCar = new Map<string, LapLike>()
+  const bestLapByCar = new Map<string, number>()
   for (const lap of laps) {
     if (lap.elapsed_seconds == null) continue
     if (elapsedCutoff != null && lap.elapsed_seconds > elapsedCutoff) continue
     const prev = latestByCar.get(lap.car_number)
     if (!prev || lap.lap_number > prev.lap_number) latestByCar.set(lap.car_number, lap)
+    if (rankByBestLap && lap.is_valid !== false && lap.lap_time_seconds != null) {
+      const best = bestLapByCar.get(lap.car_number)
+      if (best == null || lap.lap_time_seconds < best) bestLapByCar.set(lap.car_number, lap.lap_time_seconds)
+    }
   }
   const rows = [...latestByCar.values()].sort((a, b) => {
+    if (rankByBestLap) {
+      const ba = bestLapByCar.get(a.car_number)
+      const bb = bestLapByCar.get(b.car_number)
+      // No time set yet (e.g. only an out-lap so far) sorts last, behind
+      // every car that's posted at least one timed lap.
+      if (ba == null && bb == null) return 0
+      if (ba == null) return 1
+      if (bb == null) return -1
+      return ba - bb
+    }
     if (b.lap_number !== a.lap_number) return b.lap_number - a.lap_number
     return (a.elapsed_seconds ?? Infinity) - (b.elapsed_seconds ?? Infinity)
   })

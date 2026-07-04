@@ -12,7 +12,9 @@ import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { bucketFor } from '../lib/sessionBucket'
 import { BackLink } from '../components/BackLink'
 import { CarDetailModal } from '../components/CarDetailModal'
+import { ThemeToggleButton } from '../components/ThemeToggleButton'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useTheme, type Theme } from '../hooks/useTheme'
 import type { SessionType } from '../api/types'
 import { DashboardGrid } from '../dashboard/DashboardGrid'
 import { useDashboardLayout } from '../dashboard/useDashboardLayout'
@@ -44,13 +46,7 @@ export function ReplayApp() {
 
   useDocumentTitle(`${title} — Replay · On The Apex`)
 
-  // Mirrors the main app's stored theme so the two tabs stay visually
-  // consistent — this view has no toggle of its own for v1.
-  useEffect(() => {
-    const stored = window.localStorage.getItem('theme')
-    const theme = stored === 'light' || stored === 'dark' ? stored : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [])
+  const [theme, setTheme] = useTheme()
 
   const lapsState = useAsync(sessionId ? () => getLaps(Number(sessionId)) : null, [sessionId])
 
@@ -71,7 +67,7 @@ export function ReplayApp() {
         dashPanel ? (
           <PoppedOutPanel sessionId={sessionId} data={data} title={title} isRaceSession={isRaceSession} kind={dashPanel} carNumber={dashCar || undefined} />
         ) : (
-          <ReplayConsole title={title} data={data} sessionId={sessionId} isRaceSession={isRaceSession} />
+          <ReplayConsole title={title} data={data} sessionId={sessionId} isRaceSession={isRaceSession} theme={theme} setTheme={setTheme} />
         )
       ) : (
         <p className="replay-hint">No lap data for this session.</p>
@@ -156,11 +152,15 @@ function ReplayConsole({
   data,
   sessionId,
   isRaceSession,
+  theme,
+  setTheme,
 }: {
   title: string
   data: ReplayData
   sessionId: string
   isRaceSession: boolean
+  theme: Theme
+  setTheme: (t: Theme) => void
 }) {
   const clock = useReplayClock(data.minTime, data.maxTime)
   const snapshot = useReplaySnapshot(data, clock.current)
@@ -245,6 +245,7 @@ function ReplayConsole({
       <div className="replay-topbar">
         <div className="replay-session-id">
           <BackLink />
+          <ThemeToggleButton theme={theme} onChange={setTheme} />
           <h2>{title}</h2>
           <span>{data.cars.length} cars</span>
         </div>

@@ -3,6 +3,8 @@ import { useLiveSessionsPoll } from './useLiveSessionsPoll'
 import { liveNowUrl } from './liveNowUrl'
 import type { LiveSessionSummary } from '../api/types'
 import { BackLink } from '../components/BackLink'
+import { ThemeToggleButton } from '../components/ThemeToggleButton'
+import { useTheme } from '../hooks/useTheme'
 import '../replay/replay.css'
 import './live.css'
 
@@ -76,12 +78,14 @@ function SeriesSection({
 
 export function LiveStagingPage() {
   const { sessions, secondsUntilNextPoll, retryNow, loading } = useLiveSessionsPoll()
+  const [theme, setTheme] = useTheme()
 
   return (
     <div className="replay-root">
       <div className="replay-topbar">
         <div className="replay-session-id">
           <BackLink />
+          <ThemeToggleButton theme={theme} onChange={setTheme} />
           <h2>Live timing</h2>
         </div>
       </div>
