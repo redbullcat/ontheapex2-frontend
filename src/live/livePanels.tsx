@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { LiveLap, LiveStanding, LiveState } from '../api/types'
 import type { PanelDef, PanelInstance } from '../dashboard/types'
 import { formatGap, formatLapTime, formatSplit } from '../replay/format'
@@ -20,6 +20,7 @@ import { CircleOfDoom } from '../components/CircleOfDoom'
 import { TrackMap } from '../components/TrackMap'
 import { findTrackMapUrl } from '../lib/trackMaps'
 import { computeSectorFractions } from '../lib/trackFraction'
+import { buildCarRoster } from '../lib/carRoster'
 import { computeLiveTrackPositions } from './liveTrackPosition'
 import { LapPositionChart } from '../components/LapPositionChart'
 import { CarStintTable } from '../components/CarStintTable'
@@ -76,7 +77,19 @@ export const LIVE_DEFAULT_PANELS: PanelInstance[] = [
 // a per-row hook — has a stable identity per car via the key, rather than
 // being called inside a loop callback where hook order isn't guaranteed
 // stable as rows are added/removed/filtered.
-function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLap: LiveLap | undefined; onClick: () => void }) {
+function LiveStandingsRow({
+  row,
+  lastLap,
+  onClick,
+  onHoverCar,
+  onLeaveCar,
+}: {
+  row: LiveStanding
+  lastLap: LiveLap | undefined
+  onClick: () => void
+  onHoverCar: (car: string, e: MouseEvent) => void
+  onLeaveCar: () => void
+}) {
   const arrow = usePositionArrow(row.position)
   return (
     <tr className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'} onClick={onClick}>
@@ -87,7 +100,12 @@ function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLa
       <td className="al">
         <span className="class-chip">{row.class ?? '—'}</span>
       </td>
-      <td className="al">
+      <td
+        className="al"
+        onMouseEnter={(e) => onHoverCar(row.car_number, e)}
+        onMouseMove={(e) => onHoverCar(row.car_number, e)}
+        onMouseLeave={onLeaveCar}
+      >
         <span className="car-num">#{row.car_number}</span>
         {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
       </td>
@@ -136,6 +154,19 @@ function LeaderboardPanel({
     return map
   }, [data.laps])
 
+  // Hover a car's number in the main live timing panel to see its full
+  // driver roster — a car's laps only ever carry the single driver of
+  // that specific lap, so the roster is derived by scanning every laps
+  // this car has done so far this session (see lib/carRoster.ts).
+  const roster = useMemo(() => buildCarRoster(data.laps), [data.laps])
+  const teamByCar = useMemo(() => new Map(data.standings.map((s) => [s.car_number, s.team])), [data.standings])
+  const boardRef = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState<{ x: number; y: number; car: string } | null>(null)
+  const handleHoverCar = (car: string, e: MouseEvent) => {
+    const rect = boardRef.current?.getBoundingClientRect()
+    setHover({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), car })
+  }
+
   const filterControls = (
     <div className="replay-trend-controls">
       <ClassFilter classes={classes} selection={classSelection} onChange={setClassSelection} />
@@ -145,7 +176,7 @@ function LeaderboardPanel({
   return (
     <div>
       {compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls}
-      <div className="replay-board-wrap">
+      <div className="replay-board-wrap" ref={boardRef}>
         <table className="replay-board">
           <thead>
             <tr>
@@ -172,11 +203,19 @@ function LeaderboardPanel({
                 row={row}
                 lastLap={lastLapByCar.get(row.car_number)}
                 onClick={() => onRowClick?.(row.car_number)}
+                onHoverCar={handleHoverCar}
+                onLeaveCar={() => setHover(null)}
               />
             ))}
           </tbody>
         </table>
         {visibleStandings.length === 0 && <p className="replay-hint">No cars in this class have started yet.</p>}
+        {hover && (
+          <div className="replay-tooltip car-hover-tooltip" style={{ left: hover.x, top: hover.y }}>
+            <strong>#{hover.car}</strong> {getTeamDisplayName(teamByCar.get(hover.car) ?? null)}
+            {(roster.get(hover.car)?.length ?? 0) > 0 && <div>{roster.get(hover.car)!.join(' · ')}</div>}
+          </div>
+        )}
       </div>
     </div>
   )
