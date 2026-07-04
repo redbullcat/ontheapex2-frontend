@@ -34,11 +34,21 @@ export interface LinkedCarSnapshot {
   position: number
   classPosition: number
   cls: string | null
+  totalCars: number
+  totalInClass: number
 }
+
+// The one column that always exists and can't be removed — where a note
+// lands when it isn't assigned to one of the user's configured columns
+// (see hooks/useNotesColumns).
+export const GENERAL_COLUMN_ID = 'general'
 
 export interface RaceNote {
   id: string
   text: string
+  // Which grid column this note was filed under — defaults to matching the
+  // linked car's class if a column with that id exists, else GENERAL_COLUMN_ID.
+  columnId: string
   // When the note was actually typed, in the note-taker's own timezone —
   // "my local timestamp" from the spec this was built from.
   userLocalTimestamp: string
@@ -90,6 +100,8 @@ export function captureRaceNoteContext(
         position: row.position,
         classPosition: row.classPosition,
         cls: row.class,
+        totalCars: row.totalCars,
+        totalInClass: row.totalInClass,
       }
     }
   }
@@ -110,11 +122,13 @@ export function createRaceNote(params: {
   // `hour` field (LapRead's recorded real-world timestamp), since a replay
   // session isn't happening in real time at all.
   raceLocalTimestamp: string | null
+  columnId: string
 }): RaceNote {
   const { overallLeader, classLeaders, linkedCar } = captureRaceNoteContext(params.laps, params.elapsedCutoff, params.linkedCarNumber)
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     text: params.text,
+    columnId: params.columnId,
     userLocalTimestamp: new Date().toISOString(),
     raceLocalTimestamp: params.raceLocalTimestamp,
     elapsedSeconds: params.elapsedSeconds,
