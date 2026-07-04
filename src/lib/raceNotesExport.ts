@@ -9,9 +9,10 @@ function leaderText(leader: { carNumber: string; driverName: string | null } | n
 
 function noteLine(note: RaceNote): string {
   const elapsed = note.elapsedSeconds != null ? formatClock(note.elapsedSeconds) : '—'
+  const raceTime = note.raceLocalTimestamp ? ` (${new Date(note.raceLocalTimestamp).toLocaleTimeString()})` : ''
   const car = note.linkedCar ? `#${note.linkedCar.carNumber}${note.linkedCar.driverName ? ` ${note.linkedCar.driverName}` : ''}` : null
   const lap = note.linkedCar ? ` L${note.linkedCar.lapNumber}` : ''
-  const prefix = car ? `${elapsed} ${car}${lap}` : elapsed
+  const prefix = car ? `${elapsed}${raceTime} ${car}${lap}` : `${elapsed}${raceTime}`
   return `${prefix}: ${note.text}`
 }
 

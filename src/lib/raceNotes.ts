@@ -42,6 +42,13 @@ export interface RaceNote {
   // When the note was actually typed, in the note-taker's own timezone —
   // "my local timestamp" from the spec this was built from.
   userLocalTimestamp: string
+  // The real-world wall-clock time the moment itself happened at the
+  // circuit — distinct from userLocalTimestamp above, since a note can be
+  // written well after the fact (Replay) or slightly behind a viewer's own
+  // stream delay (Live). Null when no wall-clock source is available for
+  // that moment (caller-supplied — see createRaceNote's raceLocalTimestamp
+  // param for how each view derives it).
+  raceLocalTimestamp: string | null
   elapsedSeconds: number | null
   remainingSeconds: number | null
   overallLeader: { carNumber: string; driverName: string | null } | null
@@ -97,12 +104,19 @@ export function createRaceNote(params: {
   linkedCarNumber?: string | null
   elapsedSeconds: number | null
   remainingSeconds: number | null
+  // The circuit's own wall-clock time at this moment — Live derives this
+  // from Date.now() adjusted for the viewer's stream delay and how long ago
+  // a linked lap happened; Replay derives it from the linked lap's own
+  // `hour` field (LapRead's recorded real-world timestamp), since a replay
+  // session isn't happening in real time at all.
+  raceLocalTimestamp: string | null
 }): RaceNote {
   const { overallLeader, classLeaders, linkedCar } = captureRaceNoteContext(params.laps, params.elapsedCutoff, params.linkedCarNumber)
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     text: params.text,
     userLocalTimestamp: new Date().toISOString(),
+    raceLocalTimestamp: params.raceLocalTimestamp,
     elapsedSeconds: params.elapsedSeconds,
     remainingSeconds: params.remainingSeconds,
     overallLeader,

@@ -362,6 +362,15 @@ export function renderLivePanel(
             .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))}
           pendingLink={ctx.pendingNoteLink}
           onConsumeLink={ctx.onConsumeNoteLink}
+          getRaceLocalTimestamp={(elapsedSeconds) => {
+            // Live races happen in real time, so "now" (adjusted for the
+            // viewer's own stream delay) is the circuit's wall clock — and
+            // for a moment further in the past (a linked lap), walk that
+            // same adjustment back by however much earlier it happened.
+            if (elapsedSeconds == null || ctx.clock.elapsedSeconds == null) return null
+            const secondsAgo = ctx.clock.elapsedSeconds - elapsedSeconds
+            return new Date(Date.now() - ctx.delaySeconds * 1000 - secondsAgo * 1000).toISOString()
+          }}
         />
       )
     case 'circle-of-doom': {

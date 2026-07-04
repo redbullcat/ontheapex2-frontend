@@ -229,6 +229,11 @@ export function renderReplayPanel(
             .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))}
           pendingLink={ctx.pendingNoteLink}
           onConsumeLink={ctx.onConsumeNoteLink}
+          // A replay isn't happening in real time at all (it can be scrubbed
+          // to any point, played back days later, etc), and LapRead has no
+          // recorded real-world wall-clock field to fall back on — so there's
+          // no meaningful "race's own local time" here, unlike Live.
+          getRaceLocalTimestamp={() => null}
         />
       )
     case 'car-position-history':

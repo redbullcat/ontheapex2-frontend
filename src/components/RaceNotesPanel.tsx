@@ -37,6 +37,7 @@ function NoteItem({ note, onDelete }: { note: RaceNote; onDelete: () => void }) 
             {note.linkedCar.driverName ? ` · ${note.linkedCar.driverName}` : ''}
           </span>
         )}
+        {note.raceLocalTimestamp && <span title="Race's own local time">{new Date(note.raceLocalTimestamp).toLocaleTimeString()}</span>}
         <button type="button" className="race-note-delete" onClick={onDelete} title="Delete note">
           ✕
         </button>
@@ -56,6 +57,7 @@ export function RaceNotesPanel({
   carOptions,
   pendingLink,
   onConsumeLink,
+  getRaceLocalTimestamp,
 }: {
   sessionKey: string
   title: string
@@ -66,6 +68,11 @@ export function RaceNotesPanel({
   carOptions: CarOption[]
   pendingLink: PendingNoteLink | null
   onConsumeLink: () => void
+  // The circuit's own wall-clock time at a given elapsed moment — Live
+  // derives this from Date.now() adjusted for stream delay, Replay from
+  // the nearest lap's recorded `hour` field. Null (rather than omitted)
+  // when the caller has no such source at all.
+  getRaceLocalTimestamp: (elapsedSeconds: number | null) => string | null
 }) {
   const { notes, addNote, removeNote } = useRaceNotes(sessionKey)
   const [text, setText] = useState('')
@@ -90,6 +97,7 @@ export function RaceNotesPanel({
         linkedCarNumber,
         elapsedSeconds,
         remainingSeconds,
+        raceLocalTimestamp: getRaceLocalTimestamp(elapsedSeconds),
       }),
     )
     setText('')
