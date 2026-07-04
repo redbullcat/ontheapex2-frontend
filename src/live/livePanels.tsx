@@ -355,6 +355,7 @@ export function renderLivePanel(
           title={ctx.title}
           laps={data.laps}
           classes={[...new Set(data.standings.map((s) => s.class ?? 'Unknown'))].sort()}
+          raceLog={data.race_log}
           currentElapsedSeconds={ctx.clock.elapsedSeconds}
           currentRemainingSeconds={ctx.clock.remainingSeconds}
           carOptions={data.standings

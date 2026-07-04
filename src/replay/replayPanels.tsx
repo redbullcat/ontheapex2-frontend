@@ -222,6 +222,7 @@ export function renderReplayPanel(
           title={ctx.title}
           laps={ctx.data.laps}
           classes={ctx.data.classes}
+          raceLog={ctx.data.raceLog}
           currentElapsedSeconds={ctx.currentTime}
           currentRemainingSeconds={Math.max(0, ctx.data.maxTime - ctx.currentTime)}
           carOptions={ctx.data.cars

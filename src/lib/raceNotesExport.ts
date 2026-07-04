@@ -2,7 +2,7 @@ import { formatClock } from '../replay/format'
 import { buildNotesTimeline } from './raceNotesGrid'
 import { GENERAL_COLUMN_ID, type RaceNote } from './raceNotes'
 import type { NotesColumn } from '../hooks/useNotesColumns'
-import type { FlagEvent } from './flagEvents'
+import type { FlagEvent, RestartEvent } from './flagEvents'
 
 function leaderText(leader: { carNumber: string; driverName: string | null } | null): string {
   if (!leader) return '—'
@@ -37,8 +37,15 @@ function orderedColumns(columns: NotesColumn[]): NotesColumn[] {
   return [...columns, { id: GENERAL_COLUMN_ID, label: 'General' }]
 }
 
-export function raceNotesToMarkdown(notes: RaceNote[], columns: NotesColumn[], flagEvents: FlagEvent[], title: string): string {
-  const timeline = buildNotesTimeline(notes, columns, flagEvents)
+export function raceNotesToMarkdown(
+  notes: RaceNote[],
+  columns: NotesColumn[],
+  cautions: FlagEvent[],
+  restarts: RestartEvent[],
+  totalDurationSeconds: number | null,
+  title: string,
+): string {
+  const timeline = buildNotesTimeline(notes, columns, cautions, restarts, totalDurationSeconds)
   if (timeline.length === 0) return `# ${title} — race notes\n\nNo notes logged yet.`
 
   const allColumns = orderedColumns(columns)
@@ -47,7 +54,7 @@ export function raceNotesToMarkdown(notes: RaceNote[], columns: NotesColumn[], f
   const lines = [`# ${title} — race notes`, '', `| ${header.join(' | ')} |`, `| ${sep.join(' | ')} |`]
 
   for (const row of timeline) {
-    if (row.type === 'flag') {
+    if (row.type === 'flag' || row.type === 'restart') {
       lines.push(`| **${escapeMdCell(row.label)}** | | ${allColumns.map(() => '').join(' | ')} |`)
       continue
     }
@@ -62,8 +69,15 @@ export function raceNotesToMarkdown(notes: RaceNote[], columns: NotesColumn[], f
   return lines.join('\n')
 }
 
-export function raceNotesToHtml(notes: RaceNote[], columns: NotesColumn[], flagEvents: FlagEvent[], title: string): string {
-  const timeline = buildNotesTimeline(notes, columns, flagEvents)
+export function raceNotesToHtml(
+  notes: RaceNote[],
+  columns: NotesColumn[],
+  cautions: FlagEvent[],
+  restarts: RestartEvent[],
+  totalDurationSeconds: number | null,
+  title: string,
+): string {
+  const timeline = buildNotesTimeline(notes, columns, cautions, restarts, totalDurationSeconds)
   const allColumns = orderedColumns(columns)
 
   const bodyRows =
@@ -71,8 +85,9 @@ export function raceNotesToHtml(notes: RaceNote[], columns: NotesColumn[], flagE
       ? `<tr><td colspan="${allColumns.length + 2}">No notes logged yet.</td></tr>`
       : timeline
           .map((row) => {
-            if (row.type === 'flag') {
-              return `<tr class="flag-row"><td colspan="${allColumns.length + 2}">${escapeHtml(row.label)}</td></tr>`
+            if (row.type === 'flag' || row.type === 'restart') {
+              const cls = row.type === 'restart' ? 'restart-row' : 'flag-row'
+              return `<tr class="${cls}"><td colspan="${allColumns.length + 2}">${escapeHtml(row.label)}</td></tr>`
             }
             const cells = [
               `<td>${row.hour}</td>`,
@@ -96,6 +111,7 @@ export function raceNotesToHtml(notes: RaceNote[], columns: NotesColumn[], flagE
   th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 13px; text-align: left; vertical-align: top; white-space: pre-wrap; }
   th { background: #f4f4f4; }
   tr.flag-row td { background: #fff3cd; font-weight: 700; text-align: center; }
+  tr.restart-row td { background: #d8f3dc; font-weight: 700; text-align: center; }
   h1 { font-size: 20px; }
 </style>
 </head>
@@ -122,14 +138,32 @@ function download(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url)
 }
 
-export function downloadRaceNotesMarkdown(notes: RaceNote[], columns: NotesColumn[], flagEvents: FlagEvent[], title: string) {
+export function downloadRaceNotesMarkdown(
+  notes: RaceNote[],
+  columns: NotesColumn[],
+  cautions: FlagEvent[],
+  restarts: RestartEvent[],
+  totalDurationSeconds: number | null,
+  title: string,
+) {
   download(
     `${title.replace(/[^a-z0-9]+/gi, '_')}_race_notes.md`,
-    raceNotesToMarkdown(notes, columns, flagEvents, title),
+    raceNotesToMarkdown(notes, columns, cautions, restarts, totalDurationSeconds, title),
     'text/markdown',
   )
 }
 
-export function downloadRaceNotesHtml(notes: RaceNote[], columns: NotesColumn[], flagEvents: FlagEvent[], title: string) {
-  download(`${title.replace(/[^a-z0-9]+/gi, '_')}_race_notes.html`, raceNotesToHtml(notes, columns, flagEvents, title), 'text/html')
+export function downloadRaceNotesHtml(
+  notes: RaceNote[],
+  columns: NotesColumn[],
+  cautions: FlagEvent[],
+  restarts: RestartEvent[],
+  totalDurationSeconds: number | null,
+  title: string,
+) {
+  download(
+    `${title.replace(/[^a-z0-9]+/gi, '_')}_race_notes.html`,
+    raceNotesToHtml(notes, columns, cautions, restarts, totalDurationSeconds, title),
+    'text/html',
+  )
 }

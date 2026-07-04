@@ -505,6 +505,12 @@ table.race-notes-grid tr.race-notes-flag-row td {
   font-weight: 700;
   text-align: center;
 }
+table.race-notes-grid tr.race-notes-restart-row td {
+  background: rgba(63, 174, 86, 0.16);
+  color: #3fae56;
+  font-weight: 700;
+  text-align: center;
+}
 
 /* hint shown in a chart's hover tooltip when clicking the hovered point
    will link a race note to it (see PendingNoteLink) */
