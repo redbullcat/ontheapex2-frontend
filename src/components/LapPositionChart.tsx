@@ -13,6 +13,7 @@ import { computeFlagPeriods, FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { ChartExportButtons } from './ChartExportButtons'
 import { usePlayback } from '../hooks/usePlayback'
 import { PlaybackControls } from './PlaybackControls'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -86,10 +87,16 @@ export function LapPositionChart({
   laps,
   focusCarNumber,
   rankBy = 'elapsed',
+  compactFilters,
 }: {
   laps: LapRead[]
   focusCarNumber?: string
   rankBy?: 'elapsed' | 'bestLapSoFar'
+  // Moves the class/car filter controls behind the panel's gear-icon popup
+  // (see PanelSettingsPopover) — opt in for dashboard panels, which have
+  // much less width to spare than this chart's other home in the
+  // full-width sidebar/main app, where the controls stay inline as always.
+  compactFilters?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -642,16 +649,34 @@ export function LapPositionChart({
           font-size: 13px;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
-        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
-        <label className="class-filter-item">
-          <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
-          Show flag periods
-        </label>
-        <ChartExportButtons svgRef={svgRef} filename="lap_position" />
-      </div>
+      {(() => {
+        const filterControls = (
+          <>
+            <div className="chart-controls">
+              <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+              {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
+              <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+              <label className="class-filter-item">
+                <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
+                Show flag periods
+              </label>
+              <ChartExportButtons svgRef={svgRef} filename="lap_position" />
+            </div>
+            {!focusCarNumber && (
+              <div className="chart-controls">
+                <EntityFilter
+                  items={carOptions}
+                  selection={carSelection}
+                  onChange={setCarSelection}
+                  addLabel="Add car"
+                  resetLabel="Show all cars"
+                />
+              </div>
+            )}
+          </>
+        )
+        return compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls
+      })()}
       <div className="chart-controls">
         <PlaybackControls
           playback={playback}
@@ -660,17 +685,6 @@ export function LapPositionChart({
           formatValue={(v) => `Lap ${Math.round(v)}`}
         />
       </div>
-      {!focusCarNumber && (
-        <div className="chart-controls">
-          <EntityFilter
-            items={carOptions}
-            selection={carSelection}
-            onChange={setCarSelection}
-            addLabel="Add car"
-            resetLabel="Show all cars"
-          />
-        </div>
-      )}
       {colorMode === 'class' && (
         <div className="legend">
           {legendClasses.map((cls) => (

@@ -236,7 +236,7 @@ function LiveConsole({
 
       <DashboardGrid
         panelDefs={LIVE_PANEL_DEFS}
-        renderPanel={(panel) => renderLivePanel(panel, ctx, setSelectedCar)}
+        renderPanel={(panel) => renderLivePanel(panel, ctx, setSelectedCar, true)}
         carOptions={carOptions}
         onPopOut={handlePopOut}
         layoutState={layoutState}

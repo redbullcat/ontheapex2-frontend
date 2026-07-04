@@ -6,6 +6,7 @@ import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const BAR_MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const BAR_MARGIN_LEFT_MIN = 80
@@ -82,7 +83,7 @@ function formatSeconds(s: number): string {
   return `${sign}${abs.toFixed(1)}s`
 }
 
-export function PitTimeChart({ laps }: { laps: LapRead[] }) {
+export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
   const barContainerRef = useRef<HTMLDivElement>(null)
   const barSvgRef = useRef<SVGSVGElement>(null)
   const scatterContainerRef = useRef<HTMLDivElement>(null)
@@ -302,9 +303,17 @@ export function PitTimeChart({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-      </div>
+      {compactFilters ? (
+        <PanelSettingsPopover>
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          </div>
+        </PanelSettingsPopover>
+      ) : (
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+      )}
       {carStats.length === 0 ? (
         <p className="hint">No pit stop data for this selection.</p>
       ) : (

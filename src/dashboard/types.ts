@@ -10,6 +10,10 @@ export interface PanelDef {
   title: string
   category: 'field' | 'car'
   defaultSize: { w: number; h: number }
+  // True when this panel's chart has its own class/car/driver filter
+  // controls — shown via a gear icon + popup in the panel's title bar
+  // (PanelFrame) instead of dominating the panel's limited width inline.
+  hasSettings?: boolean
 }
 
 export interface PanelInstance {
