@@ -1,5 +1,3 @@
-import type { LapRead } from '../api/types'
-
 // Raw FLAG_AT_FL codes seen across timing feeds: GF/FF are green-flag
 // running, FCY is full-course yellow, SF/SC mark a safety car period, RF is
 // a red flag, CH is the live-only chequered-flag code (see app/live/state.py
@@ -41,7 +39,12 @@ export const FLAG_COLORS: Record<FlagCategory, string> = {
 // before/after a flag change) — the more severe condition wins.
 const SEVERITY: FlagCategory[] = ['green', 'unknown', 'fcy', 'safety-car', 'red', 'chequered']
 
-function dominantCategory(rows: LapRead[]): FlagCategory {
+interface FlagLapLike {
+  lap_number: number
+  flag_at_fl: string | null
+}
+
+function dominantCategory<T extends FlagLapLike>(rows: T[]): FlagCategory {
   let best: FlagCategory = 'green'
   for (const row of rows) {
     const cat = classifyFlag(row.flag_at_fl)
@@ -56,8 +59,10 @@ export interface FlagPeriod {
   category: FlagCategory
 }
 
-export function computeFlagPeriods(laps: LapRead[]): FlagPeriod[] {
-  const byLap = new Map<number, LapRead[]>()
+// Generic over the lap shape so both Replay's LapRead[] and Live's
+// LiveLap[] work unmodified — only lap_number/flag_at_fl are ever read.
+export function computeFlagPeriods<T extends FlagLapLike>(laps: T[]): FlagPeriod[] {
+  const byLap = new Map<number, T[]>()
   for (const lap of laps) {
     if (lap.lap_number == null) continue
     const arr = byLap.get(lap.lap_number)
