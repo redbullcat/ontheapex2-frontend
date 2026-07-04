@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { ReplayApp } from './replay/ReplayApp.tsx'
 import { LiveNowApp } from './live/LiveNowApp.tsx'
+import { LiveStagingPage } from './live/LiveStagingPage.tsx'
 
 // The Live Timing Replay/Live views intentionally live outside the main app
 // shell (their own tab, full browser width — see the wireframe discussion),
@@ -13,10 +14,12 @@ import { LiveNowApp } from './live/LiveNowApp.tsx'
 const path = window.location.pathname
 const isReplay = path === '/replay'
 const isLiveNow = path === '/live-now'
+const isLiveStaging = path === '/live-staging'
 
 function render() {
   if (isReplay) return <ReplayApp />
   if (isLiveNow) return <LiveNowApp />
+  if (isLiveStaging) return <LiveStagingPage />
   return <App />
 }
 
