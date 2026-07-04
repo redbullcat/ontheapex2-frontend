@@ -220,9 +220,15 @@ export function renderReplayPanel(
         <RaceNotesPanel
           sessionKey={ctx.sessionKey}
           title={ctx.title}
-          laps={ctx.data.laps}
+          // "As if live" — a caution/restart (or anything derived from laps)
+          // that hasn't actually happened yet at the current scrub position
+          // shouldn't be visible, same principle every other panel here
+          // already follows (see ctx.visibleLaps/RaceLogPanel's own time
+          // filter above). Using the full unfiltered data would show the
+          // whole session's incidents even while scrubbed back to the start.
+          laps={ctx.visibleLaps}
           classes={ctx.data.classes}
-          raceLog={ctx.data.raceLog}
+          raceLog={ctx.data.raceLog.filter((e) => e.elapsedTimeMillis / 1000 <= ctx.currentTime)}
           currentElapsedSeconds={ctx.currentTime}
           currentRemainingSeconds={Math.max(0, ctx.data.maxTime - ctx.currentTime)}
           carOptions={ctx.data.cars

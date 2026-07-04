@@ -301,17 +301,17 @@ export function RaceNotesPanel({
               </tr>
             </thead>
             <tbody>
-              {timeline.map((row, i) =>
+              {timeline.map((row) =>
                 row.type === 'flag' ? (
-                  <tr className="race-notes-flag-row" key={`flag-${i}`}>
+                  <tr className="race-notes-flag-row" key={row.key}>
                     <td colSpan={columnCount + 2}>{row.label}</td>
                   </tr>
                 ) : row.type === 'restart' ? (
-                  <tr className="race-notes-restart-row" key={`restart-${i}`}>
+                  <tr className="race-notes-restart-row" key={row.key}>
                     <td colSpan={columnCount + 2}>{row.label}</td>
                   </tr>
                 ) : (
-                  <tr key={`hour-${row.hour}-${i}`}>
+                  <tr key={row.key}>
                     <td className="race-notes-hour">{row.hour}</td>
                     <td className="race-notes-leader">{leaderText(row.leader)}</td>
                     {columns.map((col) => (
