@@ -579,6 +579,36 @@ table.race-notes-grid tr.race-notes-restart-row td {
   border-radius: 3px;
 }
 
+.theme-toggle-standalone {
+  border: 1px solid var(--replay-line-strong);
+  background: transparent;
+  color: var(--replay-muted);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.theme-toggle-standalone:hover {
+  color: var(--replay-ink);
+  border-color: var(--replay-accent);
+}
+
+.live-due-to-start-pill {
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--replay-muted);
+  border: 1px solid var(--replay-line-strong);
+  background: color-mix(in srgb, var(--replay-muted) 14%, transparent);
+  padding: 3px 9px;
+  border-radius: 3px;
+}
+
 /* filter components (ClassFilter/EntityFilter) are shared with the main
    app but this view doesn't import App.css, so they're re-themed here
    using the replay token set instead of duplicating the components. */
@@ -1010,6 +1040,12 @@ button.replay-play:hover {
 }
 
 .car-hover-tooltip {
+  /* Fixed (viewport) rather than absolute (container) positioning — the
+     leaderboard's wrapping div scrolls horizontally (.replay-board-wrap),
+     which per the CSS overflow spec forces its vertical overflow to `auto`
+     too, clipping an absolutely-positioned tooltip anchored inside it for
+     any row that isn't right at the top of the visible scroll area. */
+  position: fixed;
   white-space: normal;
 }
 

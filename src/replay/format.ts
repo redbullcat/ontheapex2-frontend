@@ -16,7 +16,7 @@ export function formatGap(seconds: number | null, lapsDown?: number | null): str
   if (lapsDown != null && lapsDown > 0) return `+${lapsDown} Lap${lapsDown === 1 ? '' : 's'}`
   if (seconds == null) return '—'
   const sign = seconds > 0 ? '+' : seconds < 0 ? '-' : ''
-  return `${sign}${Math.abs(seconds).toFixed(1)}s`
+  return `${sign}${Math.abs(seconds).toFixed(3)}s`
 }
 
 export function formatLapTime(seconds: number | null): string {

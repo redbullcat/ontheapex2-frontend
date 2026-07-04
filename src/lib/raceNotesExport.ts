@@ -46,12 +46,12 @@ export function raceNotesToMarkdown(
   title: string,
 ): string {
   const timeline = buildNotesTimeline(notes, columns, cautions, restarts, totalDurationSeconds)
-  if (timeline.length === 0) return `# ${title} — race notes\n\nNo notes logged yet.`
+  if (timeline.length === 0) return `# ${title} — session notes\n\nNo notes logged yet.`
 
   const allColumns = orderedColumns(columns)
   const header = ['Hour', 'Leader', ...allColumns.map((c) => c.label)]
   const sep = header.map(() => '---')
-  const lines = [`# ${title} — race notes`, '', `| ${header.join(' | ')} |`, `| ${sep.join(' | ')} |`]
+  const lines = [`# ${title} — session notes`, '', `| ${header.join(' | ')} |`, `| ${sep.join(' | ')} |`]
 
   for (const row of timeline) {
     if (row.type === 'flag' || row.type === 'restart') {
@@ -104,7 +104,7 @@ export function raceNotesToHtml(
 <html>
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(title)} — race notes</title>
+<title>${escapeHtml(title)} — session notes</title>
 <style>
   body { font-family: system-ui, sans-serif; padding: 24px; color: #111; background: #fff; }
   table { border-collapse: collapse; width: 100%; }
@@ -116,7 +116,7 @@ export function raceNotesToHtml(
 </style>
 </head>
 <body>
-<h1>${escapeHtml(title)} — race notes</h1>
+<h1>${escapeHtml(title)} — session notes</h1>
 <table>
 <thead><tr>${headerCells}</tr></thead>
 <tbody>
@@ -147,7 +147,7 @@ export function downloadRaceNotesMarkdown(
   title: string,
 ) {
   download(
-    `${title.replace(/[^a-z0-9]+/gi, '_')}_race_notes.md`,
+    `${title.replace(/[^a-z0-9]+/gi, '_')}_session_notes.md`,
     raceNotesToMarkdown(notes, columns, cautions, restarts, totalDurationSeconds, title),
     'text/markdown',
   )
@@ -162,7 +162,7 @@ export function downloadRaceNotesHtml(
   title: string,
 ) {
   download(
-    `${title.replace(/[^a-z0-9]+/gi, '_')}_race_notes.html`,
+    `${title.replace(/[^a-z0-9]+/gi, '_')}_session_notes.html`,
     raceNotesToHtml(notes, columns, cautions, restarts, totalDurationSeconds, title),
     'text/html',
   )

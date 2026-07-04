@@ -7,6 +7,8 @@ interface LapLike {
   class: string | null
   team: string | null
   driver_name: string | null
+  lap_time_seconds?: number | null
+  is_valid?: boolean
 }
 
 // Raised by a chart (see LapPositionChart/ReplayTrendChart's "+ Note"
@@ -77,8 +79,14 @@ export function captureRaceNoteContext(
   laps: LapLike[],
   elapsedCutoff: number | null,
   linkedCarNumber?: string | null,
+  // Qualifying/practice sessions rank by best lap time, not race progress —
+  // see computeFieldStateAtMoment's own comment for why using race-progress
+  // ranking there produced nonsense positions (a session leader on best lap
+  // time could show up mid-pack or worse, since lap count/elapsed progress
+  // during quali reflects how many out/in-laps a car has done, not pace).
+  isRaceSession = true,
 ): { overallLeader: RaceNote['overallLeader']; classLeaders: ClassLeaderSnapshot[]; linkedCar: LinkedCarSnapshot | null } {
-  const field = computeFieldStateAtMoment(laps, elapsedCutoff)
+  const field = computeFieldStateAtMoment(laps, elapsedCutoff, !isRaceSession)
 
   const overallRow = field.find((r) => r.position === 1) ?? null
   const overallLeader = overallRow ? { carNumber: overallRow.car_number, driverName: overallRow.driver_name } : null
@@ -123,8 +131,14 @@ export function createRaceNote(params: {
   // session isn't happening in real time at all.
   raceLocalTimestamp: string | null
   columnId: string
+  isRaceSession?: boolean
 }): RaceNote {
-  const { overallLeader, classLeaders, linkedCar } = captureRaceNoteContext(params.laps, params.elapsedCutoff, params.linkedCarNumber)
+  const { overallLeader, classLeaders, linkedCar } = captureRaceNoteContext(
+    params.laps,
+    params.elapsedCutoff,
+    params.linkedCarNumber,
+    params.isRaceSession,
+  )
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     text: params.text,
