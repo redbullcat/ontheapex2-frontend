@@ -6,6 +6,13 @@ import { formatClock } from '../replay/format'
 
 export interface NotesHourRow {
   type: 'hour'
+  // Stable across renders even as the row set itself grows/shrinks (Replay
+  // scrubbing reveals/hides rows as it filters by current time) — keyed by
+  // hour + position within that hour's own segments, not by position in the
+  // overall rows array, so React doesn't recycle a DOM node (and any local
+  // edit-mode state in it) onto a different row than the one the user was
+  // looking at.
+  key: string
   hour: number
   // The overall leader as of the last note logged in this hour, carried
   // forward from the previous hour if this hour has no notes of its own —
@@ -17,12 +24,14 @@ export interface NotesHourRow {
 
 export interface NotesFlagRow {
   type: 'flag'
+  key: string
   event: FlagEvent
   label: string
 }
 
 export interface NotesRestartRow {
   type: 'restart'
+  key: string
   event: RestartEvent
   label: string
 }
@@ -111,6 +120,7 @@ export function buildNotesTimeline(
 
     let noteCursor = 0
     let isFirstSegment = true
+    let segmentIndex = 0
 
     function emitSegment(segmentNotes: RaceNote[]) {
       // Always emit the hour's first segment (even empty) so every hour
@@ -123,8 +133,9 @@ export function buildNotesTimeline(
         const last = segmentNotes[segmentNotes.length - 1]
         if (last.overallLeader) lastKnownLeader = last.overallLeader
       }
-      rows.push({ type: 'hour', hour, leader: lastKnownLeader, byColumn: byColumnFor(segmentNotes) })
+      rows.push({ key: `hour-${hour}-seg-${segmentIndex}`, type: 'hour', hour, leader: lastKnownLeader, byColumn: byColumnFor(segmentNotes) })
       isFirstSegment = false
+      segmentIndex++
     }
 
     for (const marker of markers) {
@@ -135,9 +146,19 @@ export function buildNotesTimeline(
       }
       emitSegment(segment)
       if (marker.kind === 'flag') {
-        rows.push({ type: 'flag', event: marker.event, label: flagEventLabel(marker.event, totalDurationSeconds) })
+        rows.push({
+          key: `flag-${marker.event.category}-${marker.event.occurrence}`,
+          type: 'flag',
+          event: marker.event,
+          label: flagEventLabel(marker.event, totalDurationSeconds),
+        })
       } else {
-        rows.push({ type: 'restart', event: marker.event, label: restartEventLabel(marker.event, totalDurationSeconds) })
+        rows.push({
+          key: `restart-${marker.event.lapNumber}-${marker.event.elapsedSeconds}`,
+          type: 'restart',
+          event: marker.event,
+          label: restartEventLabel(marker.event, totalDurationSeconds),
+        })
       }
     }
     emitSegment(inHour.slice(noteCursor))
