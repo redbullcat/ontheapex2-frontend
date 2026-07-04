@@ -31,7 +31,29 @@ function leaderText(leader: { carNumber: string; driverName: string | null } | n
   return `#${leader.carNumber}${leader.driverName ? ` (${leader.driverName})` : ''}`
 }
 
-function NoteItem({ note, onDelete }: { note: RaceNote; onDelete: () => void }) {
+function NoteItem({
+  note,
+  onSaveText,
+  onRequestDelete,
+}: {
+  note: RaceNote
+  onSaveText: (text: string) => void
+  onRequestDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(note.text)
+
+  function startEdit() {
+    setDraft(note.text)
+    setEditing(true)
+  }
+
+  function save() {
+    const trimmed = draft.trim()
+    if (trimmed) onSaveText(trimmed)
+    setEditing(false)
+  }
+
   return (
     <div className="race-note-item">
       <div className="race-note-item-meta">
@@ -45,11 +67,40 @@ function NoteItem({ note, onDelete }: { note: RaceNote; onDelete: () => void }) 
           </span>
         )}
         {note.raceLocalTimestamp && <span title="Race's own local time">{new Date(note.raceLocalTimestamp).toLocaleTimeString()}</span>}
-        <button type="button" className="race-note-delete" onClick={onDelete} title="Delete note">
+        {!editing && (
+          <button type="button" className="race-note-edit" onClick={startEdit} title="Edit note">
+            ✎
+          </button>
+        )}
+        <button type="button" className="race-note-delete" onClick={onRequestDelete} title="Delete note">
           ✕
         </button>
       </div>
-      <div className="race-note-text">{note.text}</div>
+      {editing ? (
+        <div className="race-note-edit-form">
+          <textarea
+            className="race-notes-textarea"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            rows={2}
+            autoFocus
+          />
+          <div className="race-note-edit-actions">
+            <button type="button" className="replay-btn" onClick={save} disabled={!draft.trim()}>
+              Save
+            </button>
+            <button type="button" className="replay-btn" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="race-note-text">{note.text}</div>
+      )}
     </div>
   )
 }
@@ -93,12 +144,13 @@ export function RaceNotesPanel({
   // ranking produces nonsense positions outside of an actual race.
   isRaceSession: boolean
 }) {
-  const { notes, addNote, removeNote } = useRaceNotes(sessionKey)
+  const { notes, addNote, removeNote, updateNoteText } = useRaceNotes(sessionKey)
   const { columns, addColumn, removeColumn, renameColumn } = useNotesColumns(sessionKey, classes)
   const [text, setText] = useState('')
   const [manualCar, setManualCar] = useState('')
   const [columnId, setColumnId] = useState(GENERAL_COLUMN_ID)
   const [newColumnName, setNewColumnName] = useState('')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const totalDuration =
     currentElapsedSeconds != null && currentRemainingSeconds != null ? currentElapsedSeconds + currentRemainingSeconds : null
@@ -259,19 +311,29 @@ export function RaceNotesPanel({
                     <td colSpan={columnCount + 2}>{row.label}</td>
                   </tr>
                 ) : (
-                  <tr key={`hour-${row.hour}`}>
+                  <tr key={`hour-${row.hour}-${i}`}>
                     <td className="race-notes-hour">{row.hour}</td>
                     <td className="race-notes-leader">{leaderText(row.leader)}</td>
                     {columns.map((col) => (
                       <td key={col.id}>
                         {(row.byColumn.get(col.id) ?? []).map((note) => (
-                          <NoteItem key={note.id} note={note} onDelete={() => removeNote(note.id)} />
+                          <NoteItem
+                            key={note.id}
+                            note={note}
+                            onSaveText={(newText) => updateNoteText(note.id, newText)}
+                            onRequestDelete={() => setPendingDeleteId(note.id)}
+                          />
                         ))}
                       </td>
                     ))}
                     <td>
                       {(row.byColumn.get(GENERAL_COLUMN_ID) ?? []).map((note) => (
-                        <NoteItem key={note.id} note={note} onDelete={() => removeNote(note.id)} />
+                        <NoteItem
+                          key={note.id}
+                          note={note}
+                          onSaveText={(newText) => updateNoteText(note.id, newText)}
+                          onRequestDelete={() => setPendingDeleteId(note.id)}
+                        />
                       ))}
                     </td>
                   </tr>
@@ -300,6 +362,29 @@ export function RaceNotesPanel({
           Export HTML
         </button>
       </div>
+
+      {pendingDeleteId && (
+        <div className="race-notes-delete-confirm-backdrop" onClick={() => setPendingDeleteId(null)}>
+          <div className="race-notes-delete-confirm" onClick={(e) => e.stopPropagation()}>
+            <p>Are you sure you want to delete this note?</p>
+            <div className="race-notes-delete-confirm-actions">
+              <button
+                type="button"
+                className="replay-btn race-notes-delete-confirm-danger"
+                onClick={() => {
+                  removeNote(pendingDeleteId)
+                  setPendingDeleteId(null)
+                }}
+              >
+                Delete
+              </button>
+              <button type="button" className="replay-btn" onClick={() => setPendingDeleteId(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
