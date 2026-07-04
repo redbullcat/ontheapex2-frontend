@@ -7,6 +7,8 @@ import { computeFlagTimeline } from '../lib/flagEvents'
 import { downloadRaceNotesHtml, downloadRaceNotesMarkdown } from '../lib/raceNotesExport'
 import { formatClock } from '../replay/format'
 import { getTeamDisplayName } from '../lib/identityColors'
+import { buildCarReferenceOptions } from '../lib/carReference'
+import { SlashReferenceTextarea } from './SlashReferenceTextarea'
 import type { RaceLogEntry } from '../api/types'
 
 interface LapLike {
@@ -33,15 +35,27 @@ function leaderText(leader: { carNumber: string; driverName: string | null } | n
 
 function NoteItem({
   note,
+  laps,
+  isRaceSession,
   onSaveText,
   onRequestDelete,
 }: {
   note: RaceNote
+  laps: LapLike[]
+  isRaceSession: boolean
   onSaveText: (text: string) => void
   onRequestDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(note.text)
+
+  // Referencing another car while editing uses the field as it stood at
+  // this note's own moment, not "now" — editing an old note should still
+  // reflect the positions it actually happened at.
+  const carRefOptions = useMemo(
+    () => buildCarReferenceOptions(laps, note.elapsedSeconds, isRaceSession),
+    [laps, note.elapsedSeconds, isRaceSession],
+  )
 
   function startEdit() {
     setDraft(note.text)
@@ -78,16 +92,17 @@ function NoteItem({
       </div>
       {editing ? (
         <div className="race-note-edit-form">
-          <textarea
+          <SlashReferenceTextarea
             className="race-notes-textarea"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
+            onChange={setDraft}
+            options={carRefOptions}
+            rows={2}
+            autoFocus
+            onKeyDownCapture={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
               if (e.key === 'Escape') setEditing(false)
             }}
-            rows={2}
-            autoFocus
           />
           <div className="race-note-edit-actions">
             <button type="button" className="replay-btn" onClick={save} disabled={!draft.trim()}>
@@ -156,6 +171,12 @@ export function RaceNotesPanel({
     currentElapsedSeconds != null && currentRemainingSeconds != null ? currentElapsedSeconds + currentRemainingSeconds : null
 
   const { cautions, restarts } = useMemo(() => computeFlagTimeline(raceLog), [raceLog])
+
+  const addElapsedCutoff = pendingLink ? pendingLink.elapsedSeconds : currentElapsedSeconds
+  const addCarRefOptions = useMemo(
+    () => buildCarReferenceOptions(laps, addElapsedCutoff, isRaceSession),
+    [laps, addElapsedCutoff, isRaceSession],
+  )
 
   // Suggest a column whenever the linked/selected car changes — matching a
   // column whose label is that car's class, falling back to General. Left
@@ -268,15 +289,16 @@ export function RaceNotesPanel({
           ))}
           <option value={GENERAL_COLUMN_ID}>General</option>
         </select>
-        <textarea
+        <SlashReferenceTextarea
           className="race-notes-textarea"
-          placeholder="What's happening… e.g. left rear puncture at turn 3, trundles back round to the pits"
+          placeholder="What's happening… e.g. left rear puncture at turn 3, trundles back round to the pits. Type / to reference another car."
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
+          onChange={setText}
+          options={addCarRefOptions}
+          rows={2}
+          onKeyDownCapture={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAdd()
           }}
-          rows={2}
         />
         <button type="button" className="replay-btn" onClick={handleAdd} disabled={!text.trim()}>
           Add note
@@ -320,6 +342,8 @@ export function RaceNotesPanel({
                           <NoteItem
                             key={note.id}
                             note={note}
+                            laps={laps}
+                            isRaceSession={isRaceSession}
                             onSaveText={(newText) => updateNoteText(note.id, newText)}
                             onRequestDelete={() => setPendingDeleteId(note.id)}
                           />
@@ -331,6 +355,8 @@ export function RaceNotesPanel({
                         <NoteItem
                           key={note.id}
                           note={note}
+                          laps={laps}
+                          isRaceSession={isRaceSession}
                           onSaveText={(newText) => updateNoteText(note.id, newText)}
                           onRequestDelete={() => setPendingDeleteId(note.id)}
                         />

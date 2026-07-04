@@ -360,8 +360,8 @@ table.replay-board tr:last-child td {
   gap: 8px;
 }
 .race-notes-textarea {
-  flex: 1 1 260px;
-  min-width: 220px;
+  width: 100%;
+  box-sizing: border-box;
   font-family: inherit;
   font-size: 12px;
   padding: 6px 8px;
@@ -370,6 +370,10 @@ table.replay-board tr:last-child td {
   background: var(--replay-surface);
   color: var(--replay-ink);
   resize: vertical;
+}
+.race-notes-add .slash-reference-wrap {
+  flex: 1 1 260px;
+  min-width: 220px;
 }
 .race-notes-linked-banner {
   display: flex;
@@ -460,6 +464,61 @@ table.race-notes-grid th {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.slash-reference-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.slash-reference-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 2px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.slash-reference-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.slash-reference-option.active,
+.slash-reference-option:hover {
+  background: var(--replay-accent-soft);
+}
+.slash-reference-pos {
+  font-family: var(--replay-mono);
+  color: var(--replay-muted);
+  width: 32px;
+  flex: none;
+}
+.slash-reference-car {
+  font-family: var(--replay-mono);
+  font-weight: 700;
+  flex: none;
+}
+.slash-reference-driver {
+  color: var(--replay-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slash-reference-team {
+  color: var(--replay-muted);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .race-note-edit-form .race-notes-textarea {
   font-size: 12px;
