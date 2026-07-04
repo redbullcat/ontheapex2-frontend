@@ -47,6 +47,7 @@ export function ReplayTrendChart({
   expanded,
   onToggleExpand,
   compactFilters,
+  onRequestNoteLink,
 }: {
   data: TrendChartData
   mode: 'gap' | 'position'
@@ -60,6 +61,10 @@ export function ReplayTrendChart({
   // much less width to spare than this chart's other home in the
   // full-width sidebar/main app, where the filters stay inline as always.
   compactFilters?: boolean
+  // Clicking the hovered point links a race note to that exact car/lap —
+  // the caller resolves elapsed_seconds for the click since this chart's
+  // own data (gap/position by lap) has no elapsed-time field on it.
+  onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -69,6 +74,10 @@ export function ReplayTrendChart({
   const [hover, setHover] = useState<{ x: number; y: number; car: string; team: string | null; value: number; lap: number } | null>(
     null,
   )
+  // Synchronous mirror of `hover` for the overlay's click handler below —
+  // that handler is registered once per chart rebuild, so it can't close
+  // over each mousemove's fresh state.
+  const hoverRef = useRef<typeof hover>(null)
 
   const height = expanded ? EXPANDED_HEIGHT : HEIGHT
 
@@ -248,28 +257,37 @@ export function ReplayTrendChart({
           }
         }
         if (!nearest) {
+          hoverRef.current = null
           setHover(null)
           return
         }
         const rect = containerRef.current?.getBoundingClientRect()
-        setHover({
+        const next = {
           x: event.clientX - (rect?.left ?? 0),
           y: event.clientY - (rect?.top ?? 0),
           car: nearest.series.car,
           team: nearest.series.team,
           value: nearest.point.value,
           lap: nearest.point.lap,
-        })
+        }
+        hoverRef.current = next
+        setHover(next)
         const car = nearest.series.car
         pathsSelRef.current?.attr('opacity', (d) => (d.car === car ? 1 : 0.25)).attr('stroke-width', (d) => (d.car === car ? 2.6 : 1.6))
         pathsSelRef.current?.filter((d) => d.car === car).raise()
       })
       .on('mouseleave', () => {
+        hoverRef.current = null
         setHover(null)
         pathsSelRef.current?.attr('opacity', 0.85).attr('stroke-width', 1.6)
       })
+      .on('click', () => {
+        const h = hoverRef.current
+        if (!h || !onRequestNoteLink) return
+        onRequestNoteLink(h.car, h.lap)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSeries, width, height, mode])
+  }, [visibleSeries, width, height, mode, onRequestNoteLink])
 
   // Cheap per-tick update: just the clip width.
   useEffect(() => {
@@ -307,6 +325,7 @@ export function ReplayTrendChart({
           <div className="replay-tooltip" style={{ left: hover.x, top: hover.y }}>
             <strong>#{hover.car}</strong> {getTeamDisplayName(hover.team)}
             <div>{mode === 'position' ? `P${hover.value}` : `+${hover.value.toFixed(1)}s`} · Lap {hover.lap}</div>
+            {onRequestNoteLink && <span className="tooltip-note-hint">Click to link a race note here</span>}
           </div>
         )}
       </div>

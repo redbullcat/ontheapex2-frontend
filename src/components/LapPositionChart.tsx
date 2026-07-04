@@ -88,6 +88,7 @@ export function LapPositionChart({
   focusCarNumber,
   rankBy = 'elapsed',
   compactFilters,
+  onRequestNoteLink,
 }: {
   laps: LapRead[]
   focusCarNumber?: string
@@ -97,11 +98,22 @@ export function LapPositionChart({
   // much less width to spare than this chart's other home in the
   // full-width sidebar/main app, where the controls stay inline as always.
   compactFilters?: boolean
+  // Clicking the hovered point links a race note to that exact car/lap —
+  // only wired up from the dashboard's race-notes panel context, so this
+  // chart's other homes (main app, car-detail modal) are unaffected. The
+  // caller (not this chart) resolves elapsed_seconds for the click, since
+  // ReplayTrendChart — the other chart with this same feature — has no
+  // per-lap elapsed data of its own to do that lookup with.
+  onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [hover, setHover] = useState<HoverState | null>(null)
+  // Synchronous mirror of `hover` for the overlay's click handler below —
+  // that handler is registered once per chart rebuild (see the effect's
+  // dependency list), so it can't close over each mousemove's fresh state.
+  const hoverRef = useRef<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(() => {
     if (!focusCarNumber) return null
     const cls = laps.find((l) => l.car_number === focusCarNumber)?.class
@@ -527,7 +539,7 @@ export function LapPositionChart({
         pathsSelRef.current?.filter((d) => d.car_number === nearestCar).raise()
 
         const rect = containerRef.current?.getBoundingClientRect()
-        setHover({
+        const next: HoverState = {
           x: event.clientX - (rect?.left ?? 0),
           y: event.clientY - (rect?.top ?? 0),
           car: nearest.car_number,
@@ -536,14 +548,22 @@ export function LapPositionChart({
           position: nearest.position,
           lap: nearest.lap_number,
           lapTime: nearest.lap_time_seconds,
-        })
+        }
+        hoverRef.current = next
+        setHover(next)
       })
       .on('mouseleave', () => {
         crosshair.style('display', 'none')
         pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
+        hoverRef.current = null
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber])
+      .on('click', () => {
+        const h = hoverRef.current
+        if (!h || !onRequestNoteLink) return
+        onRequestNoteLink(h.car, h.lap)
+      })
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink])
 
   // Cheap per-frame update: just the clip-rect width and marker positions,
   // driven by playback.current — deliberately not touching the dependency
@@ -715,6 +735,7 @@ export function LapPositionChart({
             P{hover.position} · {hover.cls} · Lap {hover.lap}
             {hover.lapTime != null ? ` · ${hover.lapTime.toFixed(3)}s` : ''}
           </div>
+          {onRequestNoteLink && <span className="tooltip-note-hint">Click to link a race note here</span>}
         </div>
       )}
     </div>

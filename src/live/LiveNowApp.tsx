@@ -18,6 +18,7 @@ import { useDashboardLayout } from '../dashboard/useDashboardLayout'
 import { useBroadcastChannel } from '../dashboard/useBroadcastChannel'
 import { buildPopoutUrl, openPopout } from '../dashboard/popout'
 import type { PanelInstance } from '../dashboard/types'
+import type { PendingNoteLink } from '../lib/raceNotes'
 import '../replay/replay.css'
 import './live.css'
 
@@ -121,7 +122,19 @@ function PoppedOutLivePanel({
   const [delaySeconds, setDelaySeconds] = useState(initialDelaySeconds)
   useBroadcastChannel<number>(`live-delay:${griiipSessionId}`, setDelaySeconds)
 
-  const ctx: LivePanelContext = { data, title, delaySeconds }
+  const ctx: LivePanelContext = {
+    data,
+    title,
+    delaySeconds,
+    sessionKey: String(griiipSessionId),
+    clock: { elapsedSeconds: null, remainingSeconds: null },
+    // Note-linking from a chart click only makes sense within the main
+    // dashboard, where a race-notes panel might actually be open to
+    // receive it — a pop-out window is just one chart on its own.
+    pendingNoteLink: null,
+    onRequestNoteLink: () => {},
+    onConsumeNoteLink: () => {},
+  }
   const panelTitle = LIVE_PANEL_DEFS[kind]?.title ?? kind
 
   return (
@@ -165,6 +178,7 @@ function LiveConsole({
   const flagCategory = classifyFlag(data.current_flag)
   const isRaceSession = isLiveRaceSession(data.session_type)
   const [selectedCar, setSelectedCar] = useState<string | null>(null)
+  const [pendingNoteLink, setPendingNoteLink] = useState<PendingNoteLink | null>(null)
 
   const broadcastDelay = useBroadcastChannel<number>(`live-delay:${griiipSessionId}`)
   useEffect(() => {
@@ -180,7 +194,30 @@ function LiveConsole({
     return data.laps.map((lap, i) => liveLapToLapRead(lap, i))
   }, [data.laps, selectedCar])
 
-  const ctx: LivePanelContext = { data, title, delaySeconds }
+  // Stable identities across renders — these two are in the dependency
+  // array of chart-rebuilding D3 effects (LapPositionChart/ReplayTrendChart),
+  // so a fresh function reference every render (Live re-renders every ~2s
+  // poll) would force those charts to tear down and rebuild their whole SVG
+  // far more often than the data they render actually changes.
+  const handleRequestNoteLink = useCallback(
+    (carNumber: string, lapNumber: number) => {
+      const row = data.laps.find((l) => l.car_number === carNumber && l.lap_number === lapNumber)
+      setPendingNoteLink({ carNumber, lapNumber, elapsedSeconds: row?.elapsed_seconds ?? null })
+    },
+    [data.laps],
+  )
+  const handleConsumeNoteLink = useCallback(() => setPendingNoteLink(null), [])
+
+  const ctx: LivePanelContext = {
+    data,
+    title,
+    delaySeconds,
+    sessionKey: String(griiipSessionId),
+    clock,
+    pendingNoteLink,
+    onRequestNoteLink: handleRequestNoteLink,
+    onConsumeNoteLink: handleConsumeNoteLink,
+  }
 
   const carOptions = useMemo(
     () =>
