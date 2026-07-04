@@ -1,5 +1,6 @@
 import { Select } from './Select'
 import type { LiveSessionSummary } from '../api/types'
+import { liveNowUrl } from '../live/liveNowUrl'
 
 interface Option {
   value: string
@@ -7,12 +8,6 @@ interface Option {
 }
 
 export type Theme = 'light' | 'dark'
-
-function liveNowUrl(session: LiveSessionSummary): string {
-  const title = [session.series_name, session.event_name, session.session_name].filter(Boolean).join(' · ')
-  const params = new URLSearchParams({ sid: String(session.griiip_session_id), title })
-  return `/live-now?${params.toString()}`
-}
 
 export function Sidebar({
   open,
@@ -105,6 +100,12 @@ export function Sidebar({
           ))}
         </div>
       )}
+
+      <p className="replay-entry-point">
+        <a href="/live-staging" target="_blank" rel="noopener noreferrer">
+          Check for live sessions ↗
+        </a>
+      </p>
 
       <Select label="Series" value={seriesValue} options={series} onChange={onSeriesChange} disabled={seriesDisabled} />
       <Select label="Year" value={yearValue} options={years} onChange={onYearChange} disabled={yearDisabled} />
