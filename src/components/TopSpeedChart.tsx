@@ -6,6 +6,7 @@ import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -20,7 +21,7 @@ interface CarTopSpeed {
   lap: number | null
 }
 
-export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
+export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
@@ -212,10 +213,15 @@ export function TopSpeedChart({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <ChartExportButtons svgRef={svgRef} filename="top_speed" />
-      </div>
+      {(() => {
+        const filterControls = (
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+            <ChartExportButtons svgRef={svgRef} filename="top_speed" />
+          </div>
+        )
+        return compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls
+      })()}
       {cars.length === 0 ? <p className="hint">No top speed data for this selection.</p> : <svg ref={svgRef} />}
     </div>
   )

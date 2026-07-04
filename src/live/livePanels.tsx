@@ -29,6 +29,9 @@ import { TimeLossTrace } from '../components/TimeLossTrace'
 import { usePositionArrow } from './usePositionArrow'
 import { PositionChangeArrow } from '../components/PositionChangeArrow'
 import { isLiveRaceSession } from './liveSessionType'
+import { TopSpeedChart } from '../components/TopSpeedChart'
+import { SectorLeaderboardTicker } from '../components/SectorLeaderboardTicker'
+import { BattleZones } from '../components/BattleZones'
 
 export interface LivePanelContext {
   data: LiveState
@@ -54,6 +57,9 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'race-stats': { kind: 'race-stats', title: 'Race stats', category: 'field', defaultSize: { w: 6, h: 7 } },
   'track-map': { kind: 'track-map', title: 'Track map', category: 'field', defaultSize: { w: 4, h: 13 } },
   'circle-of-doom': { kind: 'circle-of-doom', title: 'Circle of doom', category: 'field', defaultSize: { w: 4, h: 13 } },
+  'top-speed': { kind: 'top-speed', title: 'Top speed', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
+  'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
+  'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -269,13 +275,29 @@ export function renderLivePanel(
     case 'pace':
     case 'pit-stops':
     case 'stints':
-    case 'race-stats': {
+    case 'race-stats':
+    case 'top-speed': {
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
       if (panel.kind === 'pace') return <PaceChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'pit-stops') return <PitTimeChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'stints') return <StintLengthDistribution laps={adaptedLaps} />
+      if (panel.kind === 'top-speed') return <TopSpeedChart laps={adaptedLaps} compactFilters={compactFilters} />
       return <RaceStats laps={adaptedLaps} />
     }
+    case 'sector-ticker':
+      return <SectorLeaderboardTicker laps={data.laps} />
+    case 'battle-zones':
+      return (
+        <BattleZones
+          rows={data.standings.map((s) => ({
+            car_number: s.car_number,
+            team: s.team,
+            class: s.class,
+            position: s.position,
+            intervalSeconds: s.gap_to_next_laps != null ? null : s.gap_to_next_seconds,
+          }))}
+        />
+      )
     case 'gap-evolution':
       return <GapEvolutionPanel data={data} compactFilters={compactFilters} />
     case 'lap-position':

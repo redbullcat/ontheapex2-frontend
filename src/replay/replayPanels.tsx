@@ -20,6 +20,9 @@ import { PitTimeChart } from '../components/PitTimeChart'
 import { CarStintTable } from '../components/CarStintTable'
 import { CarLapHistoryTable } from '../components/CarLapHistoryTable'
 import { TimeLossTrace } from '../components/TimeLossTrace'
+import { TopSpeedChart } from '../components/TopSpeedChart'
+import { SectorLeaderboardTicker } from '../components/SectorLeaderboardTicker'
+import { BattleZones } from '../components/BattleZones'
 import { formatClock } from './format'
 import type { RaceLogType } from '../api/types'
 
@@ -51,6 +54,10 @@ export const REPLAY_PANEL_DEFS: Record<string, PanelDef> = {
   },
   'track-map': { kind: 'track-map', title: 'Track map', category: 'field', defaultSize: { w: 4, h: 13 } },
   'circle-of-doom': { kind: 'circle-of-doom', title: 'Circle of doom', category: 'field', defaultSize: { w: 4, h: 13 } },
+  'top-speed': { kind: 'top-speed', title: 'Top speed', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
+  'pit-stops': { kind: 'pit-stops', title: 'Pit stops', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
+  'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
+  'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -170,6 +177,20 @@ export function renderReplayPanel(
         />
       )
     }
+    case 'top-speed':
+      return <TopSpeedChart laps={ctx.visibleLaps} compactFilters={compactFilters} />
+    case 'pit-stops':
+      return <PitTimeChart laps={ctx.visibleLaps} compactFilters={compactFilters} />
+    case 'sector-ticker':
+      return <SectorLeaderboardTicker laps={ctx.visibleLaps} />
+    case 'battle-zones':
+      return (
+        <BattleZones
+          rows={ctx.rows
+            .filter((r) => ctx.activeClasses.has(r.class))
+            .map((r) => ({ car_number: r.car_number, team: r.team, class: r.class, position: r.position, intervalSeconds: r.interval }))}
+        />
+      )
     case 'car-position-history':
       return panel.carNumber ? (
         <LapPositionChart
