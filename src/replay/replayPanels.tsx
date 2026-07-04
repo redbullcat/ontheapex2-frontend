@@ -23,6 +23,8 @@ import { TimeLossTrace } from '../components/TimeLossTrace'
 import { TopSpeedChart } from '../components/TopSpeedChart'
 import { SectorLeaderboardTicker } from '../components/SectorLeaderboardTicker'
 import { BattleZones } from '../components/BattleZones'
+import { RaceNotesPanel } from '../components/RaceNotesPanel'
+import type { PendingNoteLink } from '../lib/raceNotes'
 import { formatClock } from './format'
 import type { RaceLogType } from '../api/types'
 
@@ -38,6 +40,17 @@ export interface ReplayPanelContext {
   // same principle as the car detail modal's own carDetailLaps. Computed
   // once per (floored) second by the caller, not per-panel.
   visibleLaps: ReplayData['laps']
+  // A stable id for this session's notes to be stored under (see
+  // hooks/useRaceNotes) — distinct from `title` since titles aren't
+  // guaranteed unique/stable the way a session id is.
+  sessionKey: string
+  // Set when a chart's hover tooltip was clicked to link a race note to
+  // that exact car/lap (see ReplayTrendChart/LapPositionChart's
+  // onRequestNoteLink) — consumed by the race-notes panel once it's
+  // adopted the link into a draft note.
+  pendingNoteLink: PendingNoteLink | null
+  onRequestNoteLink: (carNumber: string, lapNumber: number) => void
+  onConsumeNoteLink: () => void
 }
 
 export const REPLAY_PANEL_DEFS: Record<string, PanelDef> = {
@@ -58,6 +71,7 @@ export const REPLAY_PANEL_DEFS: Record<string, PanelDef> = {
   'pit-stops': { kind: 'pit-stops', title: 'Pit stops', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
   'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
+  'race-notes': { kind: 'race-notes', title: 'Race notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -143,7 +157,16 @@ export function renderReplayPanel(
     case 'fastest-laps':
       return <ReplayFastestLapsPanel rows={ctx.rows} activeClasses={ctx.activeClasses} />
     case 'gap-evolution':
-      return <ReplayTrendChart data={ctx.data} mode="gap" currentLap={ctx.leaderLap} title="Gap evolution" compactFilters={compactFilters} />
+      return (
+        <ReplayTrendChart
+          data={ctx.data}
+          mode="gap"
+          currentLap={ctx.leaderLap}
+          title="Gap evolution"
+          compactFilters={compactFilters}
+          onRequestNoteLink={ctx.onRequestNoteLink}
+        />
+      )
     case 'lap-position':
       return (
         <ReplayTrendChart
@@ -152,6 +175,7 @@ export function renderReplayPanel(
           currentLap={ctx.leaderLap}
           title="Lap-by-lap position"
           compactFilters={compactFilters}
+          onRequestNoteLink={ctx.onRequestNoteLink}
         />
       )
     case 'circle-of-doom': {
@@ -191,6 +215,22 @@ export function renderReplayPanel(
             .map((r) => ({ car_number: r.car_number, team: r.team, class: r.class, position: r.position, intervalSeconds: r.interval }))}
         />
       )
+    case 'race-notes':
+      return (
+        <RaceNotesPanel
+          sessionKey={ctx.sessionKey}
+          title={ctx.title}
+          laps={ctx.data.laps}
+          classes={ctx.data.classes}
+          currentElapsedSeconds={ctx.currentTime}
+          currentRemainingSeconds={Math.max(0, ctx.data.maxTime - ctx.currentTime)}
+          carOptions={ctx.data.cars
+            .map((c) => ({ id: c.car_number, label: `#${c.car_number} — ${c.team ?? 'Unknown'}` }))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))}
+          pendingLink={ctx.pendingNoteLink}
+          onConsumeLink={ctx.onConsumeNoteLink}
+        />
+      )
     case 'car-position-history':
       return panel.carNumber ? (
         <LapPositionChart
@@ -198,6 +238,7 @@ export function renderReplayPanel(
           focusCarNumber={panel.carNumber}
           rankBy={ctx.isRaceSession ? 'elapsed' : 'bestLapSoFar'}
           compactFilters={compactFilters}
+          onRequestNoteLink={ctx.onRequestNoteLink}
         />
       ) : null
     case 'car-time-loss':

@@ -6,6 +6,7 @@ import { useReplayClock } from './useReplayClock'
 import { useReplaySnapshot } from './useReplayRows'
 import { ReplayTransport } from './ReplayTransport'
 import { renderReplayPanel, REPLAY_DEFAULT_PANELS, REPLAY_PANEL_DEFS, type ReplayPanelContext } from './replayPanels'
+import type { PendingNoteLink } from '../lib/raceNotes'
 import { formatClock } from './format'
 import { FLAG_COLORS, FLAG_LABELS } from '../lib/flags'
 import { bucketFor } from '../lib/sessionBucket'
@@ -123,6 +124,13 @@ function PoppedOutPanel({
     title,
     isRaceSession,
     visibleLaps,
+    sessionKey: sessionId,
+    // Note-linking from a chart click only makes sense within the main
+    // dashboard, where a race-notes panel might actually be open to
+    // receive it — a pop-out window is just one chart on its own.
+    pendingNoteLink: null,
+    onRequestNoteLink: () => {},
+    onConsumeNoteLink: () => {},
   }
   const panelTitle = REPLAY_PANEL_DEFS[kind]?.title ?? kind
 
@@ -157,6 +165,7 @@ function ReplayConsole({
   const clock = useReplayClock(data.minTime, data.maxTime)
   const snapshot = useReplaySnapshot(data, clock.current)
   const [selectedCar, setSelectedCar] = useState<string | null>(null)
+  const [pendingNoteLink, setPendingNoteLink] = useState<PendingNoteLink | null>(null)
 
   const broadcastClock = useBroadcastChannel<ClockSync>(`replay-clock:${sessionId}`)
   const lastBroadcastRef = useRef(0)
@@ -187,6 +196,20 @@ function ReplayConsole({
   const flag = snapshot.flag
   const flagLabel = flag ? FLAG_LABELS[flag] : null
 
+  // Stable identities across renders — these two are in the dependency
+  // array of chart-rebuilding D3 effects (LapPositionChart/ReplayTrendChart),
+  // so a fresh function reference every render (Replay's clock ticks every
+  // frame while playing) would force those charts to tear down and rebuild
+  // their whole SVG far more often than the data they render actually changes.
+  const handleRequestNoteLink = useCallback(
+    (carNumber: string, lapNumber: number) => {
+      const row = data.laps.find((l) => l.car_number === carNumber && l.lap_number === lapNumber)
+      setPendingNoteLink({ carNumber, lapNumber, elapsedSeconds: row?.elapsed_seconds ?? null })
+    },
+    [data.laps],
+  )
+  const handleConsumeNoteLink = useCallback(() => setPendingNoteLink(null), [])
+
   const ctx: ReplayPanelContext = {
     data,
     rows: snapshot.rows,
@@ -196,6 +219,10 @@ function ReplayConsole({
     title,
     isRaceSession,
     visibleLaps,
+    sessionKey: sessionId,
+    pendingNoteLink,
+    onRequestNoteLink: handleRequestNoteLink,
+    onConsumeNoteLink: handleConsumeNoteLink,
   }
 
   const carOptions = useMemo(

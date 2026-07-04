@@ -32,11 +32,24 @@ import { isLiveRaceSession } from './liveSessionType'
 import { TopSpeedChart } from '../components/TopSpeedChart'
 import { SectorLeaderboardTicker } from '../components/SectorLeaderboardTicker'
 import { BattleZones } from '../components/BattleZones'
+import { RaceNotesPanel } from '../components/RaceNotesPanel'
+import type { PendingNoteLink } from '../lib/raceNotes'
 
 export interface LivePanelContext {
   data: LiveState
   title: string
   delaySeconds: number
+  // A stable id for this session's notes to be stored under (see
+  // hooks/useRaceNotes).
+  sessionKey: string
+  clock: { elapsedSeconds: number | null; remainingSeconds: number | null }
+  // Set when a chart's hover tooltip was clicked to link a race note to
+  // that exact car/lap (see ReplayTrendChart/LapPositionChart's
+  // onRequestNoteLink) — consumed by the race-notes panel once it's
+  // adopted the link into a draft note.
+  pendingNoteLink: PendingNoteLink | null
+  onRequestNoteLink: (carNumber: string, lapNumber: number) => void
+  onConsumeNoteLink: () => void
 }
 
 export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
@@ -60,6 +73,7 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'top-speed': { kind: 'top-speed', title: 'Top speed', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
   'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
+  'race-notes': { kind: 'race-notes', title: 'Race notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -236,17 +250,49 @@ function carLapsFor(adaptedLaps: ReturnType<typeof liveLapToLapRead>[], carNumbe
 // called conditionally from a .map(), not a component, so calling a hook
 // directly inside that switch would violate the rules of hooks (hook
 // call order isn't stable across renders once panels are added/removed).
-function GapEvolutionPanel({ data, compactFilters }: { data: LiveState; compactFilters?: boolean }) {
-  const leaderLap = Math.max(0, ...data.standings.map((r) => r.total_laps))
-  const trendData = useLiveTrendData(data.laps)
-  return <ReplayTrendChart data={trendData} mode="gap" currentLap={leaderLap} title="Gap evolution" compactFilters={compactFilters} />
-}
-
-function LapPositionPanel({ data, compactFilters }: { data: LiveState; compactFilters?: boolean }) {
+function GapEvolutionPanel({
+  data,
+  compactFilters,
+  onRequestNoteLink,
+}: {
+  data: LiveState
+  compactFilters?: boolean
+  onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
+}) {
   const leaderLap = Math.max(0, ...data.standings.map((r) => r.total_laps))
   const trendData = useLiveTrendData(data.laps)
   return (
-    <ReplayTrendChart data={trendData} mode="position" currentLap={leaderLap} title="Lap-by-lap position" compactFilters={compactFilters} />
+    <ReplayTrendChart
+      data={trendData}
+      mode="gap"
+      currentLap={leaderLap}
+      title="Gap evolution"
+      compactFilters={compactFilters}
+      onRequestNoteLink={onRequestNoteLink}
+    />
+  )
+}
+
+function LapPositionPanel({
+  data,
+  compactFilters,
+  onRequestNoteLink,
+}: {
+  data: LiveState
+  compactFilters?: boolean
+  onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
+}) {
+  const leaderLap = Math.max(0, ...data.standings.map((r) => r.total_laps))
+  const trendData = useLiveTrendData(data.laps)
+  return (
+    <ReplayTrendChart
+      data={trendData}
+      mode="position"
+      currentLap={leaderLap}
+      title="Lap-by-lap position"
+      compactFilters={compactFilters}
+      onRequestNoteLink={onRequestNoteLink}
+    />
   )
 }
 
@@ -299,9 +345,25 @@ export function renderLivePanel(
         />
       )
     case 'gap-evolution':
-      return <GapEvolutionPanel data={data} compactFilters={compactFilters} />
+      return <GapEvolutionPanel data={data} compactFilters={compactFilters} onRequestNoteLink={ctx.onRequestNoteLink} />
     case 'lap-position':
-      return <LapPositionPanel data={data} compactFilters={compactFilters} />
+      return <LapPositionPanel data={data} compactFilters={compactFilters} onRequestNoteLink={ctx.onRequestNoteLink} />
+    case 'race-notes':
+      return (
+        <RaceNotesPanel
+          sessionKey={ctx.sessionKey}
+          title={ctx.title}
+          laps={data.laps}
+          classes={[...new Set(data.standings.map((s) => s.class ?? 'Unknown'))].sort()}
+          currentElapsedSeconds={ctx.clock.elapsedSeconds}
+          currentRemainingSeconds={ctx.clock.remainingSeconds}
+          carOptions={data.standings
+            .map((s) => ({ id: s.car_number, label: `#${s.car_number} — ${s.team ?? 'Unknown'}` }))
+            .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))}
+          pendingLink={ctx.pendingNoteLink}
+          onConsumeLink={ctx.onConsumeNoteLink}
+        />
+      )
     case 'circle-of-doom': {
       const positions = computeLiveTrackPositions(data, ctx.delaySeconds)
       const teamByCar = new Map(data.standings.map((s) => [s.car_number, s.team]))
@@ -326,6 +388,7 @@ export function renderLivePanel(
           focusCarNumber={panel.carNumber}
           rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'}
           compactFilters={compactFilters}
+          onRequestNoteLink={ctx.onRequestNoteLink}
         />
       )
     }

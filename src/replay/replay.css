@@ -347,6 +347,118 @@ table.replay-board tr:last-child td {
   color: var(--replay-muted);
 }
 
+/* race notes / timeline */
+.race-notes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.race-notes-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+.race-notes-textarea {
+  flex: 1 1 260px;
+  min-width: 220px;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--replay-line-strong);
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+  resize: vertical;
+}
+.race-notes-linked-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  background: var(--replay-purple-soft);
+  color: var(--replay-purple);
+  padding: 6px 10px;
+  border-radius: 4px;
+  flex: 1 1 100%;
+}
+.race-notes-grid-wrap {
+  overflow-x: auto;
+}
+table.race-notes-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+table.race-notes-grid th,
+table.race-notes-grid td {
+  border: 1px solid var(--replay-line);
+  padding: 6px 8px;
+  vertical-align: top;
+  text-align: left;
+  min-width: 160px;
+}
+table.race-notes-grid th {
+  background: var(--replay-paper);
+  position: sticky;
+  top: 0;
+}
+.race-notes-hour {
+  font-weight: 700;
+  min-width: auto !important;
+  width: 40px;
+  text-align: center !important;
+}
+.race-notes-leader {
+  font-family: var(--replay-mono);
+  white-space: nowrap;
+}
+.race-note-item {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--replay-line);
+}
+.race-note-item:last-child {
+  border-bottom: none;
+}
+.race-note-item-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--replay-muted);
+  font-family: var(--replay-mono);
+  margin-bottom: 2px;
+}
+.race-note-delete {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--replay-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+}
+.race-note-delete:hover {
+  color: var(--replay-flash);
+}
+.race-note-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.race-notes-export {
+  display: flex;
+  gap: 8px;
+}
+
+/* hint shown in a chart's hover tooltip when clicking the hovered point
+   will link a race note to it (see PendingNoteLink) */
+.tooltip-note-hint {
+  display: block;
+  margin-top: 3px;
+  opacity: 0.75;
+  font-size: 10px;
+}
+
 /* battle zones */
 .battle-zones {
   display: flex;
