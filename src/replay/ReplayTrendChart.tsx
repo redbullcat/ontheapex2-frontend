@@ -6,6 +6,7 @@ import { ClassFilter } from '../components/ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from '../components/EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const MARGIN = { top: 16, right: 16, bottom: 28, left: 44 }
 const HEIGHT = 220
@@ -45,6 +46,7 @@ export function ReplayTrendChart({
   onVisibleCarsChange,
   expanded,
   onToggleExpand,
+  compactFilters,
 }: {
   data: TrendChartData
   mode: 'gap' | 'position'
@@ -53,6 +55,11 @@ export function ReplayTrendChart({
   onVisibleCarsChange?: (cars: Set<string>) => void
   expanded?: boolean
   onToggleExpand?: () => void
+  // Moves the class/car filter row behind the panel's gear-icon popup
+  // (see PanelSettingsPopover) — opt in for dashboard panels, which have
+  // much less width to spare than this chart's other home in the
+  // full-width sidebar/main app, where the filters stay inline as always.
+  compactFilters?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -281,10 +288,19 @@ export function ReplayTrendChart({
           </button>
         )}
       </div>
-      <div className="replay-trend-controls">
-        <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
-        <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all" />
-      </div>
+      {compactFilters ? (
+        <PanelSettingsPopover>
+          <div className="replay-trend-controls">
+            <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
+            <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all" />
+          </div>
+        </PanelSettingsPopover>
+      ) : (
+        <div className="replay-trend-controls">
+          <ClassFilter classes={data.classes} selection={classSelection} onChange={setClassSelection} />
+          <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all" />
+        </div>
+      )}
       <div className="replay-trend-chart" ref={containerRef}>
         <svg ref={svgRef} />
         {hover && (

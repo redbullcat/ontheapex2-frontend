@@ -239,7 +239,7 @@ function ReplayConsole({
 
       <DashboardGrid
         panelDefs={REPLAY_PANEL_DEFS}
-        renderPanel={(panel) => renderReplayPanel(panel, ctx, setSelectedCar)}
+        renderPanel={(panel) => renderReplayPanel(panel, ctx, setSelectedCar, true)}
         carOptions={carOptions}
         onPopOut={handlePopOut}
         layoutState={layoutState}

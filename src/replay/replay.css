@@ -958,11 +958,69 @@ button.replay-play:hover {
   padding: 10px 12px;
 }
 
-/* react-grid-layout's own resize handle glyph doesn't pick up our theme
-   colors by default — retint to match rather than leave the library's
-   raw default styling. */
+/* react-grid-layout's own resize handle glyph ships with opacity:0.302
+   baked into its data-URI icon — our own opacity multiplier here used to
+   compound with that down to ~0.15, effectively invisible against the
+   panel background. Replace the icon entirely with a plain high-contrast
+   corner mark instead of just retinting the (barely visible) original. */
 .react-resizable-handle {
-  opacity: 0.5;
+  opacity: 1;
+  background-image: none !important;
+  width: 16px;
+  height: 16px;
+}
+.react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--replay-muted);
+  border-bottom: 2px solid var(--replay-muted);
+  border-radius: 0 0 2px 0;
+}
+.react-resizable-handle:hover::after {
+  border-color: var(--replay-accent);
+}
+
+/* Panel settings popup — opened via the gear icon in a dashboard panel's
+   title bar (PanelFrame), for charts whose own class/car/driver filters
+   would otherwise dominate the panel's limited width (see
+   PanelSettingsPopover). */
+.panel-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 60;
+}
+.panel-settings-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 61;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+  min-width: 280px;
+  max-width: min(90vw, 560px);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.panel-settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 8px 10px 14px;
+  border-bottom: 1px solid var(--replay-line);
+  font-size: 12px;
+  font-weight: 700;
+}
+.panel-settings-modal-body {
+  padding: 12px 14px 14px;
 }
 
 .car-detail-section-label {

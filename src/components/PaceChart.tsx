@@ -9,6 +9,7 @@ import type { EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -112,7 +113,19 @@ function formatSeconds(s: number): string {
 // already only ever passes one car's laps in — "Add car" would just offer a
 // single, already-selected option, which reads as broken rather than
 // merely unused. Every other caller omits this and is unaffected.
-export function PaceChart({ laps, hideCarFilter }: { laps: LapRead[]; hideCarFilter?: boolean }) {
+export function PaceChart({
+  laps,
+  hideCarFilter,
+  compactFilters,
+}: {
+  laps: LapRead[]
+  hideCarFilter?: boolean
+  // Moves the class/group/car/driver controls behind the panel's gear-icon
+  // popup (see PanelSettingsPopover) — opt in for dashboard panels, which
+  // have much less width to spare than this chart's other home in the
+  // full-width sidebar/main app, where the controls stay inline as always.
+  compactFilters?: boolean
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
@@ -333,6 +346,50 @@ export function PaceChart({ laps, hideCarFilter }: { laps: LapRead[]; hideCarFil
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
   }, [groups, width, chartType])
 
+  const filterControls = (
+    <>
+      <div className="chart-controls">
+        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        <div className="color-mode-toggle" role="radiogroup" aria-label="Group by">
+          {(['team', 'driver', 'manufacturer', 'car'] as const).map((g) => (
+            <button key={g} type="button" className={groupBy === g ? 'active' : ''} onClick={() => setGroupBy(g)}>
+              {g[0].toUpperCase() + g.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="color-mode-toggle" role="radiogroup" aria-label="Chart type">
+          {(['bar', 'box'] as const).map((t) => (
+            <button key={t} type="button" className={chartType === t ? 'active' : ''} onClick={() => setChartType(t)}>
+              {t === 'bar' ? 'Bar' : 'Box plot'}
+            </button>
+          ))}
+        </div>
+        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+        <label className="top-percent">
+          <span className="field-label">Top % of laps</span>
+          <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
+        </label>
+        <ChartExportButtons svgRef={svgRef} filename="pace_chart" />
+      </div>
+      {!hideCarFilter && (
+        <div className="chart-controls">
+          <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all cars" />
+        </div>
+      )}
+      {groupBy === 'driver' && (
+        <div className="chart-controls">
+          <EntityFilter
+            items={driverOptions}
+            selection={driverSelection}
+            onChange={setDriverSelection}
+            addLabel="Add driver"
+            resetLabel="Show all drivers"
+          />
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="viz-root pace-chart" ref={containerRef}>
       <style>{`
@@ -390,57 +447,7 @@ export function PaceChart({ laps, hideCarFilter }: { laps: LapRead[]; hideCarFil
           font-size: 13px;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <div className="color-mode-toggle" role="radiogroup" aria-label="Group by">
-          {(['team', 'driver', 'manufacturer', 'car'] as const).map((g) => (
-            <button key={g} type="button" className={groupBy === g ? 'active' : ''} onClick={() => setGroupBy(g)}>
-              {g[0].toUpperCase() + g.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="color-mode-toggle" role="radiogroup" aria-label="Chart type">
-          {(['bar', 'box'] as const).map((t) => (
-            <button key={t} type="button" className={chartType === t ? 'active' : ''} onClick={() => setChartType(t)}>
-              {t === 'bar' ? 'Bar' : 'Box plot'}
-            </button>
-          ))}
-        </div>
-        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
-        <label className="top-percent">
-          <span className="field-label">Top % of laps</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={topPercentInput}
-            onChange={(e) => setTopPercentInput(e.target.value)}
-          />
-        </label>
-        <ChartExportButtons svgRef={svgRef} filename="pace_chart" />
-      </div>
-      {!hideCarFilter && (
-        <div className="chart-controls">
-          <EntityFilter
-            items={carOptions}
-            selection={carSelection}
-            onChange={setCarSelection}
-            addLabel="Add car"
-            resetLabel="Show all cars"
-          />
-        </div>
-      )}
-      {groupBy === 'driver' && (
-        <div className="chart-controls">
-          <EntityFilter
-            items={driverOptions}
-            selection={driverSelection}
-            onChange={setDriverSelection}
-            addLabel="Add driver"
-            resetLabel="Show all drivers"
-          />
-        </div>
-      )}
+      {compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls}
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>

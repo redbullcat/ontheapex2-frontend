@@ -4,6 +4,7 @@ import type { PanelDef, PanelInstance } from '../dashboard/types'
 import { formatGap, formatLapTime, formatSplit } from '../replay/format'
 import { getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from '../components/ClassFilter'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { colorBadgeClass } from './liveColors'
 import { RaceLogPanel } from './RaceLogPanel'
@@ -35,22 +36,34 @@ export interface LivePanelContext {
 }
 
 export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
-  leaderboard: { kind: 'leaderboard', title: 'Leaderboard', category: 'field', defaultSize: { w: 12, h: 11 } },
+  leaderboard: { kind: 'leaderboard', title: 'Leaderboard', category: 'field', defaultSize: { w: 12, h: 11 }, hasSettings: true },
   'race-log': { kind: 'race-log', title: 'Race log', category: 'field', defaultSize: { w: 6, h: 8 } },
   'fastest-laps': { kind: 'fastest-laps', title: 'Fastest laps', category: 'field', defaultSize: { w: 6, h: 8 } },
-  pace: { kind: 'pace', title: 'Pace', category: 'field', defaultSize: { w: 6, h: 8 } },
-  'pit-stops': { kind: 'pit-stops', title: 'Pit stops', category: 'field', defaultSize: { w: 6, h: 8 } },
+  pace: { kind: 'pace', title: 'Pace', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
+  'pit-stops': { kind: 'pit-stops', title: 'Pit stops', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
   stints: { kind: 'stints', title: 'Stints', category: 'field', defaultSize: { w: 6, h: 7 } },
-  'gap-evolution': { kind: 'gap-evolution', title: 'Gap evolution', category: 'field', defaultSize: { w: 6, h: 8 } },
-  'lap-position': { kind: 'lap-position', title: 'Lap-by-lap position', category: 'field', defaultSize: { w: 6, h: 8 } },
+  'gap-evolution': { kind: 'gap-evolution', title: 'Gap evolution', category: 'field', defaultSize: { w: 6, h: 8 }, hasSettings: true },
+  'lap-position': {
+    kind: 'lap-position',
+    title: 'Lap-by-lap position',
+    category: 'field',
+    defaultSize: { w: 6, h: 8 },
+    hasSettings: true,
+  },
   'race-stats': { kind: 'race-stats', title: 'Race stats', category: 'field', defaultSize: { w: 6, h: 7 } },
   'track-map': { kind: 'track-map', title: 'Track map', category: 'field', defaultSize: { w: 4, h: 13 } },
   'circle-of-doom': { kind: 'circle-of-doom', title: 'Circle of doom', category: 'field', defaultSize: { w: 4, h: 13 } },
-  'car-position-history': { kind: 'car-position-history', title: 'Position history', category: 'car', defaultSize: { w: 6, h: 7 } },
+  'car-position-history': {
+    kind: 'car-position-history',
+    title: 'Position history',
+    category: 'car',
+    defaultSize: { w: 6, h: 7 },
+    hasSettings: true,
+  },
   'car-time-loss': { kind: 'car-time-loss', title: 'Time-loss trace', category: 'car', defaultSize: { w: 6, h: 6 } },
-  'car-pace': { kind: 'car-pace', title: 'Pace', category: 'car', defaultSize: { w: 6, h: 7 } },
+  'car-pace': { kind: 'car-pace', title: 'Pace', category: 'car', defaultSize: { w: 6, h: 7 }, hasSettings: true },
   'car-stints': { kind: 'car-stints', title: 'Stint history', category: 'car', defaultSize: { w: 6, h: 6 } },
-  'car-pit-stops': { kind: 'car-pit-stops', title: 'Pit stops', category: 'car', defaultSize: { w: 6, h: 7 } },
+  'car-pit-stops': { kind: 'car-pit-stops', title: 'Pit stops', category: 'car', defaultSize: { w: 6, h: 7 }, hasSettings: true },
   'car-lap-history': { kind: 'car-lap-history', title: 'Full lap history', category: 'car', defaultSize: { w: 5, h: 9 } },
 }
 
@@ -100,7 +113,15 @@ function LiveStandingsRow({ row, lastLap, onClick }: { row: LiveStanding; lastLa
   )
 }
 
-function LeaderboardPanel({ data, onRowClick }: { data: LiveState; onRowClick?: (car: string) => void }) {
+function LeaderboardPanel({
+  data,
+  onRowClick,
+  compactFilters,
+}: {
+  data: LiveState
+  onRowClick?: (car: string) => void
+  compactFilters?: boolean
+}) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const classes = useMemo(() => [...new Set(data.standings.map((r) => r.class ?? 'Unknown'))].sort(), [data.standings])
   const activeClasses = useMemo(() => resolveClassSelection(classSelection, classes), [classSelection, classes])
@@ -115,11 +136,15 @@ function LeaderboardPanel({ data, onRowClick }: { data: LiveState; onRowClick?: 
     return map
   }, [data.laps])
 
+  const filterControls = (
+    <div className="replay-trend-controls">
+      <ClassFilter classes={classes} selection={classSelection} onChange={setClassSelection} />
+    </div>
+  )
+
   return (
     <div>
-      <div className="replay-trend-controls">
-        <ClassFilter classes={classes} selection={classSelection} onChange={setClassSelection} />
-      </div>
+      {compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls}
       <div className="replay-board-wrap">
         <table className="replay-board">
           <thead>
@@ -166,27 +191,38 @@ function carLapsFor(adaptedLaps: ReturnType<typeof liveLapToLapRead>[], carNumbe
 // called conditionally from a .map(), not a component, so calling a hook
 // directly inside that switch would violate the rules of hooks (hook
 // call order isn't stable across renders once panels are added/removed).
-function GapEvolutionPanel({ data }: { data: LiveState }) {
+function GapEvolutionPanel({ data, compactFilters }: { data: LiveState; compactFilters?: boolean }) {
   const leaderLap = Math.max(0, ...data.standings.map((r) => r.total_laps))
   const trendData = useLiveTrendData(data.laps)
-  return <ReplayTrendChart data={trendData} mode="gap" currentLap={leaderLap} title="Gap evolution" />
+  return <ReplayTrendChart data={trendData} mode="gap" currentLap={leaderLap} title="Gap evolution" compactFilters={compactFilters} />
 }
 
-function LapPositionPanel({ data }: { data: LiveState }) {
+function LapPositionPanel({ data, compactFilters }: { data: LiveState; compactFilters?: boolean }) {
   const leaderLap = Math.max(0, ...data.standings.map((r) => r.total_laps))
   const trendData = useLiveTrendData(data.laps)
-  return <ReplayTrendChart data={trendData} mode="position" currentLap={leaderLap} title="Lap-by-lap position" />
+  return (
+    <ReplayTrendChart data={trendData} mode="position" currentLap={leaderLap} title="Lap-by-lap position" compactFilters={compactFilters} />
+  )
 }
 
 // The single place that maps a panel instance to its rendered content —
 // every chart here is the exact same component the main historical app
 // and Replay already use, just fed from live data via liveLapToLapRead.
-export function renderLivePanel(panel: PanelInstance, ctx: LivePanelContext, onRowClick?: (car: string) => void) {
+export function renderLivePanel(
+  panel: PanelInstance,
+  ctx: LivePanelContext,
+  onRowClick?: (car: string) => void,
+  // Set true only from the dashboard grid (DashboardGrid/PanelFrame gives
+  // every panel a gear-icon settings popup there) — left false for pop-out
+  // windows, which have a whole browser window to themselves and keep
+  // showing these same filters inline like before this dashboard existed.
+  compactFilters = false,
+) {
   const { data } = ctx
   const isRaceSession = isLiveRaceSession(data.session_type)
   switch (panel.kind) {
     case 'leaderboard':
-      return <LeaderboardPanel data={data} onRowClick={onRowClick} />
+      return <LeaderboardPanel data={data} onRowClick={onRowClick} compactFilters={compactFilters} />
     case 'race-log':
       return <RaceLogPanel entries={data.race_log} />
     case 'fastest-laps':
@@ -196,15 +232,15 @@ export function renderLivePanel(panel: PanelInstance, ctx: LivePanelContext, onR
     case 'stints':
     case 'race-stats': {
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
-      if (panel.kind === 'pace') return <PaceChart laps={adaptedLaps} />
-      if (panel.kind === 'pit-stops') return <PitTimeChart laps={adaptedLaps} />
+      if (panel.kind === 'pace') return <PaceChart laps={adaptedLaps} compactFilters={compactFilters} />
+      if (panel.kind === 'pit-stops') return <PitTimeChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'stints') return <StintLengthDistribution laps={adaptedLaps} />
       return <RaceStats laps={adaptedLaps} />
     }
     case 'gap-evolution':
-      return <GapEvolutionPanel data={data} />
+      return <GapEvolutionPanel data={data} compactFilters={compactFilters} />
     case 'lap-position':
-      return <LapPositionPanel data={data} />
+      return <LapPositionPanel data={data} compactFilters={compactFilters} />
     case 'circle-of-doom': {
       const positions = computeLiveTrackPositions(data, ctx.delaySeconds)
       const teamByCar = new Map(data.standings.map((s) => [s.car_number, s.team]))
@@ -223,7 +259,14 @@ export function renderLivePanel(panel: PanelInstance, ctx: LivePanelContext, onR
     case 'car-position-history': {
       if (!panel.carNumber) return null
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
-      return <LapPositionChart laps={adaptedLaps} focusCarNumber={panel.carNumber} rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'} />
+      return (
+        <LapPositionChart
+          laps={adaptedLaps}
+          focusCarNumber={panel.carNumber}
+          rankBy={isRaceSession ? 'elapsed' : 'bestLapSoFar'}
+          compactFilters={compactFilters}
+        />
+      )
     }
     case 'car-time-loss': {
       if (!panel.carNumber) return null
@@ -237,9 +280,9 @@ export function renderLivePanel(panel: PanelInstance, ctx: LivePanelContext, onR
       if (!panel.carNumber) return null
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
       const laps = carLapsFor(adaptedLaps, panel.carNumber)
-      if (panel.kind === 'car-pace') return <PaceChart laps={laps} hideCarFilter />
+      if (panel.kind === 'car-pace') return <PaceChart laps={laps} hideCarFilter compactFilters={compactFilters} />
       if (panel.kind === 'car-stints') return <CarStintTable laps={laps} />
-      if (panel.kind === 'car-pit-stops') return <PitTimeChart laps={laps} />
+      if (panel.kind === 'car-pit-stops') return <PitTimeChart laps={laps} compactFilters={compactFilters} />
       return <CarLapHistoryTable laps={laps} />
     }
     default:

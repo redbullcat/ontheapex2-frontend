@@ -117,7 +117,12 @@ export function DashboardGrid({
               const title = def ? (p.carNumber ? `${def.title} — #${p.carNumber}` : def.title) : p.kind
               return (
                 <div key={p.id}>
-                  <PanelFrame title={title} onClose={() => removePanel(p.id)} onPopOut={() => onPopOut(p)}>
+                  <PanelFrame
+                    title={title}
+                    onClose={() => removePanel(p.id)}
+                    onPopOut={() => onPopOut(p)}
+                    hasSettings={def?.hasSettings}
+                  >
                     {renderPanel(p)}
                   </PanelFrame>
                 </div>
