@@ -51,6 +51,11 @@ export interface ReplayPanelContext {
   pendingNoteLink: PendingNoteLink | null
   onRequestNoteLink: (carNumber: string, lapNumber: number) => void
   onConsumeNoteLink: () => void
+  // Seeds the gap-evolution/lap-position trend charts' class filter on
+  // first render (e.g. from a pop-out/export URL's ?dashClasses=... —
+  // see ReplayApp.tsx) instead of always starting on "all classes" with
+  // no way to preset it outside of clicking checkboxes by hand.
+  initialClasses?: string[]
 }
 
 export const REPLAY_PANEL_DEFS: Record<string, PanelDef> = {
@@ -165,6 +170,7 @@ export function renderReplayPanel(
           title="Gap evolution"
           compactFilters={compactFilters}
           onRequestNoteLink={ctx.onRequestNoteLink}
+          initialClasses={ctx.initialClasses}
         />
       )
     case 'lap-position':
@@ -176,6 +182,7 @@ export function renderReplayPanel(
           title="Lap-by-lap position"
           compactFilters={compactFilters}
           onRequestNoteLink={ctx.onRequestNoteLink}
+          initialClasses={ctx.initialClasses}
         />
       )
     case 'circle-of-doom': {

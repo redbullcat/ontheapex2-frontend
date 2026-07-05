@@ -18,6 +18,8 @@
 // Common flags (all optional):
 //   --panel <kind>       Panel to record (default: lap-position)
 //   --car <number>       Car number, for car-scoped panels (e.g. car-pace)
+//   --classes <list>     Comma-separated classes to show, e.g. HYPERCAR,LMGT3
+//                        (default: all classes)
 //   --type <sessionType> race|qualifying|practice|test (default: race)
 //   --title <string>     Shown in the page's own title bar, cosmetic only
 //   --start <seconds>     Race-elapsed start time (default: 0)
@@ -31,6 +33,9 @@
 //   --keep-frames         Don't delete the intermediate PNG frames
 //   --api-base <url>      Backend base URL (default: https://ontheapex-api.fly.dev)
 //   --port <n>            Local dev server port (default: 5173)
+//   --selector <css>      Override which element gets screenshotted, in
+//                         case a future panel kind isn't covered by the
+//                         built-in chart-only/table-only defaults
 
 import { chromium } from 'playwright'
 import { spawn, spawnSync } from 'node:child_process'
@@ -79,6 +84,7 @@ if (!args.session) {
 const sessionId = String(args.session)
 const panel = args.panel ?? 'lap-position'
 const carNumber = args.car ?? null
+const classes = args.classes ? String(args.classes).split(',').map((c) => c.trim()).filter(Boolean) : null
 const sessionType = args.type ?? 'race'
 const title = args.title ?? 'Replay'
 const videoSeconds = Number(args['video-seconds'] ?? 60)
@@ -125,7 +131,7 @@ async function main() {
   const end = args.end !== undefined ? Number(args.end) : await fetchSessionDuration()
   if (!(end > start)) throw new Error(`Nothing to record: end (${end}) must be greater than start (${start})`)
 
-  console.log(`Recording session ${sessionId} (${panel}${carNumber ? ` #${carNumber}` : ''}), ${start}s -> ${end}s of race time into ${videoSeconds}s of video at ${fps}fps, ${width}x${height}${scale !== 1 ? ` @${scale}x` : ''}`)
+  console.log(`Recording session ${sessionId} (${panel}${carNumber ? ` #${carNumber}` : ''}${classes ? ` classes=${classes.join(',')}` : ''}), ${start}s -> ${end}s of race time into ${videoSeconds}s of video at ${fps}fps, ${width}x${height}${scale !== 1 ? ` @${scale}x` : ''}`)
 
   const externalServerUrl = args['server-url']
   let dev = null
@@ -168,10 +174,20 @@ async function main() {
 
       const params = new URLSearchParams({ session: sessionId, title, type: sessionType, dashPanel: panel })
       if (carNumber) params.set('dashCar', carNumber)
+      if (classes) params.set('dashClasses', classes.join(','))
       await page.goto(`${baseUrl}/replay?${params.toString()}`, { waitUntil: 'networkidle' })
 
-      const panelSelector = '.replay-leaderboard-panel'
-      await page.waitForSelector(`${panelSelector} svg`, { timeout: 30000 })
+      const wrapperSelector = '.replay-leaderboard-panel'
+      await page.waitForSelector(`${wrapperSelector} svg`, { timeout: 30000 })
+
+      // Just the chart itself, no title/filters/car-chip row around it —
+      // .replay-trend-chart is the inner div ReplayTrendChart wraps around
+      // its own <svg> (see src/replay/ReplayTrendChart.tsx). Panel kinds
+      // that don't use that component (tables, the leaderboard, etc) fall
+      // back to the full pop-out panel wrapper.
+      const chartOnlySelector = '.replay-trend-chart'
+      const hasChartOnly = (await page.locator(chartOnlySelector).count()) > 0
+      const panelSelector = args.selector ?? (hasChartOnly ? chartOnlySelector : wrapperSelector)
 
       const frameCount = Math.max(2, Math.round(videoSeconds * fps))
       const channelName = `replay-clock:${sessionId}`
@@ -184,11 +200,26 @@ async function main() {
           },
           { channelName, current: t },
         )
-        // Two rAFs: one for React's state update to commit, one for the
-        // browser to actually paint it, before we screenshot.
-        await page.evaluate(
-          () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        // Poll the wrapper's own data-frame-time attribute (set by
+        // ReplayApp.tsx's PoppedOutPanel on every render) instead of
+        // guessing with a fixed number of rAFs — BroadcastChannel delivery
+        // and the React/D3 update it triggers aren't perfectly
+        // synchronous, and a fixed wait occasionally screenshotted a stale
+        // frame (still showing the *previous* currentTime), which is what
+        // made early exports look choppy/juddery rather than smooth.
+        await page.waitForFunction(
+          ({ sel, target }) => {
+            const el = document.querySelector(sel)
+            if (!el) return false
+            const current = parseFloat(el.getAttribute('data-frame-time') ?? 'NaN')
+            return Math.abs(current - target) < 0.01
+          },
+          { sel: wrapperSelector, target: t },
+          { timeout: 5000 },
         )
+        // One more rAF so the paint from that render has actually happened
+        // before the screenshot, not just the DOM/attribute update.
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
         const frameFile = path.join(framesDir, `frame-${String(i).padStart(6, '0')}.png`)
         await page.locator(panelSelector).screenshot({ path: frameFile })
         if (i % 30 === 0 || i === frameCount - 1) {
@@ -207,6 +238,10 @@ async function main() {
         '-y',
         '-framerate', String(fps),
         '-i', path.join(framesDir, 'frame-%06d.png'),
+        // libx264 requires even width/height, but a chart-only crop's
+        // exact pixel size depends on its content (car count, filter row
+        // wrapping, etc) and won't always land on an even number.
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-preset', 'slow',

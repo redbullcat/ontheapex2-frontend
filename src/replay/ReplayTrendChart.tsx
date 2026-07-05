@@ -7,6 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from '../components/EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { useSvgRecorder } from './useSvgRecorder'
 
 const MARGIN = { top: 16, right: 16, bottom: 28, left: 44 }
 const HEIGHT = 220
@@ -48,6 +49,7 @@ export function ReplayTrendChart({
   onToggleExpand,
   compactFilters,
   onRequestNoteLink,
+  initialClasses,
 }: {
   data: TrendChartData
   mode: 'gap' | 'position'
@@ -65,11 +67,18 @@ export function ReplayTrendChart({
   // the caller resolves elapsed_seconds for the click since this chart's
   // own data (gap/position by lap) has no elapsed-time field on it.
   onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
+  // Preselects the class filter on first render instead of "all classes"
+  // — only read once (see useState initializer below), same as any other
+  // uncontrolled-after-mount filter in this app.
+  initialClasses?: string[]
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const recorder = useSvgRecorder(svgRef, title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'chart')
   const [width, setWidth] = useState(800)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(() =>
+    initialClasses && initialClasses.length > 0 ? new Set(initialClasses) : null,
+  )
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [hover, setHover] = useState<{ x: number; y: number; car: string; team: string | null; value: number; lap: number } | null>(
     null,
@@ -300,6 +309,20 @@ export function ReplayTrendChart({
     <div className={expanded ? 'replay-trend-panel expanded' : 'replay-trend-panel'}>
       <div className="replay-trend-header">
         <p className="replay-panel-label">{title}</p>
+        {recorder.recording && (
+          <span className="replay-record-indicator">
+            <span className="replay-record-dot" /> {String(Math.floor(recorder.elapsedSeconds / 60)).padStart(2, '0')}:
+            {String(recorder.elapsedSeconds % 60).padStart(2, '0')}
+          </span>
+        )}
+        <button
+          type="button"
+          className="replay-record-btn"
+          onClick={recorder.recording ? recorder.stop : recorder.start}
+          title={recorder.recording ? 'Stop recording and download the video' : 'Record this chart as a video — play/scrub normally while recording'}
+        >
+          {recorder.recording ? '⏹ Stop' : '⏺ Record'}
+        </button>
         {onToggleExpand && (
           <button type="button" className="replay-expand-btn" onClick={onToggleExpand} title={expanded ? 'Close' : 'Expand'}>
             {expanded ? '✕ Close' : '⛶ Expand'}
