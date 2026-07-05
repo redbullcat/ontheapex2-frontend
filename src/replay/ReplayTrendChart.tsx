@@ -48,6 +48,7 @@ export function ReplayTrendChart({
   onToggleExpand,
   compactFilters,
   onRequestNoteLink,
+  initialClasses,
 }: {
   data: TrendChartData
   mode: 'gap' | 'position'
@@ -65,11 +66,17 @@ export function ReplayTrendChart({
   // the caller resolves elapsed_seconds for the click since this chart's
   // own data (gap/position by lap) has no elapsed-time field on it.
   onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
+  // Preselects the class filter on first render instead of "all classes"
+  // — only read once (see useState initializer below), same as any other
+  // uncontrolled-after-mount filter in this app.
+  initialClasses?: string[]
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(() =>
+    initialClasses && initialClasses.length > 0 ? new Set(initialClasses) : null,
+  )
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [hover, setHover] = useState<{ x: number; y: number; car: string; team: string | null; value: number; lap: number } | null>(
     null,

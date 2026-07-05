@@ -43,6 +43,8 @@ export function ReplayApp() {
   const isRaceSession = rawType ? bucketFor(rawType as SessionType) === 'race' : true
   const dashPanel = readParam('dashPanel')
   const dashCar = readParam('dashCar')
+  const dashClassesRaw = readParam('dashClasses')
+  const dashClasses = dashClassesRaw ? dashClassesRaw.split(',').filter(Boolean) : undefined
 
   useDocumentTitle(`${title} — Replay · On The Apex`)
 
@@ -65,7 +67,7 @@ export function ReplayApp() {
         <p className="replay-hint">Failed to load laps: {lapsState.error}</p>
       ) : data && data.events.length > 0 ? (
         dashPanel ? (
-          <PoppedOutPanel sessionId={sessionId} data={data} title={title} isRaceSession={isRaceSession} kind={dashPanel} carNumber={dashCar || undefined} />
+          <PoppedOutPanel sessionId={sessionId} data={data} title={title} isRaceSession={isRaceSession} kind={dashPanel} carNumber={dashCar || undefined} initialClasses={dashClasses} />
         ) : (
           <ReplayConsole title={title} data={data} sessionId={sessionId} isRaceSession={isRaceSession} theme={theme} setTheme={setTheme} />
         )
@@ -89,6 +91,7 @@ function PoppedOutPanel({
   isRaceSession,
   kind,
   carNumber,
+  initialClasses,
 }: {
   sessionId: string
   data: ReplayData
@@ -96,6 +99,7 @@ function PoppedOutPanel({
   isRaceSession: boolean
   kind: string
   carNumber?: string
+  initialClasses?: string[]
 }) {
   // No broadcast received yet (e.g. opened from a bookmark with no source
   // tab running) falls back to showing the whole session, same as the
@@ -127,6 +131,7 @@ function PoppedOutPanel({
     pendingNoteLink: null,
     onRequestNoteLink: () => {},
     onConsumeNoteLink: () => {},
+    initialClasses,
   }
   const panelTitle = REPLAY_PANEL_DEFS[kind]?.title ?? kind
 
@@ -142,7 +147,15 @@ function PoppedOutPanel({
           <span className="replay-popout-sync-hint">{formatClock(sync.current)} · {sync.playing ? `playing ${sync.speed}x` : 'paused'} · synced to main tab</span>
         </div>
       </div>
-      <div className="replay-leaderboard-panel">{renderReplayPanel({ id: kind, kind, carNumber }, ctx)}</div>
+      {/* data-frame-time: read by scripts/export-replay-video.mjs to know
+          exactly when the DOM has caught up to a given currentTime, since
+          BroadcastChannel delivery + the React/D3 update it triggers isn't
+          synchronous — polling this instead of guessing a fixed wait is
+          what keeps the exported video's frames from occasionally
+          duplicating (stale capture) or skipping (choppy playback). */}
+      <div className="replay-leaderboard-panel" data-frame-time={sync.current}>
+        {renderReplayPanel({ id: kind, kind, carNumber }, ctx)}
+      </div>
     </div>
   )
 }
