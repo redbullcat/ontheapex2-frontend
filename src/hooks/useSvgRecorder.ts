@@ -13,6 +13,39 @@ import { useCallback, useRef, useState } from 'react'
 const RESOLUTION_SCALE = 2
 const CAPTURE_FPS = 30
 
+// Visual properties a chart's paths/text can pick up from an external
+// stylesheet (a CSS class, or a var(--replay-muted)-style custom property)
+// rather than an inline attribute — axis ticks and gridlines in particular
+// are styled this way. A cloned SVG serialized on its own has no access to
+// the page's stylesheets, so left alone these come out as CSS defaults
+// (black text, invisible against a dark chart) instead of their real
+// themed color. Baking the resolved value in as an inline style before
+// serializing fixes that regardless of where the original rule lived.
+const INLINE_STYLE_PROPS = [
+  'fill',
+  'stroke',
+  'stroke-width',
+  'stroke-opacity',
+  'fill-opacity',
+  'opacity',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'text-anchor',
+] as const
+
+function inlineComputedStyles(original: Element, clone: Element) {
+  const cs = getComputedStyle(original)
+  const declarations = INLINE_STYLE_PROPS.map((prop) => `${prop}:${cs.getPropertyValue(prop)}`).join(';')
+  clone.setAttribute('style', `${clone.getAttribute('style') ?? ''};${declarations}`)
+
+  const originalChildren = original.children
+  const cloneChildren = clone.children
+  for (let i = 0; i < originalChildren.length; i++) {
+    inlineComputedStyles(originalChildren[i], cloneChildren[i])
+  }
+}
+
 export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, filenameBase: string) {
   const [recording, setRecording] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -43,13 +76,17 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
         canvas.height = height
       }
 
-      // A serialized SVG's <image> renders at whatever width/height it
-      // declares, not the container's on-screen size — set them explicitly
-      // to our target resolution so the rasterized result is crisp rather
-      // than a small image stretched up.
+      // Deliberately NOT overriding the clone's width/height to the scaled
+      // canvas size here: these charts size their <svg> in raw pixels with
+      // no viewBox, so the width/height attributes ARE the coordinate
+      // system every path was drawn in. Forcing them to a bigger number
+      // doesn't rescale existing content — it just declares a bigger,
+      // mostly-blank canvas around the same small drawing (the "canvas is
+      // much bigger than the chart" bug). Leaving them at the SVG's own
+      // real size and letting drawImage's destination rect below do the
+      // upscaling is what actually renders it bigger *and* correctly.
       const clone = svg.cloneNode(true) as SVGSVGElement
-      clone.setAttribute('width', String(width))
-      clone.setAttribute('height', String(height))
+      inlineComputedStyles(svg, clone)
       const serialized = new XMLSerializer().serializeToString(clone)
       const svgBlob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' })
       const url = URL.createObjectURL(svgBlob)
