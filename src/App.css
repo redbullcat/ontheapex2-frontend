@@ -619,6 +619,43 @@ header h1 {
   background: color-mix(in srgb, var(--text, #52514e) 8%, transparent);
 }
 
+.chart-record-btn {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.chart-record-btn:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+
+.chart-record-indicator {
+  font-size: 13px;
+  color: #d64545;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.chart-record-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d64545;
+  animation: chart-record-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chart-record-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .entity-filter {
   display: flex;
   flex-wrap: wrap;
