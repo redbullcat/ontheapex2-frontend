@@ -7,7 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from '../components/EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
-import { useSvgRecorder } from './useSvgRecorder'
+import { useSvgRecorder } from '../hooks/useSvgRecorder'
 
 const MARGIN = { top: 16, right: 16, bottom: 28, left: 44 }
 const HEIGHT = 220

@@ -54,8 +54,12 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const svgBlob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' })
       const url = URL.createObjectURL(svgBlob)
 
-      const chartContainer = svg.closest('.replay-trend-chart')
-      const bg = (chartContainer ? getComputedStyle(chartContainer) : getComputedStyle(svg)).backgroundColor
+      // The svg's own immediate parent is the chart's actual themed
+      // container in every chart this hook is used from (ReplayTrendChart's
+      // .replay-trend-chart, LapPositionChart's .position-chart, etc) —
+      // reading it directly here means this hook doesn't need to know any
+      // particular chart's class names.
+      const bg = getComputedStyle(svg.parentElement ?? svg).backgroundColor
 
       const img = new Image()
       const proceed = () => {

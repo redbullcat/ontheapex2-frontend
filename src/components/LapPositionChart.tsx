@@ -14,6 +14,7 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { usePlayback } from '../hooks/usePlayback'
 import { PlaybackControls } from './PlaybackControls'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { useSvgRecorder } from '../hooks/useSvgRecorder'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -108,6 +109,7 @@ export function LapPositionChart({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const recorder = useSvgRecorder(svgRef, focusCarNumber ? `lap_position_${focusCarNumber}` : 'lap_position')
   const [width, setWidth] = useState(800)
   const [hover, setHover] = useState<HoverState | null>(null)
   // Synchronous mirror of `hover` for the overlay's click handler below —
@@ -681,6 +683,24 @@ export function LapPositionChart({
                 Show flag periods
               </label>
               <ChartExportButtons svgRef={svgRef} filename="lap_position" />
+              {recorder.recording && (
+                <span className="chart-record-indicator">
+                  <span className="chart-record-dot" /> {String(Math.floor(recorder.elapsedSeconds / 60)).padStart(2, '0')}:
+                  {String(recorder.elapsedSeconds % 60).padStart(2, '0')}
+                </span>
+              )}
+              <button
+                type="button"
+                className="chart-record-btn"
+                onClick={recorder.recording ? recorder.stop : recorder.start}
+                title={
+                  recorder.recording
+                    ? 'Stop recording and download the video'
+                    : 'Record this chart as a video — play/scrub normally while recording'
+                }
+              >
+                {recorder.recording ? '⏹ Stop' : '⏺ Record'}
+              </button>
             </div>
             {!focusCarNumber && (
               <div className="chart-controls">
