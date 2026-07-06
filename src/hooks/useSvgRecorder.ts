@@ -13,6 +13,42 @@ import { useCallback, useRef, useState } from 'react'
 const RESOLUTION_SCALE = 2
 const CAPTURE_FPS = 30
 
+export type RecordAspect = 'landscape' | 'portrait' | 'square' | 'portrait-4-5'
+
+// null (landscape) keeps the original behavior: the whole chart, upscaled
+// to a crisper size, same shape as it's displayed on screen. The others
+// are real social-video target resolutions — cropping a wide chart down to
+// one of these needs a source window narrower than the full chart, which
+// is what the tracking logic below computes every frame.
+const ASPECT_PRESETS: Record<RecordAspect, { width: number; height: number } | null> = {
+  landscape: null,
+  portrait: { width: 1080, height: 1920 },
+  square: { width: 1080, height: 1080 },
+  'portrait-4-5': { width: 1080, height: 1350 },
+}
+
+// How much of the crop window's width to leave as breathing room past the
+// current reveal edge, so the "now" point doesn't sit flush against the
+// right border of the frame.
+const TRACK_EDGE_PADDING_FRACTION = 0.06
+
+// Finds how far into the chart's own (unscaled) coordinate space the
+// reveal animation has currently progressed, by measuring the live
+// clip-path rect these charts already use to drive their reveal (see
+// ReplayTrendChart.tsx/LapPositionChart.tsx's clipRectRef) — reading its
+// on-screen position via getBoundingClientRect handles any margin/axis
+// transform the chart applies internally, without this hook needing to
+// know any chart-specific layout details.
+function findRevealEdgeX(svg: SVGSVGElement, naturalWidth: number): number | null {
+  const clipRect = svg.querySelector('clipPath rect')
+  if (!clipRect) return null
+  const svgBox = svg.getBoundingClientRect()
+  if (svgBox.width === 0) return null
+  const clipBox = (clipRect as SVGGraphicsElement).getBoundingClientRect()
+  const scaleX = naturalWidth / svgBox.width
+  return (clipBox.right - svgBox.left) * scaleX
+}
+
 // Visual properties a chart's paths/text can pick up from an external
 // stylesheet (a CSS class, or a var(--replay-muted)-style custom property)
 // rather than an inline attribute — axis ticks and gridlines in particular
@@ -55,6 +91,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const rafRef = useRef<number | null>(null)
   const timerRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
+  const aspectRef = useRef<RecordAspect>('landscape')
 
   // Renders exactly one frame onto the canvas; resolves once it's actually
   // painted. Used both to pre-warm the canvas before recording starts (so
@@ -69,11 +106,41 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       if (!svg || !canvas || !ctx) return resolve()
 
       const rect = svg.getBoundingClientRect()
-      const width = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
-      const height = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width
-        canvas.height = height
+      // The chart's own width/height attributes ARE its coordinate system
+      // (no viewBox — see the note on drawImage below), so that's what
+      // source crop math needs to work in, not the on-screen CSS size.
+      const naturalWidth = Number(svg.getAttribute('width')) || rect.width
+      const naturalHeight = Number(svg.getAttribute('height')) || rect.height
+
+      const preset = ASPECT_PRESETS[aspectRef.current]
+      let destWidth: number
+      let destHeight: number
+      let srcX = 0
+      let srcY = 0
+      let srcWidth = naturalWidth
+      let srcHeight = naturalHeight
+
+      if (preset) {
+        destWidth = preset.width
+        destHeight = preset.height
+        // Full chart height, but only as much width as this destination's
+        // aspect ratio needs — cropping a wide lap chart down to a tall
+        // frame instead of squashing it into an illegible sliver.
+        srcHeight = naturalHeight
+        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
+        const edge = findRevealEdgeX(svg, naturalWidth)
+        if (edge !== null) {
+          const padding = srcWidth * TRACK_EDGE_PADDING_FRACTION
+          srcX = Math.min(Math.max(0, edge + padding - srcWidth), Math.max(0, naturalWidth - srcWidth))
+        }
+      } else {
+        destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
+        destHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
+      }
+
+      if (canvas.width !== destWidth || canvas.height !== destHeight) {
+        canvas.width = destWidth
+        canvas.height = destHeight
       }
 
       // Deliberately NOT overriding the clone's width/height to the scaled
@@ -83,8 +150,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       // doesn't rescale existing content — it just declares a bigger,
       // mostly-blank canvas around the same small drawing (the "canvas is
       // much bigger than the chart" bug). Leaving them at the SVG's own
-      // real size and letting drawImage's destination rect below do the
-      // upscaling is what actually renders it bigger *and* correctly.
+      // real size and letting drawImage's source/destination rects below
+      // do the crop-and-scale is what actually renders it correctly.
       const clone = svg.cloneNode(true) as SVGSVGElement
       inlineComputedStyles(svg, clone)
       const serialized = new XMLSerializer().serializeToString(clone)
@@ -108,8 +175,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
         // still matters so the chart's own background shows through
         // wherever the SVG itself is transparent (empty margins etc).
         ctx.fillStyle = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#ffffff'
-        ctx.fillRect(0, 0, width, height)
-        ctx.drawImage(img, 0, 0, width, height)
+        ctx.fillRect(0, 0, destWidth, destHeight)
+        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
         proceed()
       }
       img.onerror = proceed
@@ -122,10 +189,11 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     if (recorderRef.current?.state === 'recording') rafRef.current = requestAnimationFrame(() => loop())
   }, [drawOnce])
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (aspect: RecordAspect = 'landscape') => {
     const svg = svgRef.current
     if (!svg || recorderRef.current) return
 
+    aspectRef.current = aspect
     const canvas = document.createElement('canvas')
     canvasRef.current = canvas
     // Pre-warm: paint a real frame before the recorder (and its capture
@@ -145,7 +213,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${filenameBase}.webm`
+      a.download = aspectRef.current === 'landscape' ? `${filenameBase}.webm` : `${filenameBase}_${aspectRef.current}.webm`
       document.body.appendChild(a)
       a.click()
       a.remove()

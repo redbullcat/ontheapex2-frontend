@@ -8,6 +8,7 @@ import { EntityFilter, type EntityOption } from '../components/EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
+import { RecordControls } from '../components/RecordControls'
 
 const MARGIN = { top: 16, right: 16, bottom: 28, left: 44 }
 const HEIGHT = 220
@@ -309,20 +310,7 @@ export function ReplayTrendChart({
     <div className={expanded ? 'replay-trend-panel expanded' : 'replay-trend-panel'}>
       <div className="replay-trend-header">
         <p className="replay-panel-label">{title}</p>
-        {recorder.recording && (
-          <span className="replay-record-indicator">
-            <span className="replay-record-dot" /> {String(Math.floor(recorder.elapsedSeconds / 60)).padStart(2, '0')}:
-            {String(recorder.elapsedSeconds % 60).padStart(2, '0')}
-          </span>
-        )}
-        <button
-          type="button"
-          className="replay-record-btn"
-          onClick={recorder.recording ? recorder.stop : recorder.start}
-          title={recorder.recording ? 'Stop recording and download the video' : 'Record this chart as a video — play/scrub normally while recording'}
-        >
-          {recorder.recording ? '⏹ Stop' : '⏺ Record'}
-        </button>
+        <RecordControls recorder={recorder} />
         {onToggleExpand && (
           <button type="button" className="replay-expand-btn" onClick={onToggleExpand} title={expanded ? 'Close' : 'Expand'}>
             {expanded ? '✕ Close' : '⛶ Expand'}

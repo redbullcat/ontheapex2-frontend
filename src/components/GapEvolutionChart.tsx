@@ -14,6 +14,7 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { usePlayback } from '../hooks/usePlayback'
 import { PlaybackControls } from './PlaybackControls'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
+import { RecordControls } from './RecordControls'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 400
@@ -672,24 +673,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           </select>
         </label>
         <ChartExportButtons svgRef={svgRef} filename="gap_evolution" />
-        {recorder.recording && (
-          <span className="chart-record-indicator">
-            <span className="chart-record-dot" /> {String(Math.floor(recorder.elapsedSeconds / 60)).padStart(2, '0')}:
-            {String(recorder.elapsedSeconds % 60).padStart(2, '0')}
-          </span>
-        )}
-        <button
-          type="button"
-          className="chart-record-btn"
-          onClick={recorder.recording ? recorder.stop : recorder.start}
-          title={
-            recorder.recording
-              ? 'Stop recording and download the video'
-              : 'Record this chart as a video — play/scrub normally while recording'
-          }
-        >
-          {recorder.recording ? '⏹ Stop' : '⏺ Record'}
-        </button>
+        <RecordControls recorder={recorder} />
       </div>
       <div className="chart-controls">
         <PlaybackControls

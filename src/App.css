@@ -634,6 +634,17 @@ header h1 {
   color: #d64545;
 }
 
+.chart-record-aspect {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 8px;
+  cursor: pointer;
+  max-width: 200px;
+}
+
 .chart-record-indicator {
   font-size: 13px;
   color: #d64545;
