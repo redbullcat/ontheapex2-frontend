@@ -872,7 +872,7 @@ table.race-notes-grid tr.race-notes-restart-row td {
   flex: 1;
   margin: 0;
 }
-.replay-record-btn {
+.chart-record-btn {
   font-family: var(--replay-mono);
   font-size: 11px;
   background: var(--replay-surface);
@@ -883,11 +883,23 @@ table.race-notes-grid tr.race-notes-restart-row td {
   color: var(--replay-muted);
   flex: none;
 }
-.replay-record-btn:hover {
+.chart-record-btn:hover {
   border-color: #d64545;
   color: #d64545;
 }
-.replay-record-indicator {
+.chart-record-aspect {
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--replay-muted);
+  flex: none;
+  max-width: 180px;
+}
+.chart-record-indicator {
   font-family: var(--replay-mono);
   font-size: 11px;
   color: #d64545;
@@ -897,14 +909,14 @@ table.race-notes-grid tr.race-notes-restart-row td {
   flex: none;
   white-space: nowrap;
 }
-.replay-record-dot {
+.chart-record-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #d64545;
-  animation: replay-record-pulse 1.2s ease-in-out infinite;
+  animation: chart-record-pulse 1.2s ease-in-out infinite;
 }
-@keyframes replay-record-pulse {
+@keyframes chart-record-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
