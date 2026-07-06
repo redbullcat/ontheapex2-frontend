@@ -887,6 +887,14 @@ table.race-notes-grid tr.race-notes-restart-row td {
   border-color: #d64545;
   color: #d64545;
 }
+.chart-record-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chart-record-btn:disabled:hover {
+  border-color: var(--replay-line-strong);
+  color: var(--replay-muted);
+}
 .chart-record-aspect {
   font-family: var(--replay-mono);
   font-size: 11px;

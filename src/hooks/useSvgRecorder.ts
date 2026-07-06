@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
+import logoWhiteRaw from '../assets/logo-white.svg?raw'
+import logoBlackRaw from '../assets/logo-black.svg?raw'
 
 // Records an <svg> element as a video by continuously rasterizing it onto
 // an offscreen canvas and feeding that canvas's own MediaStream to a
@@ -82,9 +84,156 @@ function inlineComputedStyles(original: Element, clone: Element) {
   }
 }
 
+// --- On The Apex watermark, baked into every recorded frame -----------
+
+function svgToDataUri(raw: string): string {
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(raw)))}`
+}
+
+function loadImage(src: string): HTMLImageElement {
+  const img = new Image()
+  img.src = src
+  return img
+}
+
+// Both logo files share this viewBox (see src/assets/logo-*.svg).
+const LOGO_ASPECT = 1731 / 390
+// White-on-transparent for dark chart backgrounds, black-on-transparent
+// for light ones — loaded once and reused across every recording rather
+// than per-frame.
+const logoWhiteImg = loadImage(svgToDataUri(logoWhiteRaw))
+const logoBlackImg = loadImage(svgToDataUri(logoBlackRaw))
+
+function isDarkTheme(): boolean {
+  const attr = document.documentElement.getAttribute('data-theme')
+  if (attr === 'dark') return true
+  if (attr === 'light') return false
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+function drawLogo(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const logoImg = isDarkTheme() ? logoWhiteImg : logoBlackImg
+  if (!logoImg.complete || logoImg.naturalWidth === 0) return
+  const logoWidth = Math.min(width * 0.32, 220)
+  const logoHeight = logoWidth / LOGO_ASPECT
+  const marginBottom = height * 0.025
+  ctx.drawImage(logoImg, (width - logoWidth) / 2, height - logoHeight - marginBottom, logoWidth, logoHeight)
+}
+
+// --- Optional title overlay, added in a second re-encode pass ---------
+
+function wrapTitleLines(ctx: CanvasRenderingContext2D, title: string, maxWidth: number): string[] {
+  const words = title.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current)
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
+function drawTitleBand(ctx: CanvasRenderingContext2D, title: string, width: number, height: number) {
+  const fontSize = Math.round(height * 0.042)
+  ctx.font = `700 ${fontSize}px system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  const lines = wrapTitleLines(ctx, title, width * 0.88)
+  const lineHeight = fontSize * 1.3
+  const paddingY = height * 0.025
+  const bandHeight = lines.length * lineHeight + paddingY * 2
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  ctx.fillRect(0, 0, width, bandHeight)
+
+  ctx.fillStyle = '#ffffff'
+  lines.forEach((line, i) => ctx.fillText(line, width / 2, paddingY + i * lineHeight))
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+// Re-encodes an already-recorded clip with a title band burned into every
+// frame — done as a second pass (replay the recorded blob through a
+// <video>, redraw each frame onto a fresh canvas with the title added on
+// top, re-capture that canvas) rather than during the original recording,
+// since the whole point is asking for the title *after* recording so it
+// isn't decided in advance.
+function burnInTitle(sourceBlob: Blob, title: string, mimeType: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video')
+    video.muted = true
+    video.playsInline = true
+    const sourceUrl = URL.createObjectURL(sourceBlob)
+    video.src = sourceUrl
+
+    video.onerror = () => {
+      URL.revokeObjectURL(sourceUrl)
+      reject(new Error('Failed to load recorded video for title overlay'))
+    }
+
+    video.onloadedmetadata = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d', { alpha: false })
+      if (!ctx) {
+        URL.revokeObjectURL(sourceUrl)
+        return reject(new Error('2D canvas context unavailable'))
+      }
+
+      const stream = canvas.captureStream(CAPTURE_FPS)
+      const outRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
+      const outChunks: Blob[] = []
+      outRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) outChunks.push(e.data)
+      }
+      outRecorder.onstop = () => {
+        URL.revokeObjectURL(sourceUrl)
+        resolve(new Blob(outChunks, { type: mimeType }))
+      }
+
+      let rafId: number | null = null
+      const drawFrame = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        drawTitleBand(ctx, title, canvas.width, canvas.height)
+        if (!video.ended) rafId = requestAnimationFrame(drawFrame)
+      }
+      video.onended = () => {
+        if (rafId !== null) cancelAnimationFrame(rafId)
+        outRecorder.stop()
+      }
+
+      outRecorder.start()
+      video
+        .play()
+        .then(drawFrame)
+        .catch((err) => {
+          URL.revokeObjectURL(sourceUrl)
+          reject(err)
+        })
+    }
+  })
+}
+
 export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, filenameBase: string) {
   const [recording, setRecording] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [processing, setProcessing] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -176,6 +325,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
         ctx.fillStyle = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#ffffff'
         ctx.fillRect(0, 0, destWidth, destHeight)
         ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
+        drawLogo(ctx, destWidth, destHeight)
         proceed()
       }
       img.onerror = proceed
@@ -205,8 +355,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     const canvas = document.createElement('canvas')
     canvasRef.current = canvas
     // Pre-warm: paint a real frame before the recorder (and its capture
-    // timer) starts, so the saved video opens on real content instead of
-    // an empty/blank canvas from before the first async image decode.
+    // timer) starts, so the saved video doesn't open on a blank frame
+    // while the first async SVG-decode is still in flight.
     await drawOnce()
 
     const stream = canvas.captureStream(CAPTURE_FPS)
@@ -216,16 +366,30 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
     }
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = aspectRef.current === 'landscape' ? `${filenameBase}.webm` : `${filenameBase}_${aspectRef.current}.webm`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+    recorder.onstop = async () => {
+      const rawBlob = new Blob(chunksRef.current, { type: mimeType })
+      const aspectSuffix = aspectRef.current === 'landscape' ? '' : `_${aspectRef.current}`
+      const filename = `${filenameBase}${aspectSuffix}.webm`
+
+      // Asked here — after the recording is done, before it's saved —
+      // rather than up front, since the whole point is not having to
+      // decide the title before you've seen how the recording turned out.
+      const title = window.prompt('Title for this video (shown at the top of the frame — leave blank for none):', '')?.trim()
+      if (!title) {
+        downloadBlob(rawBlob, filename)
+        return
+      }
+
+      setProcessing(true)
+      try {
+        const finalBlob = await burnInTitle(rawBlob, title, mimeType)
+        downloadBlob(finalBlob, filename)
+      } catch (err) {
+        console.error('Failed to add title overlay — downloading without it', err)
+        downloadBlob(rawBlob, filename)
+      } finally {
+        setProcessing(false)
+      }
     }
     recorderRef.current = recorder
     recorder.start()
@@ -247,5 +411,5 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
   }, [])
 
-  return { recording, elapsedSeconds, start, stop }
+  return { recording, elapsedSeconds, processing, start, stop }
 }

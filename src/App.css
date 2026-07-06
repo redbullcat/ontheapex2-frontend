@@ -634,6 +634,15 @@ header h1 {
   color: #d64545;
 }
 
+.chart-record-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chart-record-btn:disabled:hover {
+  border-color: var(--border, #e1e0d9);
+  color: var(--text-secondary, #52514e);
+}
+
 .chart-record-aspect {
   border: 1px solid var(--border, #e1e0d9);
   background: transparent;
