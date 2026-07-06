@@ -546,6 +546,11 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     pathsSelRef.current?.attr('d', (d) => line(d.points))
 
     clipRectRef.current?.attr('width', Math.max(0, x(current) + 8))
+    // Recording (useSvgRecorder's portrait/square crop-and-track mode)
+    // needs this in a plain, queryable form — getBoundingClientRect() on
+    // the clip rect itself always reads as all-zero, since clipPath
+    // contents are never laid out/painted the way normal elements are.
+    svgRef.current?.setAttribute('data-reveal-x', String(x(current)))
     const showMarkers = current < maxLap
     markersSelRef.current
       ?.style('display', showMarkers ? 'inline' : 'none')

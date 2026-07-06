@@ -27,26 +27,26 @@ const ASPECT_PRESETS: Record<RecordAspect, { width: number; height: number } | n
   'portrait-4-5': { width: 1080, height: 1350 },
 }
 
-// How much of the crop window's width to leave as breathing room past the
-// current reveal edge, so the "now" point doesn't sit flush against the
-// right border of the frame.
-const TRACK_EDGE_PADDING_FRACTION = 0.06
+// Where the current reveal position sits within the crop window, as a
+// fraction of the window's width — 0.5 keeps the cars centered as the
+// window tracks them through the race, rather than pinned to one edge.
+const TRACK_POSITION_FRACTION = 0.5
 
 // Finds how far into the chart's own (unscaled) coordinate space the
-// reveal animation has currently progressed, by measuring the live
-// clip-path rect these charts already use to drive their reveal (see
-// ReplayTrendChart.tsx/LapPositionChart.tsx's clipRectRef) — reading its
-// on-screen position via getBoundingClientRect handles any margin/axis
-// transform the chart applies internally, without this hook needing to
-// know any chart-specific layout details.
-function findRevealEdgeX(svg: SVGSVGElement, naturalWidth: number): number | null {
-  const clipRect = svg.querySelector('clipPath rect')
-  if (!clipRect) return null
-  const svgBox = svg.getBoundingClientRect()
-  if (svgBox.width === 0) return null
-  const clipBox = (clipRect as SVGGraphicsElement).getBoundingClientRect()
-  const scaleX = naturalWidth / svgBox.width
-  return (clipBox.right - svgBox.left) * scaleX
+// reveal animation has currently progressed, by reading a data-reveal-x
+// attribute the chart keeps up to date on its own <svg> root every tick
+// (see ReplayTrendChart.tsx/LapPositionChart.tsx/GapEvolutionChart.tsx's
+// per-tick effects). This deliberately does NOT measure the clip-path
+// rect's geometry directly (e.g. via getBoundingClientRect): clipPath
+// contents are never laid out or painted the way normal elements are, so
+// browsers report their bounding rect as all-zero — the crop window would
+// silently never move (exactly the "not tracking the cars" bug this was
+// built to fix in the first place).
+function findRevealEdgeX(svg: SVGSVGElement): number | null {
+  const raw = svg.getAttribute('data-reveal-x')
+  if (raw === null) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
 }
 
 // Visual properties a chart's paths/text can pick up from an external
@@ -128,10 +128,9 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
         // frame instead of squashing it into an illegible sliver.
         srcHeight = naturalHeight
         srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
-        const edge = findRevealEdgeX(svg, naturalWidth)
+        const edge = findRevealEdgeX(svg)
         if (edge !== null) {
-          const padding = srcWidth * TRACK_EDGE_PADDING_FRACTION
-          srcX = Math.min(Math.max(0, edge + padding - srcWidth), Math.max(0, naturalWidth - srcWidth))
+          srcX = Math.min(Math.max(0, edge - srcWidth * TRACK_POSITION_FRACTION), Math.max(0, naturalWidth - srcWidth))
         }
       } else {
         destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))

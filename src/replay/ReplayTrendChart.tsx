@@ -304,6 +304,13 @@ export function ReplayTrendChart({
     const x = xScaleRef.current
     if (!x || !clipRectRef.current) return
     clipRectRef.current.attr('width', Math.max(0, x(currentLap) + 4))
+    // Recording (useSvgRecorder's portrait/square crop-and-track mode)
+    // needs to know exactly where the reveal has gotten to in the SVG's
+    // own coordinate space. A getBoundingClientRect() on the clip rect
+    // itself always reads as all-zero (clipPath contents are never laid
+    // out/painted, so browsers don't give them real layout geometry) —
+    // this plain data attribute sidesteps that entirely.
+    svgRef.current?.setAttribute('data-reveal-x', String(x(currentLap)))
   }, [currentLap])
 
   return (
