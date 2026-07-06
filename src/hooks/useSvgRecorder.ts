@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import logoWhiteRaw from '../assets/logo-white.svg?raw'
 import logoBlackRaw from '../assets/logo-black.svg?raw'
+import { contrastTextColorForColor } from '../lib/contrastColor'
 
 // Records an <svg> element as a video by continuously rasterizing it onto
 // an offscreen canvas and feeding that canvas's own MediaStream to a
@@ -14,6 +15,14 @@ import logoBlackRaw from '../assets/logo-black.svg?raw'
 // crisper-than-screen result without needing a separate "resolution" UI.
 const RESOLUTION_SCALE = 2
 const CAPTURE_FPS = 30
+
+// The logo and (optional) title live in their own reserved strips rather
+// than painted over the chart — these are how much of the frame each
+// strip takes. The chart itself is always drawn at its own correct aspect
+// ratio *within* whatever space is left, never stretched/squashed to fill
+// a mismatched box.
+const LOGO_BAND_FRACTION = 0.09
+const TITLE_BAND_FRACTION = 0.16
 
 export type RecordAspect = 'landscape' | 'portrait' | 'square' | 'portrait-4-5'
 
@@ -111,13 +120,23 @@ function isDarkTheme(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-function drawLogo(ctx: CanvasRenderingContext2D, width: number, height: number) {
+// Draws the logo inside its own reserved band (from y=bandTop to the
+// bottom of the canvas) — never on top of the chart, which is drawn only
+// above bandTop (see drawOnce/burnInTitle).
+function drawLogo(ctx: CanvasRenderingContext2D, width: number, bandTop: number, canvasHeight: number) {
   const logoImg = isDarkTheme() ? logoWhiteImg : logoBlackImg
   if (!logoImg.complete || logoImg.naturalWidth === 0) return
-  const logoWidth = Math.min(width * 0.32, 220)
-  const logoHeight = logoWidth / LOGO_ASPECT
-  const marginBottom = height * 0.025
-  ctx.drawImage(logoImg, (width - logoWidth) / 2, height - logoHeight - marginBottom, logoWidth, logoHeight)
+  const bandHeight = canvasHeight - bandTop
+  let logoHeight = bandHeight * 0.6
+  let logoWidth = logoHeight * LOGO_ASPECT
+  const maxWidth = width * 0.42
+  if (logoWidth > maxWidth) {
+    logoWidth = maxWidth
+    logoHeight = logoWidth / LOGO_ASPECT
+  }
+  const x = (width - logoWidth) / 2
+  const y = bandTop + (bandHeight - logoHeight) / 2
+  ctx.drawImage(logoImg, x, y, logoWidth, logoHeight)
 }
 
 // --- Optional title overlay, added in a second re-encode pass ---------
@@ -139,21 +158,30 @@ function wrapTitleLines(ctx: CanvasRenderingContext2D, title: string, maxWidth: 
   return lines
 }
 
-function drawTitleBand(ctx: CanvasRenderingContext2D, title: string, width: number, height: number) {
-  const fontSize = Math.round(height * 0.042)
-  ctx.font = `700 ${fontSize}px system-ui, sans-serif`
+// Draws the title centered inside its own reserved band (y=0 to bandHeight)
+// — never on top of the chart, which is placed below this band. Text
+// color follows the band's own background (the chart's real background
+// color, same as everywhere else) rather than a fixed white, which would
+// vanish against a light theme.
+function drawTitleInBand(ctx: CanvasRenderingContext2D, title: string, width: number, bandHeight: number, bandBackground: string) {
+  const maxFontSize = Math.round(bandHeight * 0.32)
+  let fontSize = maxFontSize
+  let lines: string[] = []
+  // Shrink the font until the wrapped title actually fits the band's
+  // height, rather than a fixed size that could overflow a long title.
+  for (; fontSize >= 12; fontSize -= 2) {
+    ctx.font = `700 ${fontSize}px system-ui, sans-serif`
+    lines = wrapTitleLines(ctx, title, width * 0.9)
+    const lineHeight = fontSize * 1.3
+    if (lines.length * lineHeight <= bandHeight * 0.86) break
+  }
   ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  const lines = wrapTitleLines(ctx, title, width * 0.88)
+  ctx.textBaseline = 'middle'
   const lineHeight = fontSize * 1.3
-  const paddingY = height * 0.025
-  const bandHeight = lines.length * lineHeight + paddingY * 2
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
-  ctx.fillRect(0, 0, width, bandHeight)
-
-  ctx.fillStyle = '#ffffff'
-  lines.forEach((line, i) => ctx.fillText(line, width / 2, paddingY + i * lineHeight))
+  const totalTextHeight = lines.length * lineHeight
+  const startY = (bandHeight - totalTextHeight) / 2 + lineHeight / 2
+  ctx.fillStyle = contrastTextColorForColor(bandBackground)
+  lines.forEach((line, i) => ctx.fillText(line, width / 2, startY + i * lineHeight))
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -167,13 +195,16 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// Re-encodes an already-recorded clip with a title band burned into every
-// frame — done as a second pass (replay the recorded blob through a
-// <video>, redraw each frame onto a fresh canvas with the title added on
-// top, re-capture that canvas) rather than during the original recording,
-// since the whole point is asking for the title *after* recording so it
-// isn't decided in advance.
-function burnInTitle(sourceBlob: Blob, title: string, mimeType: string): Promise<Blob> {
+// Re-encodes an already-recorded clip with a title band added above it —
+// done as a second pass (replay the recorded blob through a <video>,
+// redraw each frame onto a fresh, slightly taller canvas with the
+// original frame uniformly scaled down into the remaining space plus the
+// title drawn in the new strip, re-capture that) rather than during the
+// original recording, since the whole point is asking for the title
+// *after* recording so it isn't decided in advance. Scaling uniformly
+// (not stretching) and letterboxing with the chart's own background color
+// keeps the chart+logo exactly as they were, just smaller — no distortion.
+function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgroundColor: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.muted = true
@@ -187,14 +218,22 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string): Promise
     }
 
     video.onloadedmetadata = () => {
+      const srcWidth = video.videoWidth
+      const srcHeight = video.videoHeight
       const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+      canvas.width = srcWidth
+      canvas.height = srcHeight
       const ctx = canvas.getContext('2d', { alpha: false })
       if (!ctx) {
         URL.revokeObjectURL(sourceUrl)
         return reject(new Error('2D canvas context unavailable'))
       }
+
+      const titleBandHeight = Math.round(srcHeight * TITLE_BAND_FRACTION)
+      const availableHeight = srcHeight - titleBandHeight
+      const scale = availableHeight / srcHeight
+      const scaledWidth = srcWidth * scale
+      const offsetX = (srcWidth - scaledWidth) / 2
 
       const stream = canvas.captureStream(CAPTURE_FPS)
       const outRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
@@ -209,8 +248,13 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string): Promise
 
       let rafId: number | null = null
       const drawFrame = () => {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        drawTitleBand(ctx, title, canvas.width, canvas.height)
+        ctx.fillStyle = backgroundColor
+        ctx.fillRect(0, 0, srcWidth, srcHeight)
+        // The already-recorded frame (chart + logo, exactly as captured)
+        // scaled down uniformly and placed below the title band — never
+        // stretched, so nothing in it looks different, just smaller.
+        ctx.drawImage(video, offsetX, titleBandHeight, scaledWidth, availableHeight)
+        drawTitleInBand(ctx, title, srcWidth, titleBandHeight, backgroundColor)
         if (!video.ended) rafId = requestAnimationFrame(drawFrame)
       }
       video.onended = () => {
@@ -241,6 +285,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const timerRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
   const aspectRef = useRef<RecordAspect>('landscape')
+  const bgColorRef = useRef('#ffffff')
 
   // Renders exactly one frame onto the canvas; resolves once it's actually
   // painted. Used both to pre-warm the canvas before recording starts (so
@@ -264,26 +309,36 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const preset = ASPECT_PRESETS[aspectRef.current]
       let destWidth: number
       let destHeight: number
+      // The chart itself is only ever drawn into (0,0,destWidth,chartDrawHeight)
+      // — the remaining strip below is reserved for the logo, so the chart's
+      // own content is never painted over.
+      let chartDrawHeight: number
       let srcX = 0
       let srcY = 0
       let srcWidth = naturalWidth
       let srcHeight = naturalHeight
 
       if (preset) {
+        // Exact requested output size (matters for social-media specs like
+        // a true 1080x1920) — the logo band is carved out of it, not added
+        // on top, so the final video still matches that exact resolution.
         destWidth = preset.width
         destHeight = preset.height
-        // Full chart height, but only as much width as this destination's
-        // aspect ratio needs — cropping a wide lap chart down to a tall
-        // frame instead of squashing it into an illegible sliver.
+        chartDrawHeight = Math.round(destHeight * (1 - LOGO_BAND_FRACTION))
         srcHeight = naturalHeight
-        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
+        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / chartDrawHeight))
         const edge = findRevealEdgeX(svg)
         if (edge !== null) {
           srcX = Math.min(Math.max(0, edge - srcWidth * TRACK_POSITION_FRACTION), Math.max(0, naturalWidth - srcWidth))
         }
       } else {
+        // Landscape isn't chasing an exact social-media resolution, so
+        // instead of shrinking the chart to make room for the logo, just
+        // grow the canvas — the chart keeps its own exact on-screen aspect
+        // ratio (no distortion) and the logo gets genuinely extra space.
         destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
-        destHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
+        chartDrawHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
+        destHeight = Math.round(chartDrawHeight / (1 - LOGO_BAND_FRACTION))
       }
 
       if (canvas.width !== destWidth || canvas.height !== destHeight) {
@@ -312,6 +367,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       // reading it directly here means this hook doesn't need to know any
       // particular chart's class names.
       const bg = getComputedStyle(svg.parentElement ?? svg).backgroundColor
+      const resolvedBg = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#ffffff'
+      bgColorRef.current = resolvedBg
 
       const img = new Image()
       const proceed = () => {
@@ -321,11 +378,12 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       img.onload = () => {
         // alpha:false already makes every pixel fully opaque, but the fill
         // still matters so the chart's own background shows through
-        // wherever the SVG itself is transparent (empty margins etc).
-        ctx.fillStyle = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#ffffff'
+        // wherever the SVG itself is transparent (empty margins etc), and
+        // fills the logo band behind the logo's own transparency.
+        ctx.fillStyle = resolvedBg
         ctx.fillRect(0, 0, destWidth, destHeight)
-        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
-        drawLogo(ctx, destWidth, destHeight)
+        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, chartDrawHeight)
+        drawLogo(ctx, destWidth, chartDrawHeight, destHeight)
         proceed()
       }
       img.onerror = proceed
@@ -382,7 +440,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
 
       setProcessing(true)
       try {
-        const finalBlob = await burnInTitle(rawBlob, title, mimeType)
+        const finalBlob = await burnInTitle(rawBlob, title, mimeType, bgColorRef.current)
         downloadBlob(finalBlob, filename)
       } catch (err) {
         console.error('Failed to add title overlay — downloading without it', err)
