@@ -16,6 +16,7 @@ import { PlaybackControls } from './PlaybackControls'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
 import { RecordControls } from './RecordControls'
+import { contrastTextColor } from '../lib/contrastColor'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -325,6 +326,7 @@ export function LapPositionChart({
   const yScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
   const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
   const markersSelRef = useRef<d3.Selection<SVGCircleElement, CarSeries, SVGGElement, unknown> | null>(null)
+  const markerLabelsSelRef = useRef<d3.Selection<SVGTextElement, CarSeries, SVGGElement, unknown> | null>(null)
 
   const playback = usePlayback(minLap, maxLap, 3)
 
@@ -358,7 +360,9 @@ export function LapPositionChart({
         .attr('fill-opacity', 0.15)
     }
 
-    const yTicks = y.ticks(Math.min(maxPosition, 10)).filter((t) => Number.isInteger(t))
+    // Every position, not d3's default "nice round numbers" tick selection
+    // — P1..P35 all listed rather than just every 2nd/5th one.
+    const yTicks = d3.range(1, maxPosition + 1)
     g.append('g')
       .attr('class', 'gridlines')
       .selectAll('line')
@@ -407,75 +411,85 @@ export function LapPositionChart({
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
 
+    const markerCx = (d: CarSeries) => {
+      // A retired/no-more-laps car's marker freezes at its own last known
+      // lap instead of sliding along with everyone else's current
+      // position — otherwise (see positionAtLap's forward-fill) it looks
+      // like the car is still "racing" with no line trailing behind it.
+      // Freezing it in place means the crop-tracking recorder's scrolling
+      // window naturally carries it out of frame on its own.
+      const lastLap = d.points[d.points.length - 1]?.lap_number ?? playback.current
+      return x(Math.min(playback.current, lastLap))
+    }
     const markers = g
       .append('g')
       .attr('class', 'playback-markers')
       .selectAll<SVGCircleElement, CarSeries>('circle')
       .data(cars)
       .join('circle')
-      .attr('r', 4)
+      .attr('r', 9)
       .attr('fill', strokeColor)
       .attr('stroke', 'var(--surface-1)')
       .attr('stroke-width', 1.5)
-      .style('display', playback.current < maxLap ? 'inline' : 'none')
-      .attr('cx', x(playback.current))
+      .attr('cx', markerCx)
       .attr('cy', (d) => {
         const v = positionAtLap(d.points, playback.current)
         return v == null ? -9999 : y(v)
       })
     markersSelRef.current = markers
 
+    const markerLabels = g
+      .append('g')
+      .attr('class', 'playback-marker-labels')
+      .selectAll<SVGTextElement, CarSeries>('text')
+      .data(cars)
+      .join('text')
+      .attr('x', markerCx)
+      .attr('y', (d) => {
+        const v = positionAtLap(d.points, playback.current)
+        return v == null ? -9999 : y(v)
+      })
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('font-size', 8)
+      .attr('font-weight', 700)
+      .attr('pointer-events', 'none')
+      .attr('fill', function (_d, i) {
+        const circle = markers.nodes()[i]
+        return circle ? contrastTextColor(circle) : '#000000'
+      })
+      .text((d) => d.car_number)
+    markerLabelsSelRef.current = markerLabels
+
     const finalLap = rankedByLap.get(maxLap)
     if (finalLap) {
-      // finalLap/activeClasses still span the whole ranking pool (the
-      // class), not just the drawn line(s) — normally that's exactly what
-      // "one label per class leader" wants, but with focusCarNumber only
-      // one line is ever drawn, so the label must follow it instead of
-      // whichever car happens to be leading the class it's never shown.
-      const leaders = focusCarNumber
+      // Every car that finished (not just one leader per class) gets its
+      // own finishing-position label — with focusCarNumber only its own
+      // line is ever drawn, so only its own label makes sense to show.
+      // Every position is already a unique integer (no ties), so unlike
+      // the old per-class-leader version this never needs a collision
+      // nudge — y(position) alone keeps every label evenly spaced.
+      const finishers = focusCarNumber
         ? finalLap.filter((e) => e.car_number === focusCarNumber)
-        : [...activeClasses]
-            .map((cls) => {
-              let best: RankedLap | null = null
-              for (const entry of finalLap) {
-                if (entry.class !== cls) continue
-                if (!best || entry.position < best.position) best = entry
-              }
-              return best
-            })
-            .filter((e): e is RankedLap => e !== null)
-            .sort((a, b) => a.position - b.position)
+        : [...finalLap].sort((a, b) => a.position - b.position)
 
-      const minGap = 14
-      const labelYs = leaders.map((l) => y(l.position))
-      for (let i = 1; i < labelYs.length; i++) {
-        if (labelYs[i] - labelYs[i - 1] < minGap) labelYs[i] = labelYs[i - 1] + minGap
-      }
-
-      const endLabels = g.append('g').attr('class', 'end-labels')
-
-      endLabels
-        .selectAll('circle')
-        .data(leaders)
-        .join('circle')
-        .attr('cx', innerWidth)
-        .attr('cy', (_d, i) => labelYs[i])
-        .attr('r', 4)
-        .attr('fill', strokeColor)
-        .attr('stroke', 'var(--surface-1)')
-        .attr('stroke-width', 2)
-
-      endLabels
+      // No circle here — the (now-always-visible, see markers above)
+      // playback marker itself already sits at this exact spot for any
+      // car that actually finished, so a second circle would just be a
+      // duplicate sitting on top of it. This is just the "P3" text next
+      // to it.
+      g.append('g')
+        .attr('class', 'end-labels')
         .selectAll('text')
-        .data(leaders)
+        .data(finishers)
         .join('text')
-        .attr('x', innerWidth + 10)
-        .attr('y', (_d, i) => labelYs[i])
+        .attr('x', innerWidth + 14)
+        .attr('y', (d) => y(d.position))
         .attr('dominant-baseline', 'central')
         .attr('fill', 'var(--text-primary)')
         .attr('font-size', 12)
         .attr('font-weight', 600)
-        .text((d) => `#${d.car_number}`)
+        .text((d) => `P${d.position}`)
     }
 
     const xAxis = d3
@@ -582,14 +596,21 @@ export function LapPositionChart({
     // the clip rect itself always reads as all-zero, since clipPath
     // contents are never laid out/painted the way normal elements are.
     svgRef.current?.setAttribute('data-reveal-x', String(x(current)))
-    const showMarkers = current < maxLap
-    markersSelRef.current
-      ?.style('display', showMarkers ? 'inline' : 'none')
-      .attr('cx', x(current))
-      .attr('cy', (d) => {
-        const v = positionAtLap(d.points, current)
-        return v == null ? -9999 : y(v)
-      })
+    // A retired/finished car's marker freezes at its own last lap (see the
+    // matching comment where markerCx is built above) instead of sliding
+    // along with the current playback position — and stays visible
+    // throughout, including once the race is fully revealed, rather than
+    // vanishing right when there's nothing left to reveal.
+    const markerCx = (d: CarSeries) => {
+      const lastLap = d.points[d.points.length - 1]?.lap_number ?? current
+      return x(Math.min(current, lastLap))
+    }
+    const markerCy = (d: CarSeries) => {
+      const v = positionAtLap(d.points, current)
+      return v == null ? -9999 : y(v)
+    }
+    markersSelRef.current?.attr('cx', markerCx).attr('cy', markerCy)
+    markerLabelsSelRef.current?.attr('x', markerCx).attr('y', markerCy)
   }, [playback.current, maxLap])
 
   const legendClasses = useMemo(

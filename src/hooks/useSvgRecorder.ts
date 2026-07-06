@@ -88,7 +88,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const rafRef = useRef<number | null>(null)
+  const loopTimerRef = useRef<number | null>(null)
   const timerRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
   const aspectRef = useRef<RecordAspect>('landscape')
@@ -185,7 +185,16 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
 
   const loop = useCallback(async () => {
     await drawOnce()
-    if (recorderRef.current?.state === 'recording') rafRef.current = requestAnimationFrame(() => loop())
+    // setTimeout, not requestAnimationFrame: rAF callbacks are throttled to
+    // near-zero (often fully paused) by the browser the moment a tab isn't
+    // the focused/visible one — which used to mean a recording silently
+    // stopped updating (and so came out with a frozen, cut-off-looking
+    // tail) the instant you looked away or switched tabs while it ran.
+    // setTimeout keeps firing in a background tab, so the recording keeps
+    // progressing regardless of whether the tab is actively being watched.
+    if (recorderRef.current?.state === 'recording') {
+      loopTimerRef.current = window.setTimeout(() => loop(), 1000 / CAPTURE_FPS)
+    }
   }, [drawOnce])
 
   const start = useCallback(async (aspect: RecordAspect = 'landscape') => {
@@ -234,7 +243,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     recorderRef.current = null
     canvasRef.current = null
     setRecording(false)
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    if (loopTimerRef.current !== null) window.clearTimeout(loopTimerRef.current)
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
   }, [])
 
