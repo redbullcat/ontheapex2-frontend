@@ -11,6 +11,7 @@ const ASPECT_OPTIONS: { value: RecordAspect; label: string }[] = [
 interface RecorderLike {
   recording: boolean
   elapsedSeconds: number
+  processing: boolean
   start: (aspect?: RecordAspect) => void
   stop: () => void
 }
@@ -32,7 +33,12 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
           {String(recorder.elapsedSeconds % 60).padStart(2, '0')}
         </span>
       )}
-      {!recorder.recording && (
+      {recorder.processing && (
+        <span className="chart-record-indicator" title="Re-encoding with the title you entered — this takes about as long as the recording itself">
+          <span className="chart-record-dot" /> Adding title…
+        </span>
+      )}
+      {!recorder.recording && !recorder.processing && (
         <select
           className="chart-record-aspect"
           value={aspect}
@@ -49,10 +55,11 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
       <button
         type="button"
         className="chart-record-btn"
+        disabled={recorder.processing}
         onClick={() => (recorder.recording ? recorder.stop() : recorder.start(aspect))}
         title={
           recorder.recording
-            ? 'Stop recording and download the video'
+            ? 'Stop recording — you\'ll be asked for a title before it downloads'
             : 'Record this chart as a video — play/scrub normally while recording'
         }
       >

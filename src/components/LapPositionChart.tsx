@@ -512,6 +512,15 @@ export function LapPositionChart({
       .call((sel) => sel.selectAll('.tick line').remove())
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
 
+    // Markers/labels are appended before the axes above, so without this
+    // an axis gridline painted later would sit visually on top of (in
+    // front of) any dot/number that happens to overlap it. SVG paints in
+    // DOM order, so raising these groups to the end of <g> puts them back
+    // above the axes regardless of append order.
+    g.select('.playback-markers').raise()
+    g.select('.playback-marker-labels').raise()
+    g.select('.end-labels').raise()
+
     const crosshair = g
       .append('line')
       .attr('y1', 0)
