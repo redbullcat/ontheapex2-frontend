@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { getTeamDisplayName } from '../lib/identityColors'
+import { isLapDeleted } from '../lib/lapOverrides'
+import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 
 const TOP_N = 20
 
@@ -14,6 +16,9 @@ function formatLapTime(seconds: number): string {
 // Narrowed to just the fields this table actually uses (rather than the
 // full LapRead) so both historical laps and live laps (which have no
 // id/session_id — see api/types.ts's LiveLap) can be passed in directly.
+// session_id is optional for the same reason — live laps have none, and a
+// lap can only be flagged deleted (see lapOverrides.ts) once it belongs to
+// a real persisted session, so live laps just never match an override.
 export interface FastestLapsTableLap {
   car_number: string
   lap_number: number
@@ -21,10 +26,16 @@ export interface FastestLapsTableLap {
   driver_name: string | null
   class: string | null
   team: string | null
+  session_id?: number
+}
+
+function notDeleted(lap: FastestLapsTableLap): boolean {
+  return !isLapDeleted(lap.session_id, lap.car_number, lap.lap_number)
 }
 
 export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const deletedLapsVersion = useDeletedLapsVersion()
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -39,21 +50,23 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
 
   const fastestLaps = useMemo(() => {
     return laps
-      .filter((l) => l.lap_time_seconds != null && activeClasses.has(l.class ?? 'Unknown'))
+      .filter((l) => l.lap_time_seconds != null && activeClasses.has(l.class ?? 'Unknown') && notDeleted(l))
       .sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
       .slice(0, TOP_N)
-  }, [laps, activeClasses])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laps, activeClasses, deletedLapsVersion])
 
   const fastestByCar = useMemo(() => {
     const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null) continue
-      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap)) continue
       const prev = best.get(lap.car_number)
       if (!prev || lap.lap_time_seconds < prev.lap_time_seconds!) best.set(lap.car_number, lap)
     }
     return [...best.values()].sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
-  }, [laps, activeClasses])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laps, activeClasses, deletedLapsVersion])
 
   // Cars sharing driving duties can have a car-level fastest lap set by only
   // one of them — this breaks the fastest lap out per individual driver
@@ -63,12 +76,13 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
     const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null || !lap.driver_name) continue
-      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap)) continue
       const prev = best.get(lap.driver_name)
       if (!prev || lap.lap_time_seconds < prev.lap_time_seconds!) best.set(lap.driver_name, lap)
     }
     return [...best.values()].sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
-  }, [laps, activeClasses])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laps, activeClasses, deletedLapsVersion])
 
   return (
     <div className="fastest-laps">

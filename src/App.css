@@ -425,6 +425,125 @@ header h1 {
   background: color-mix(in srgb, var(--text, #52514e) 6%, transparent);
 }
 
+.deleted-lap-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d64545;
+  cursor: help;
+  white-space: nowrap;
+}
+.deleted-lap-flag-btn {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-muted, #898781);
+  border-radius: 6px;
+  font-size: 11.5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.deleted-lap-flag-btn:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+
+.lap-flag-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.lap-flag-modal {
+  background: var(--surface-1, #fcfcfb);
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 8px;
+  padding: 20px 22px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  color: var(--text-h, #0b0b0b);
+}
+.lap-flag-modal h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.lap-flag-summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h, #0b0b0b);
+}
+.lap-flag-modal .hint {
+  margin: 0 0 14px;
+}
+.lap-flag-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #52514e);
+  margin-bottom: 16px;
+}
+.lap-flag-field textarea {
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  padding: 8px 9px;
+  font-size: 13px;
+  background: var(--surface-1, #fcfcfb);
+  color: var(--text-h, #0b0b0b);
+  font-family: inherit;
+  resize: vertical;
+}
+.lap-flag-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lap-flag-actions-right {
+  display: flex;
+  gap: 8px;
+}
+.lap-flag-actions button {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.lap-flag-actions button:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.lap-flag-restore {
+  color: #d64545 !important;
+  border-color: #d64545 !important;
+}
+.lap-flag-primary {
+  background: #d64545 !important;
+  border-color: #d64545 !important;
+  color: #fff !important;
+}
+.lap-flag-primary:hover {
+  filter: brightness(1.1);
+}
+.lap-flag-primary:disabled {
+  background: var(--border, #e1e0d9) !important;
+  border-color: var(--border, #e1e0d9) !important;
+  color: var(--text-muted, #898781) !important;
+  cursor: default;
+}
+
 .stat-row {
   display: flex;
   flex-wrap: wrap;
@@ -848,6 +967,26 @@ header h1 {
   color-scheme: light;
   flex: 1;
   min-width: 120px;
+}
+
+.settings-section-head {
+  margin: 20px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, #e1e0d9);
+  font-size: 15px;
+}
+
+.settings-row-deleted-lap .settings-row-team {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.settings-deleted-lap-reason {
+  font-size: 12.5px;
+  color: var(--text-secondary, #52514e);
+}
+.settings-deleted-lap-date {
+  color: var(--text-muted, #898781);
 }
 
 .top-percent {

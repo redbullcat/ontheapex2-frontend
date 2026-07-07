@@ -17,6 +17,8 @@ import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
 import { RecordControls } from './RecordControls'
 import { contrastTextColor } from '../lib/contrastColor'
+import { isLapDeleted } from '../lib/lapOverrides'
+import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -143,6 +145,7 @@ export function LapPositionChart({
   const [showFlags, setShowFlags] = useState(false)
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
+  const deletedLapsVersion = useDeletedLapsVersion()
 
   useEffect(() => {
     const el = containerRef.current
@@ -234,6 +237,7 @@ export function LapPositionChart({
         for (const r of lapsByNumber.get(lapNumber)!) {
           if (r.lap_time_seconds == null) continue
           if (!activeClasses.has(r.class ?? 'Unknown') || !activeCars.has(r.car_number)) continue
+          if (isLapDeleted(r.session_id, r.car_number, r.lap_number)) continue
           const prev = bestSoFar.get(r.car_number)
           if (!prev || r.lap_time_seconds < prev.time) {
             bestSoFar.set(r.car_number, { time: r.lap_time_seconds, class: r.class ?? 'Unknown', team: r.team })
@@ -277,7 +281,8 @@ export function LapPositionChart({
       m.set(lapNumber, ranked)
     }
     return m
-  }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange, rankBy])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange, rankBy, deletedLapsVersion])
 
   // Grid slot only makes sense as the origin of a real race running order
   // — practice/qualifying's own 'bestLapSoFar' ranking has no green flag to

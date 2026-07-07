@@ -10,6 +10,7 @@ import {
   getStints,
 } from './api/client'
 import { useAsync } from './hooks/useAsync'
+import { useDeletedLapsVersion } from './hooks/useDeletedLapsVersion'
 import { useDocumentTitle } from './hooks/useDocumentTitle'
 import { Sidebar, type Theme } from './components/Sidebar'
 import { useLiveSessions } from './live/useLiveSessions'
@@ -221,9 +222,11 @@ function App() {
       : null,
     [sessionSection, sessionsByBucket],
   )
+  const deletedLapsVersion = useDeletedLapsVersion()
   const startingGrid = useMemo(
     () => (qualifyingLapsState.status === 'success' ? computeStartingGrid(qualifyingLapsState.data) : null),
-    [qualifyingLapsState],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [qualifyingLapsState, deletedLapsVersion],
   )
 
   // Default session once the event's sessions load: prefer Race, then
