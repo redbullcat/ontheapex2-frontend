@@ -1,6 +1,14 @@
-import { useMemo, useRef, useState } from 'react'
-import type { FinalizeOptions } from '../hooks/useSvgRecorder'
-import { DEFAULT_TITLE_FONT, TITLE_FONT_FAMILIES, stylesForFamily, type TitleFontFamily } from '../lib/fonts'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  defaultAspectOptions,
+  toFinalizeOptions,
+  type EditableAspectOptions,
+  type FinalizeOptions,
+  type PreviewSource,
+  type RecordAspect,
+} from '../hooks/useSvgRecorder'
+import { ASPECT_OPTIONS } from '../lib/recordAspects'
+import { TITLE_FONT_FAMILIES, stylesForFamily, type TitleFontFamily } from '../lib/fonts'
 import { createMoment, type RaceMoment } from '../lib/raceMoments'
 import { RecordPreview, type RecordPreviewHandle } from './RecordPreview'
 
@@ -25,25 +33,25 @@ function formatTime(seconds: number): string {
 // via RecordPreview/composeFrame. Deliberately shown *after* recording
 // rather than before: none of these choices need to be locked in until
 // you've actually seen how the clip turned out.
+//
+// When more than one aspect ratio was recorded at once, a tab bar switches
+// between them — each has its own independent preview, title/font/logo,
+// and moments, seeded as a clone of a shared starting point the first time
+// it's ever shown (see the effect below) and free to diverge from there.
 export function RecordFinalizeModal({
-  preview,
-  moments,
-  onMomentsChange,
+  previewSources,
+  perAspectOptions,
+  onAspectOptionsChange,
   onSubmit,
   onCancel,
 }: {
-  preview: { blob: Blob; backgroundColor: string } | null
-  moments: RaceMoment[]
-  onMomentsChange: (moments: RaceMoment[]) => void
-  onSubmit: (options: FinalizeOptions) => void
+  previewSources: PreviewSource[]
+  perAspectOptions: Partial<Record<RecordAspect, EditableAspectOptions>>
+  onAspectOptionsChange: (aspect: RecordAspect, options: EditableAspectOptions) => void
+  onSubmit: (optionsByAspect: Partial<Record<RecordAspect, FinalizeOptions>>) => void
   onCancel: () => void
 }) {
-  const [title, setTitle] = useState('')
-  const [includeLogo, setIncludeLogo] = useState(true)
-  const [family, setFamily] = useState<TitleFontFamily>(DEFAULT_TITLE_FONT.family)
-  const [weight, setWeight] = useState(DEFAULT_TITLE_FONT.weight)
-  const [italic, setItalic] = useState(DEFAULT_TITLE_FONT.italic)
-  const [size, setSize] = useState(DEFAULT_TITLE_FONT.size)
+  const [activeAspect, setActiveAspect] = useState<RecordAspect>(previewSources[0]?.aspect ?? 'landscape')
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null)
   const [previewTime, setPreviewTime] = useState(0)
   const [previewDuration, setPreviewDuration] = useState(0)
@@ -51,28 +59,56 @@ export function RecordFinalizeModal({
 
   const previewRef = useRef<RecordPreviewHandle>(null)
 
-  const styleOptions = useMemo(() => stylesForFamily(family), [family])
+  // Every pending aspect without its own persisted options (see
+  // useSvgRecorder's perAspectOptions) starts as a clone of whichever
+  // pending aspect already has some — or a fresh default if none do —
+  // rather than blank. From here each aspect's edits are independent.
+  useEffect(() => {
+    if (previewSources.length === 0) return
+    const aspects = previewSources.map((p) => p.aspect)
+    const missing = aspects.filter((a) => !perAspectOptions[a])
+    if (missing.length === 0) return
+    const seedAspect = aspects.find((a) => perAspectOptions[a])
+    const seed = seedAspect ? perAspectOptions[seedAspect]! : defaultAspectOptions()
+    for (const aspect of missing) {
+      onAspectOptionsChange(aspect, structuredClone(seed))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewSources])
 
-  const font = { family, weight, italic, size }
-  const options: FinalizeOptions = { title: title.trim() || null, includeLogo, font, moments }
-  const editingMoment = moments.find((m) => m.id === editingMomentId) ?? null
+  const active = perAspectOptions[activeAspect] ?? defaultAspectOptions()
+  const preview = previewSources.find((p) => p.aspect === activeAspect) ?? null
+  const multiAspect = previewSources.length > 1
+
+  const styleOptions = useMemo(() => stylesForFamily(active.family), [active.family])
+  const editingMoment = active.moments.find((m) => m.id === editingMomentId) ?? null
+
+  function patchActive(patch: Partial<EditableAspectOptions>) {
+    onAspectOptionsChange(activeAspect, { ...active, ...patch })
+  }
+
+  function switchAspect(aspect: RecordAspect) {
+    if (aspect === activeAspect) return
+    setActiveAspect(aspect)
+    setEditingMomentId(null)
+    setIsPlaying(true)
+    setPreviewTime(0)
+    setPreviewDuration(0)
+  }
 
   function handleFamilyChange(next: TitleFontFamily) {
-    setFamily(next)
     // Saira Condensed has no italic cut — fall back to the same weight,
     // upright, rather than silently rendering upright anyway while the
     // dropdown still claims "Italic".
     const nextOptions = stylesForFamily(next)
-    if (!nextOptions.some((opt) => opt.weight === weight && opt.italic === italic)) {
-      setItalic(false)
-    }
+    const stillValid = nextOptions.some((opt) => opt.weight === active.weight && opt.italic === active.italic)
+    patchActive({ family: next, italic: stillValid ? active.italic : false })
   }
 
   function handleStyleChange(key: string) {
     const opt = styleOptions.find((o) => styleKey(o.weight, o.italic) === key)
     if (!opt) return
-    setWeight(opt.weight)
-    setItalic(opt.italic)
+    patchActive({ weight: opt.weight, italic: opt.italic })
   }
 
   function stopEditing() {
@@ -83,7 +119,7 @@ export function RecordFinalizeModal({
 
   function handleAddMoment() {
     const m = createMoment(previewTime)
-    onMomentsChange([...moments, m])
+    patchActive({ moments: [...active.moments, m] })
     setEditingMomentId(m.id)
     setIsPlaying(false)
     previewRef.current?.setPlaying(false)
@@ -102,23 +138,23 @@ export function RecordFinalizeModal({
   }
 
   function handleRemove(id: string) {
-    onMomentsChange(moments.filter((m) => m.id !== id))
+    patchActive({ moments: active.moments.filter((m) => m.id !== id) })
     if (editingMomentId === id) stopEditing()
   }
 
   function handleMomentPatch(id: string, patch: Partial<Pick<RaceMoment, 'text' | 'fontSize' | 'holdSeconds'>>) {
-    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+    patchActive({ moments: active.moments.map((m) => (m.id === id ? { ...m, ...patch } : m)) })
   }
 
   function handleMomentDrag(id: string, patch: Partial<Pick<RaceMoment, 'textPos' | 'anchorPos'>>) {
-    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+    patchActive({ moments: active.moments.map((m) => (m.id === id ? { ...m, ...patch } : m)) })
   }
 
   // Called continuously while positioning a moment and playback/scrubbing
   // moves it away from its current time — see RecordPreview's editing
   // branch. Scrubbing or playing while positioning *is* how you retime it.
   function handleMomentRetime(id: string, atSeconds: number) {
-    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, atSeconds } : m)))
+    patchActive({ moments: active.moments.map((m) => (m.id === id ? { ...m, atSeconds } : m)) })
   }
 
   function handleScrub(seconds: number) {
@@ -134,18 +170,44 @@ export function RecordFinalizeModal({
     previewRef.current?.setPlaying(next)
   }
 
-  const sortedMoments = [...moments].sort((a, b) => a.atSeconds - b.atSeconds)
+  function handleDownload() {
+    const optionsByAspect: Partial<Record<RecordAspect, FinalizeOptions>> = {}
+    for (const p of previewSources) {
+      const e = perAspectOptions[p.aspect] ?? defaultAspectOptions()
+      optionsByAspect[p.aspect] = toFinalizeOptions(e)
+    }
+    onSubmit(optionsByAspect)
+  }
+
+  const sortedMoments = [...active.moments].sort((a, b) => a.atSeconds - b.atSeconds)
 
   return (
     <div className="record-finalize-backdrop" onClick={onCancel}>
       <div className="record-finalize-modal" onClick={(e) => e.stopPropagation()}>
         <h3>Finish recording</h3>
+
+        {multiAspect && (
+          <div className="record-finalize-aspect-tabs">
+            {previewSources.map((p) => (
+              <button
+                key={p.aspect}
+                type="button"
+                className={p.aspect === activeAspect ? 'active' : ''}
+                onClick={() => switchAspect(p.aspect)}
+              >
+                {ASPECT_OPTIONS.find((o) => o.value === p.aspect)?.shortLabel ?? p.aspect}
+              </button>
+            ))}
+          </div>
+        )}
+
         {preview && (
           <RecordPreview
+            key={activeAspect}
             ref={previewRef}
             blob={preview.blob}
             backgroundColor={preview.backgroundColor}
-            options={options}
+            options={toFinalizeOptions(active)}
             editingMoment={editingMoment}
             onMomentDrag={handleMomentDrag}
             onMomentRetime={handleMomentRetime}
@@ -157,12 +219,7 @@ export function RecordFinalizeModal({
         )}
         {preview && (
           <div className="record-finalize-scrub">
-            <button
-              type="button"
-              className="btn icon"
-              onClick={togglePlaying}
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
+            <button type="button" className="btn icon" onClick={togglePlaying} title={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? '⏸' : '▶'}
             </button>
             <input
@@ -181,8 +238,8 @@ export function RecordFinalizeModal({
           Title (optional)
           <input
             type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={active.title}
+            onChange={(e) => patchActive({ title: e.target.value })}
             placeholder="e.g. 2026 Spa 6H lap chart — Hypercar"
             autoFocus
           />
@@ -190,7 +247,7 @@ export function RecordFinalizeModal({
         <div className="record-finalize-font-row">
           <label className="record-finalize-field">
             Font
-            <select value={family} onChange={(e) => handleFamilyChange(e.target.value as TitleFontFamily)}>
+            <select value={active.family} onChange={(e) => handleFamilyChange(e.target.value as TitleFontFamily)}>
               {TITLE_FONT_FAMILIES.map((f) => (
                 <option key={f} value={f}>
                   {f}
@@ -200,7 +257,7 @@ export function RecordFinalizeModal({
           </label>
           <label className="record-finalize-field">
             Style
-            <select value={styleKey(weight, italic)} onChange={(e) => handleStyleChange(e.target.value)}>
+            <select value={styleKey(active.weight, active.italic)} onChange={(e) => handleStyleChange(e.target.value)}>
               {styleOptions.map((opt) => (
                 <option key={styleKey(opt.weight, opt.italic)} value={styleKey(opt.weight, opt.italic)}>
                   {opt.label}
@@ -214,11 +271,11 @@ export function RecordFinalizeModal({
               type="number"
               min={8}
               max={200}
-              value={size}
+              value={active.size}
               list="record-finalize-size-presets"
               onChange={(e) => {
                 const next = Number(e.target.value)
-                if (Number.isFinite(next)) setSize(next)
+                if (Number.isFinite(next)) patchActive({ size: next })
               }}
             />
             <datalist id="record-finalize-size-presets">
@@ -229,7 +286,7 @@ export function RecordFinalizeModal({
           </label>
         </div>
         <label className="record-finalize-checkbox">
-          <input type="checkbox" checked={includeLogo} onChange={(e) => setIncludeLogo(e.target.checked)} />
+          <input type="checkbox" checked={active.includeLogo} onChange={(e) => patchActive({ includeLogo: e.target.checked })} />
           Include OTA logo?
         </label>
 
@@ -298,8 +355,8 @@ export function RecordFinalizeModal({
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="record-finalize-primary" onClick={() => onSubmit(options)}>
-            Download
+          <button type="button" className="record-finalize-primary" onClick={handleDownload}>
+            {multiAspect ? `Download ${previewSources.length} videos (.zip)` : 'Download'}
           </button>
         </div>
       </div>

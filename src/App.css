@@ -773,6 +773,65 @@ header h1 {
   max-width: 200px;
 }
 
+.chart-record-aspect-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.chart-record-aspect-btn {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chart-record-aspect-btn:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+
+.chart-record-aspect-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+}
+
+.chart-record-aspect-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 56;
+  background: var(--surface-1, #fcfcfb);
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.chart-record-aspect-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-h, #0b0b0b);
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chart-record-aspect-option:hover {
+  background: var(--surface-2, #f2f1ec);
+}
+
 .chart-record-indicator {
   font-size: 13px;
   color: #d64545;
@@ -1037,6 +1096,30 @@ header h1 {
   margin: 0;
   font-size: 13px;
   color: var(--text-h, #0b0b0b);
+}
+.record-finalize-aspect-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.record-finalize-aspect-tabs button {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.record-finalize-aspect-tabs button:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.record-finalize-aspect-tabs button.active {
+  background: #d64545;
+  border-color: #d64545;
+  color: #fff;
 }
 .record-finalize-preview {
   display: flex;

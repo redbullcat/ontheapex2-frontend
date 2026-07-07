@@ -907,6 +907,61 @@ table.race-notes-grid tr.race-notes-restart-row td {
   flex: none;
   max-width: 180px;
 }
+.chart-record-aspect-picker {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.chart-record-aspect-btn {
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--replay-muted);
+  white-space: nowrap;
+}
+.chart-record-aspect-btn:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.chart-record-aspect-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+}
+.chart-record-aspect-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 56;
+  background: var(--replay-surface);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 210px;
+}
+.chart-record-aspect-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--replay-mono);
+  font-size: 11px;
+  color: var(--replay-ink);
+  padding: 5px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chart-record-aspect-option:hover {
+  background: var(--replay-surface-strong, rgba(255, 255, 255, 0.06));
+}
 .chart-record-indicator {
   font-family: var(--replay-mono);
   font-size: 11px;
@@ -1555,6 +1610,31 @@ button.replay-play:hover {
   margin: 0;
   font-size: 13px;
   color: var(--replay-ink);
+}
+.replay-root .record-finalize-aspect-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.replay-root .record-finalize-aspect-tabs button {
+  font-family: var(--replay-mono);
+  border: 1px solid var(--replay-line-strong);
+  background: var(--replay-surface);
+  color: var(--replay-muted);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.replay-root .record-finalize-aspect-tabs button:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.replay-root .record-finalize-aspect-tabs button.active {
+  background: #d64545;
+  border-color: #d64545;
+  color: #fff;
 }
 .replay-root .record-finalize-preview {
   display: flex;
