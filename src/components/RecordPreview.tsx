@@ -27,9 +27,14 @@ export const RecordPreview = forwardRef<
     options: FinalizeOptions
     editingMoment: RaceMoment | null
     onMomentDrag: (id: string, patch: Partial<Pick<RaceMoment, 'textPos' | 'anchorPos'>>) => void
+    // Called continuously while positioning a moment and playback/scrubbing
+    // moves away from its current atSeconds — scrubbing or playing *is* how
+    // you retime a moment while positioning it, rather than a separate
+    // control (see the editing branch in the draw loop below).
+    onMomentRetime: (id: string, atSeconds: number) => void
     onTimeUpdate?: (seconds: number, durationSeconds: number) => void
   }
->(function RecordPreview({ blob, backgroundColor, options, editingMoment, onMomentDrag, onTimeUpdate }, ref) {
+>(function RecordPreview({ blob, backgroundColor, options, editingMoment, onMomentDrag, onMomentRetime, onTimeUpdate }, ref) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null)
@@ -44,6 +49,8 @@ export const RecordPreview = forwardRef<
   const seekTargetRef = useRef<number | null>(null)
   const onTimeUpdateRef = useRef(onTimeUpdate)
   onTimeUpdateRef.current = onTimeUpdate
+  const onMomentRetimeRef = useRef(onMomentRetime)
+  onMomentRetimeRef.current = onMomentRetime
 
   useImperativeHandle(ref, () => ({
     seek(seconds) {
@@ -97,14 +104,26 @@ export const RecordPreview = forwardRef<
 
         const editing = editingMomentRef.current
         if (editing) {
-          // Positioning mode: freeze on the moment's own frame, draw the
-          // clean base composite (no baked-in overlay — the DOM handles
-          // are what's editable here), and skip the moment-player entirely.
-          if (Math.abs(video.currentTime - editing.atSeconds) > 0.05) {
-            video.currentTime = editing.atSeconds
+          // Positioning mode starts frozen on the moment's own frame, but
+          // scrubbing or pressing play still works here — that's how you
+          // retime a moment while positioning it, rather than a separate
+          // control. Whatever instant playback/scrubbing lands on becomes
+          // the moment's new atSeconds.
+          if (seekTargetRef.current !== null) {
+            video.currentTime = seekTargetRef.current
+            seekTargetRef.current = null
+            if (!playingRef.current) video.pause()
           }
-          if (!video.paused) video.pause()
+          if (playingRef.current) {
+            if (video.paused) video.play().catch(() => {})
+          } else if (!video.paused) {
+            video.pause()
+          }
           composeFrame(ctx, video, video.videoWidth, video.videoHeight, bgRef.current, optionsRef.current, null)
+          if (Math.abs(video.currentTime - editing.atSeconds) > 0.01) {
+            onMomentRetimeRef.current?.(editing.id, video.currentTime)
+          }
+          onTimeUpdateRef.current?.(video.currentTime, video.duration || 0)
           rafId = requestAnimationFrame(draw)
           return
         }

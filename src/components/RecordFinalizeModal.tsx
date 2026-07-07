@@ -47,6 +47,7 @@ export function RecordFinalizeModal({
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null)
   const [previewTime, setPreviewTime] = useState(0)
   const [previewDuration, setPreviewDuration] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(true)
 
   const previewRef = useRef<RecordPreviewHandle>(null)
 
@@ -76,6 +77,7 @@ export function RecordFinalizeModal({
 
   function stopEditing() {
     setEditingMomentId(null)
+    setIsPlaying(true)
     previewRef.current?.setPlaying(true)
   }
 
@@ -83,6 +85,7 @@ export function RecordFinalizeModal({
     const m = createMoment(previewTime)
     onMomentsChange([...moments, m])
     setEditingMomentId(m.id)
+    setIsPlaying(false)
     previewRef.current?.setPlaying(false)
     previewRef.current?.seek(previewTime)
   }
@@ -93,6 +96,7 @@ export function RecordFinalizeModal({
       return
     }
     setEditingMomentId(m.id)
+    setIsPlaying(false)
     previewRef.current?.setPlaying(false)
     previewRef.current?.seek(m.atSeconds)
   }
@@ -110,10 +114,24 @@ export function RecordFinalizeModal({
     onMomentsChange(moments.map((m) => (m.id === id ? { ...m, ...patch } : m)))
   }
 
+  // Called continuously while positioning a moment and playback/scrubbing
+  // moves it away from its current time — see RecordPreview's editing
+  // branch. Scrubbing or playing while positioning *is* how you retime it.
+  function handleMomentRetime(id: string, atSeconds: number) {
+    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, atSeconds } : m)))
+  }
+
   function handleScrub(seconds: number) {
+    setIsPlaying(false)
     previewRef.current?.setPlaying(false)
     previewRef.current?.seek(seconds)
     setPreviewTime(seconds)
+  }
+
+  function togglePlaying() {
+    const next = !isPlaying
+    setIsPlaying(next)
+    previewRef.current?.setPlaying(next)
   }
 
   const sortedMoments = [...moments].sort((a, b) => a.atSeconds - b.atSeconds)
@@ -130,6 +148,7 @@ export function RecordFinalizeModal({
             options={options}
             editingMoment={editingMoment}
             onMomentDrag={handleMomentDrag}
+            onMomentRetime={handleMomentRetime}
             onTimeUpdate={(t, d) => {
               setPreviewTime(t)
               setPreviewDuration(d)
@@ -141,10 +160,10 @@ export function RecordFinalizeModal({
             <button
               type="button"
               className="btn icon"
-              onClick={() => previewRef.current?.setPlaying(true)}
-              title="Resume auto-play"
+              onClick={togglePlaying}
+              title={isPlaying ? 'Pause' : 'Play'}
             >
-              ▶
+              {isPlaying ? '⏸' : '▶'}
             </button>
             <input
               type="range"
