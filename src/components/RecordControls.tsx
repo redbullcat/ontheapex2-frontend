@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { RecordAspect } from '../hooks/useSvgRecorder'
+import type { FinalizeOptions, RecordAspect } from '../hooks/useSvgRecorder'
+import { RecordFinalizeModal } from './RecordFinalizeModal'
 
 const ASPECT_OPTIONS: { value: RecordAspect; label: string }[] = [
   { value: 'landscape', label: 'Landscape (16:9)' },
@@ -12,6 +13,9 @@ interface RecorderLike {
   recording: boolean
   elapsedSeconds: number
   processing: boolean
+  awaitingFinalize: boolean
+  submitFinalize: (options: FinalizeOptions) => void
+  cancelFinalize: () => void
   start: (aspect?: RecordAspect) => void
   stop: () => void
 }
@@ -34,8 +38,8 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
         </span>
       )}
       {recorder.processing && (
-        <span className="chart-record-indicator" title="Re-encoding with the title you entered — this takes about as long as the recording itself">
-          <span className="chart-record-dot" /> Adding title…
+        <span className="chart-record-indicator" title="Re-encoding with your chosen title/logo — this takes about as long as the recording itself">
+          <span className="chart-record-dot" /> Finalizing…
         </span>
       )}
       {!recorder.recording && !recorder.processing && (
@@ -59,12 +63,15 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
         onClick={() => (recorder.recording ? recorder.stop() : recorder.start(aspect))}
         title={
           recorder.recording
-            ? 'Stop recording — you\'ll be asked for a title before it downloads'
+            ? 'Stop recording — you\'ll be asked for a title and logo before it downloads'
             : 'Record this chart as a video — play/scrub normally while recording'
         }
       >
         {recorder.recording ? '⏹ Stop' : '⏺ Record'}
       </button>
+      {recorder.awaitingFinalize && (
+        <RecordFinalizeModal onSubmit={recorder.submitFinalize} onCancel={recorder.cancelFinalize} />
+      )}
     </>
   )
 }

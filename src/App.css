@@ -868,3 +868,78 @@ header h1 {
   color: #0b0b0b;
   color-scheme: light;
 }
+
+.record-finalize-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.record-finalize-modal {
+  background: var(--surface-1, #fcfcfb);
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 8px;
+  padding: 20px 22px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  color: var(--text-h, #0b0b0b);
+}
+.record-finalize-modal h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+.record-finalize-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #52514e);
+  margin-bottom: 14px;
+}
+.record-finalize-field input[type='text'] {
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  background: var(--surface-1, #fcfcfb);
+  color: var(--text-h, #0b0b0b);
+}
+.record-finalize-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #52514e);
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+.record-finalize-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.record-finalize-actions button {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.record-finalize-actions button:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.record-finalize-primary {
+  background: #d64545 !important;
+  border-color: #d64545 !important;
+  color: #fff !important;
+}
+.record-finalize-primary:hover {
+  filter: brightness(1.1);
+}
