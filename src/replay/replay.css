@@ -1540,7 +1540,7 @@ button.replay-play:hover {
   border: 1px solid var(--replay-line-strong);
   border-radius: 8px;
   padding: 20px 22px;
-  width: 420px;
+  width: 720px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
   overflow-y: auto;
@@ -1561,11 +1561,14 @@ button.replay-play:hover {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 220px;
+  height: min(70vh, 520px);
   background: #000;
   border-radius: 6px;
   margin-bottom: 8px;
   overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .replay-root .record-finalize-preview-frame {
   position: relative;
@@ -1712,18 +1715,21 @@ button.replay-play:hover {
   padding: 8px 9px;
   display: grid;
   grid-template-columns: 18px 1fr auto;
+  grid-template-rows: auto auto;
   gap: 6px 8px;
-  align-items: center;
   background: color-mix(in srgb, var(--replay-line-strong) 18%, var(--replay-surface));
 }
 .replay-root .record-finalize-moment-idx {
+  grid-row: 1 / 3;
   font-size: 11.5px;
   font-weight: 700;
   color: var(--replay-muted);
   text-align: center;
+  padding-top: 6px;
 }
 .replay-root .record-finalize-moment input[type='text'] {
   grid-column: 2 / 3;
+  grid-row: 1 / 2;
   border: 1px solid var(--replay-line-strong);
   border-radius: 6px;
   padding: 6px 8px;
@@ -1733,17 +1739,38 @@ button.replay-play:hover {
   font-family: inherit;
   width: 100%;
 }
-.replay-root .record-finalize-moment-time {
+.replay-root .record-finalize-moment-meta {
   grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   font-size: 11px;
   color: var(--replay-muted);
   font-variant-numeric: tabular-nums;
 }
+.replay-root .record-finalize-moment-meta label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.replay-root .record-finalize-moment-meta input[type='number'] {
+  width: 52px;
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 5px;
+  padding: 3px 5px;
+  font-size: 11px;
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+  font-family: inherit;
+}
 .replay-root .record-finalize-moment-actions {
   grid-column: 3 / 4;
+  grid-row: 1 / 3;
   display: flex;
   gap: 6px;
   align-items: center;
+  align-self: center;
 }
 
 .replay-root .moment-editor {

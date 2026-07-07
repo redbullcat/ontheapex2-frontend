@@ -24,9 +24,18 @@ export interface RaceMoment {
   textPos: Point
   anchorPos: Point
   holdSeconds: number
+  // Caption text size, in canvas pixels at the recording's own resolution
+  // — same convention as the title's font-size control, not a fraction of
+  // the frame, so it's a literal, eyeball-and-adjust number rather than
+  // something that silently changes meaning as the chart area's own size
+  // changes. The bubble itself is never sized independently: it's always
+  // exactly big enough to fit the wrapped caption at this font size, so
+  // "bubble size" and "font size" are the same control.
+  fontSize: number
 }
 
 export const DEFAULT_HOLD_SECONDS = 3
+export const DEFAULT_MOMENT_FONT_SIZE = 32
 // How long the arrow/caption take to draw in and fade out — kept short and
 // fixed (not per-moment) since these are a house style, not something worth
 // a control for.
@@ -43,6 +52,7 @@ export function createMoment(atSeconds: number): RaceMoment {
     textPos: { x: 0.5, y: 0.16 },
     anchorPos: { x: 0.5, y: 0.5 },
     holdSeconds: DEFAULT_HOLD_SECONDS,
+    fontSize: DEFAULT_MOMENT_FONT_SIZE,
   }
 }
 
@@ -190,7 +200,7 @@ export function drawMomentOverlay(
   const { x: ax, y: ay } = momentAnchorPx(chartRect, moment)
   const { x: tx, y: ty } = momentTextPx(chartRect, moment)
 
-  const fontSize = Math.max(12, Math.round(chartRect.height * 0.032))
+  const fontSize = Math.max(10, moment.fontSize)
   ctx.font = `700 ${fontSize}px system-ui, sans-serif`
   const maxTextWidth = chartRect.width * 0.4
   const lines = wrapLines(ctx, moment.text || ' ', maxTextWidth)
@@ -202,16 +212,32 @@ export function drawMomentOverlay(
   const bubbleH = lines.length * lineHeight + padY * 2
   // Settles in from slightly below during the entry animation, same feel as
   // the wireframe's CSS "slide up while fading in".
-  const bubbleY = ty - bubbleH / 2 + (1 - opacity) * fontSize * 0.6
-  const bubbleX = tx - bubbleW / 2
+  let bubbleY = ty - bubbleH / 2 + (1 - opacity) * fontSize * 0.6
+  let bubbleX = tx - bubbleW / 2
+
+  // Clamped to stay fully on-canvas regardless of where textPos/fontSize
+  // put it — a bubble placed near an edge (or made large enough to no
+  // longer fit where it was originally dropped) must still be fully
+  // visible in the export rather than silently drawing partly or entirely
+  // off-canvas. RecordPreview's drag-to-position editor applies this same
+  // clamp so what's shown while editing matches what's exported.
+  const margin = Math.max(4, fontSize * 0.25)
+  const canvasW = ctx.canvas.width
+  const canvasH = ctx.canvas.height
+  bubbleX = Math.min(Math.max(bubbleX, margin), Math.max(margin, canvasW - bubbleW - margin))
+  bubbleY = Math.min(Math.max(bubbleY, margin), Math.max(margin, canvasH - bubbleH - margin))
+  const bubbleCenterX = bubbleX + bubbleW / 2
+  const bubbleCenterY = bubbleY + bubbleH / 2
 
   // Arrow start: the point on the bubble's own edge closest to the anchor,
   // not the bubble's center — otherwise the line would visibly cut across
-  // the caption text itself.
-  const dx = ax - tx
-  const dy = ay - ty
-  let startX = tx
-  let startY = ty
+  // the caption text itself. Uses the bubble's actual (possibly clamped)
+  // position, not the raw textPos, so the arrow always visibly starts at
+  // the bubble whether or not it got clamped.
+  const dx = ax - bubbleCenterX
+  const dy = ay - bubbleCenterY
+  let startX = bubbleCenterX
+  let startY = bubbleCenterY
   if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
     const scaleX = bubbleW / 2 / (Math.abs(dx) || 1)
     const scaleY = bubbleH / 2 / (Math.abs(dy) || 1)

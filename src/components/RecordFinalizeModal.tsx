@@ -102,8 +102,8 @@ export function RecordFinalizeModal({
     if (editingMomentId === id) stopEditing()
   }
 
-  function handleTextChange(id: string, text: string) {
-    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, text } : m)))
+  function handleMomentPatch(id: string, patch: Partial<Pick<RaceMoment, 'text' | 'fontSize' | 'holdSeconds'>>) {
+    onMomentsChange(moments.map((m) => (m.id === id ? { ...m, ...patch } : m)))
   }
 
   function handleMomentDrag(id: string, patch: Partial<Pick<RaceMoment, 'textPos' | 'anchorPos'>>) {
@@ -229,9 +229,39 @@ export function RecordFinalizeModal({
                   type="text"
                   value={m.text}
                   placeholder="What happened here?"
-                  onChange={(e) => handleTextChange(m.id, e.target.value)}
+                  onChange={(e) => handleMomentPatch(m.id, { text: e.target.value })}
                 />
-                <span className="record-finalize-moment-time">at {formatTime(m.atSeconds)}</span>
+                <div className="record-finalize-moment-meta">
+                  <span className="record-finalize-moment-time">at {formatTime(m.atSeconds)}</span>
+                  <label>
+                    Size
+                    <input
+                      type="number"
+                      min={10}
+                      max={200}
+                      value={m.fontSize}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        if (Number.isFinite(next)) handleMomentPatch(m.id, { fontSize: next })
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Hold
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={30}
+                      step={0.5}
+                      value={m.holdSeconds}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        if (Number.isFinite(next)) handleMomentPatch(m.id, { holdSeconds: next })
+                      }}
+                    />
+                    s
+                  </label>
+                </div>
                 <div className="record-finalize-moment-actions">
                   <button type="button" className="btn" onClick={() => handlePositionToggle(m)}>
                     {editingMomentId === m.id ? 'Done' : 'Position it'}

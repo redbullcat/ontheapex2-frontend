@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { chartRectFor, composeFrame, type FinalizeOptions } from '../hooks/useSvgRecorder'
 import { ensureTitleFontLoaded } from '../lib/fonts'
 import { curveControlPoint, momentAnchorPx, momentTextPx, MomentPlayer, type RaceMoment } from '../lib/raceMoments'
@@ -178,9 +178,61 @@ function MomentEditor({
   onDrag: (id: string, patch: Partial<Pick<RaceMoment, 'textPos' | 'anchorPos'>>) => void
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null)
+  const bubbleRef = useRef<HTMLDivElement | null>(null)
+  // The frame's actual on-screen pixel size — needed to convert the
+  // moment's canvas-pixel font size (see raceMoments.ts) into a CSS
+  // font-size that visually matches, so the bubble you drag around here is
+  // the same size (relative to the chart) as what ends up in the export.
+  const [frameSizePx, setFrameSizePx] = useState({ width: 0, height: 0 })
+  // The bubble's own rendered size — used to keep it fully inside the
+  // frame regardless of where textPos points or how big fontSize makes it
+  // (see the matching clamp in raceMoments.ts's drawMomentOverlay, which
+  // this mirrors so what's shown here matches the actual export). One
+  // render behind the current drag position, which is invisible in
+  // practice since only text/fontSize change the bubble's size, not
+  // dragging itself.
+  const [bubbleSizePx, setBubbleSizePx] = useState({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    if (!frame) return
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (rect) setFrameSizePx({ width: rect.width, height: rect.height })
+    })
+    ro.observe(frame)
+    return () => ro.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current
+    if (!bubble) return
+    const ro = new ResizeObserver(() => {
+      const rect = bubble.getBoundingClientRect()
+      setBubbleSizePx({ width: rect.width, height: rect.height })
+    })
+    // Border-box (via getBoundingClientRect, not contentRect) — the
+    // clamp below needs the bubble's actual visible box, padding
+    // included, not just its inner content area.
+    ro.observe(bubble)
+    return () => ro.disconnect()
+  }, [])
 
   const anchorPx = momentAnchorPx(chartRect, moment)
-  const textPx = momentTextPx(chartRect, moment)
+  const rawTextPx = momentTextPx(chartRect, moment)
+  const displayScale = frameSizePx.height > 0 ? frameSizePx.height / videoSize.height : 1
+  const bubbleFontSizePx = Math.max(10, moment.fontSize) * displayScale
+
+  // Clamp the bubble's *displayed* center so its full box stays within the
+  // frame, converting the bubble's on-screen size back into canvas-pixel
+  // units to clamp in the same coordinate space as textPx itself.
+  const margin = 8 / displayScale
+  const halfW = bubbleSizePx.width / 2 / displayScale
+  const halfH = bubbleSizePx.height / 2 / displayScale
+  const textPx = {
+    x: Math.min(Math.max(rawTextPx.x, halfW + margin), Math.max(halfW + margin, videoSize.width - halfW - margin)),
+    y: Math.min(Math.max(rawTextPx.y, halfH + margin), Math.max(halfH + margin, videoSize.height - halfH - margin)),
+  }
   const { cx, cy } = curveControlPoint(textPx.x, textPx.y, anchorPx.x, anchorPx.y)
 
   function pct(px: number, dim: number) {
@@ -220,7 +272,12 @@ function MomentEditor({
       </svg>
       <div
         className="moment-editor-bubble"
-        style={{ left: pct(textPx.x, videoSize.width), top: pct(textPx.y, videoSize.height) }}
+        ref={bubbleRef}
+        style={{
+          left: pct(textPx.x, videoSize.width),
+          top: pct(textPx.y, videoSize.height),
+          fontSize: `${bubbleFontSizePx}px`,
+        }}
         onPointerDown={(e) => startDrag(e, 'textPos')}
       >
         {moment.text || 'New moment'}
