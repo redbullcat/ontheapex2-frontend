@@ -17,6 +17,7 @@ import { Tabs, type Tab } from './components/Tabs'
 import { SessionTypeTabs } from './components/SessionTypeTabs'
 import { bucketFor, type SessionBucket } from './lib/sessionBucket'
 import { parseCombinedSessionId } from './lib/combinedSession'
+import { computeStartingGrid } from './lib/startingGrid'
 import type { SessionSummary } from './api/types'
 import { LeadHistoryPanel } from './components/LeadHistoryPanel'
 import { PositionChart } from './components/PositionChart'
@@ -209,6 +210,21 @@ function App() {
     [currentEvent?.display_name, currentSession?.label, 'On The Apex'].filter(Boolean).join(' · '),
   )
   const sessionSection: SessionBucket | '' = combinedBucket || (currentSession ? bucketFor(currentSession.type) : '')
+
+  // Seeds the lap-by-lap position chart at each car's actual qualifying
+  // slot instead of at lap 1 (see startingGrid.ts) — only meaningful for a
+  // real race's running order, so skipped entirely for practice/qualifying
+  // sessions and for events with no qualifying session at all.
+  const qualifyingLapsState = useAsync(
+    sessionSection === 'race' && sessionsByBucket.qualifying.length > 0
+      ? () => getCombinedLaps(sessionsByBucket.qualifying.map((s) => s.id))
+      : null,
+    [sessionSection, sessionsByBucket],
+  )
+  const startingGrid = useMemo(
+    () => (qualifyingLapsState.status === 'success' ? computeStartingGrid(qualifyingLapsState.data) : null),
+    [qualifyingLapsState],
+  )
 
   // Default session once the event's sessions load: prefer Race, then
   // Qualifying, then Practice — but leave an already-valid selection (e.g.
@@ -436,7 +452,7 @@ function App() {
                     )}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
-                        <LapPositionChart laps={lapsState.data} />
+                        <LapPositionChart laps={lapsState.data} startingGrid={startingGrid} />
                       ) : (
                         <p className="hint">No lap data for this session.</p>
                       ))}
