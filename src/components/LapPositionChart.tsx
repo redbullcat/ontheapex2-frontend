@@ -587,8 +587,28 @@ export function LapPositionChart({
       .on('mousemove', (event: MouseEvent) => {
         const [mx, my] = d3.pointer(event, g.node())
         const lapAtX = Math.round(x.invert(mx))
-        const clampedLap = Math.max(minLap, Math.min(maxLap, lapAtX))
-        const lapData = rankedByLap.get(clampedLap)
+        // The "Grid" column at lap 0 isn't in rankedByLap at all — it's a
+        // synthetic point unshifted onto each car's own series above, not
+        // a real recorded lap — so clamping straight to minLap here would
+        // silently show lap-1's *actual* running order while the visually
+        // nearest dots are still sitting at their grid slots, mismatching
+        // whichever car the cursor lands nearest to.
+        const clampedLap = showGridStart
+          ? Math.max(0, Math.min(maxLap, lapAtX))
+          : Math.max(minLap, Math.min(maxLap, lapAtX))
+        const lapData: RankedLap[] | undefined =
+          clampedLap === 0 && showGridStart
+            ? cars
+                .filter((c) => c.points[0]?.lap_number === 0)
+                .map((c) => ({
+                  car_number: c.car_number,
+                  class: c.class,
+                  team: c.team,
+                  lap_number: 0,
+                  position: c.points[0].position,
+                  lap_time_seconds: null,
+                }))
+            : rankedByLap.get(clampedLap)
         if (!lapData || lapData.length === 0) return
 
         const positionAtY = y.invert(my)
