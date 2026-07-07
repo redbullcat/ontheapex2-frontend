@@ -90,10 +90,33 @@ const INLINE_STYLE_PROPS = [
   'text-anchor',
 ] as const
 
+// getComputedStyle forces the browser to resolve the full cascaded style
+// (a real cost, not a free property read) — only worth paying for an
+// element that actually has one of these properties set to a CSS custom
+// property reference (e.g. attr('fill', 'var(--text-muted)') on axis tick
+// text), since that's the one thing cloneNode can't carry over correctly
+// on its own. Everything else here (car paths, playback markers, end
+// labels, ...) gets every one of these properties set to an already-
+// resolved literal value directly via d3's own .attr() calls, which
+// cloneNode(true) copies verbatim — recomputing style for those elements
+// every single animation frame would just reproduce what's already on the
+// clone. For a chart with dozens of cars recording for minutes at 30fps,
+// skipping the needless majority of these calls is what keeps a long
+// recording from drowning the main thread (and the *live* chart sharing
+// that same thread — see usePlayback) in avoidable GC pressure as it runs.
+function needsStyleInline(el: Element): boolean {
+  for (const prop of INLINE_STYLE_PROPS) {
+    if (el.getAttribute(prop)?.includes('var(')) return true
+  }
+  return false
+}
+
 function inlineComputedStyles(original: Element, clone: Element) {
-  const cs = getComputedStyle(original)
-  const declarations = INLINE_STYLE_PROPS.map((prop) => `${prop}:${cs.getPropertyValue(prop)}`).join(';')
-  clone.setAttribute('style', `${clone.getAttribute('style') ?? ''};${declarations}`)
+  if (needsStyleInline(original)) {
+    const cs = getComputedStyle(original)
+    const declarations = INLINE_STYLE_PROPS.map((prop) => `${prop}:${cs.getPropertyValue(prop)}`).join(';')
+    clone.setAttribute('style', `${clone.getAttribute('style') ?? ''};${declarations}`)
+  }
 
   const originalChildren = original.children
   const cloneChildren = clone.children
@@ -405,6 +428,30 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const recordersRef = useRef<Map<RecordAspect, MediaRecorder>>(new Map())
   const chunksRef = useRef<Map<RecordAspect, Blob[]>>(new Map())
   const canvasesRef = useRef<Map<RecordAspect, HTMLCanvasElement>>(new Map())
+  // getContext('2d', ...) is idempotent (same object every call) but isn't
+  // free — cached once per canvas at start() instead of re-fetched every
+  // single frame for every aspect, one more small cut into the per-frame
+  // overhead a long recording pays 30 times a second (see drawOnce/
+  // inlineComputedStyles for the bigger ones).
+  const ctxsRef = useRef<Map<RecordAspect, CanvasRenderingContext2D>>(new Map())
+  // Reused across every frame of a recording instead of `new Image()` each
+  // time — drawOnce always awaits the previous call before the next is
+  // scheduled (see loop), so there's never more than one decode in flight
+  // to race against reassigning .onload/.src here.
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  // getBoundingClientRect() forces the browser to synchronously flush any
+  // pending layout before it can answer — and there's *always* pending
+  // layout to flush here, since the chart's own per-frame effect (see
+  // LapPositionChart's clip-rect/marker update) mutates this same <svg> on
+  // every animation frame too. Calling it fresh every drawOnce() therefore
+  // means a forced synchronous reflow of the whole page 30 times a second
+  // for the entire length of a recording — one of the biggest single costs
+  // in this loop, and the main reason a long recording visibly stutters
+  // (it shares the main thread with the chart's own rAF-driven playback)
+  // and can even end up with less recorded video than wall-clock time
+  // elapsed. The chart's on-screen size essentially never changes mid-
+  // recording, so this is measured once per recording instead.
+  const rectRef = useRef<DOMRect | null>(null)
   const activeAspectsRef = useRef<RecordAspect[]>([])
   const stoppedCountRef = useRef(0)
   const loopTimerRef = useRef<number | null>(null)
@@ -427,7 +474,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const aspects = activeAspectsRef.current
       if (!svg || aspects.length === 0) return resolve()
 
-      const rect = svg.getBoundingClientRect()
+      if (!rectRef.current) rectRef.current = svg.getBoundingClientRect()
+      const rect = rectRef.current
       // The chart's own width/height attributes ARE its coordinate system
       // (no viewBox — see the note on drawImage below), so that's what
       // source crop math needs to work in, not the on-screen CSS size.
@@ -461,7 +509,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const resolvedBg = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#ffffff'
       bgColorRef.current = resolvedBg
 
-      const img = new Image()
+      if (!imgRef.current) imgRef.current = new Image()
+      const img = imgRef.current
       const proceed = () => {
         URL.revokeObjectURL(url)
         resolve()
@@ -469,8 +518,14 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       img.onload = () => {
         for (const aspect of aspects) {
           const canvas = canvasesRef.current.get(aspect)
-          const ctx = canvas?.getContext('2d', { alpha: false })
-          if (!canvas || !ctx) continue
+          if (!canvas) continue
+          let ctx = ctxsRef.current.get(aspect)
+          if (!ctx) {
+            const created = canvas.getContext('2d', { alpha: false })
+            if (!created) continue
+            ctx = created
+            ctxsRef.current.set(aspect, ctx)
+          }
 
           const preset = ASPECT_PRESETS[aspect]
           let destWidth: number
@@ -537,6 +592,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
 
     activeAspectsRef.current = aspects
     canvasesRef.current = new Map(aspects.map((a) => [a, document.createElement('canvas')]))
+    ctxsRef.current = new Map()
+    rectRef.current = null
     // Pre-warm: paint a real frame before any recorder (and the capture
     // timer) starts, so the saved videos don't open on a blank frame while
     // the first async SVG-decode is still in flight.
@@ -589,6 +646,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     for (const recorder of recordersRef.current.values()) recorder.stop()
     recordersRef.current = new Map()
     canvasesRef.current = new Map()
+    ctxsRef.current = new Map()
     setRecording(false)
     if (loopTimerRef.current !== null) window.clearTimeout(loopTimerRef.current)
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
