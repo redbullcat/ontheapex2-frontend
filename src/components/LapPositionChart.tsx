@@ -92,6 +92,7 @@ export function LapPositionChart({
   rankBy = 'elapsed',
   compactFilters,
   onRequestNoteLink,
+  startingGrid,
 }: {
   laps: LapRead[]
   focusCarNumber?: string
@@ -108,6 +109,15 @@ export function LapPositionChart({
   // ReplayTrendChart — the other chart with this same feature — has no
   // per-lap elapsed data of its own to do that lookup with.
   onRequestNoteLink?: (carNumber: string, lapNumber: number) => void
+  // Qualifying classification (car_number -> grid slot), from
+  // computeStartingGrid — when given (only meaningful for rankBy
+  // 'elapsed', i.e. an actual race), every car's line gets an extra point
+  // at lap 0 sitting at its grid slot, so whatever happened between the
+  // green flag and each car's own first recorded crossing of the line
+  // — which the raw per-lap data alone has already missed by the time lap
+  // 1 is recorded — shows up as a visible first move instead of the line
+  // just starting wherever lap 1 happened to land it.
+  startingGrid?: Map<string, number> | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -269,6 +279,11 @@ export function LapPositionChart({
     return m
   }, [lapsByNumber, activeClasses, activeCars, effectiveLapRange, rankBy])
 
+  // Grid slot only makes sense as the origin of a real race running order
+  // — practice/qualifying's own 'bestLapSoFar' ranking has no green flag to
+  // start from.
+  const showGridStart = Boolean(startingGrid) && rankBy === 'elapsed'
+
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
     for (const ranked of rankedByLap.values()) {
@@ -287,8 +302,22 @@ export function LapPositionChart({
       }
     }
     for (const car of byCar.values()) car.points.sort((a, b) => a.lap_number - b.lap_number)
+    if (showGridStart) {
+      for (const car of byCar.values()) {
+        if (car.points.length === 0 || car.points[0].lap_number > 0) {
+          // Falls back to the car's own lap-1 position (a flat line, no
+          // implied movement) when it has no qualifying time of its own —
+          // a late entry or a qualifying DNS — rather than leaving it
+          // without a grid point at all, which would make it pop in
+          // suddenly at lap 1 while every other car's marker is already
+          // sitting in place.
+          const gridPos = startingGrid!.get(car.car_number) ?? car.points[0]?.position
+          if (gridPos != null) car.points.unshift({ lap_number: 0, position: gridPos, lap_time_seconds: null })
+        }
+      }
+    }
     return [...byCar.values()]
-  }, [rankedByLap, focusCarNumber])
+  }, [rankedByLap, focusCarNumber, showGridStart, startingGrid])
 
   const { minLap, maxLap, maxPosition } = useMemo(() => {
     let minLap = Infinity
@@ -299,8 +328,14 @@ export function LapPositionChart({
       maxLap = Math.max(maxLap, lapNumber)
       for (const p of ranked) maxPosition = Math.max(maxPosition, p.position)
     }
+    // The grid point above can sit at a slot deeper than any position the
+    // field's actual race laps ever reach (e.g. a car that qualified last
+    // but only ever raced near the front) — widen the axis to still fit it.
+    for (const car of cars) {
+      for (const p of car.points) maxPosition = Math.max(maxPosition, p.position)
+    }
     return { minLap: minLap === Infinity ? 1 : minLap, maxLap, maxPosition }
-  }, [rankedByLap])
+  }, [rankedByLap, cars])
 
   const strokeColor = useCallback(
     (car: { class: string; team: string | null }) => {
@@ -328,7 +363,7 @@ export function LapPositionChart({
   const markersSelRef = useRef<d3.Selection<SVGCircleElement, CarSeries, SVGGElement, unknown> | null>(null)
   const markerLabelsSelRef = useRef<d3.Selection<SVGTextElement, CarSeries, SVGGElement, unknown> | null>(null)
 
-  const playback = usePlayback(minLap, maxLap, 3)
+  const playback = usePlayback(showGridStart ? 0 : minLap, maxLap, 3)
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -339,7 +374,8 @@ export function LapPositionChart({
     const innerHeight = PLOT_HEIGHT - MARGIN.top - MARGIN.bottom
     svg.attr('width', width).attr('height', PLOT_HEIGHT)
 
-    const x = d3.scaleLinear().domain([minLap, maxLap]).range([0, innerWidth])
+    const xDomainMin = showGridStart ? 0 : minLap
+    const x = d3.scaleLinear().domain([xDomainMin, maxLap]).range([0, innerWidth])
     const y = d3.scaleLinear().domain([1, maxPosition]).range([0, innerHeight])
     xScaleRef.current = x
     yScaleRef.current = y
@@ -492,11 +528,16 @@ export function LapPositionChart({
         .text((d) => `P${d.position}`)
     }
 
-    const xAxis = d3
-      .axisBottom(x)
-      .ticks(Math.max(2, Math.min(maxLap - minLap + 1, Math.floor(innerWidth / 60))))
-      .tickFormat((d) => `L${d}`)
-      .tickSizeOuter(0)
+    const xAxis = d3.axisBottom(x).tickSizeOuter(0)
+    if (showGridStart) {
+      // Explicit tickValues rather than .ticks(...) so the "Grid" tick at
+      // 0 is always present — d3's automatic "nice round number" tick
+      // selection has no reason to always land exactly on 0 otherwise.
+      const autoTicks = x.ticks(Math.max(2, Math.min(maxLap - xDomainMin + 1, Math.floor(innerWidth / 60))))
+      xAxis.tickValues([0, ...autoTicks.filter((t) => t !== 0)]).tickFormat((d) => (d === 0 ? 'Grid' : `L${d}`))
+    } else {
+      xAxis.ticks(Math.max(2, Math.min(maxLap - minLap + 1, Math.floor(innerWidth / 60)))).tickFormat((d) => `L${d}`)
+    }
 
     g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
@@ -589,7 +630,7 @@ export function LapPositionChart({
         if (!h || !onRequestNoteLink) return
         onRequestNoteLink(h.car, h.lap)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink, showGridStart])
 
   // Cheap per-frame update: just the clip-rect width and marker positions,
   // driven by playback.current — deliberately not touching the dependency
@@ -739,9 +780,9 @@ export function LapPositionChart({
       <div className="chart-controls">
         <PlaybackControls
           playback={playback}
-          min={minLap}
+          min={showGridStart ? 0 : minLap}
           max={maxLap}
-          formatValue={(v) => `Lap ${Math.round(v)}`}
+          formatValue={(v) => (showGridStart && Math.round(v) <= 0 ? 'Grid' : `Lap ${Math.round(v)}`)}
         />
       </div>
       {colorMode === 'class' && (
