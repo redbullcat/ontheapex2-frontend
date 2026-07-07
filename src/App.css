@@ -885,6 +885,8 @@ header h1 {
   padding: 20px 22px;
   width: 420px;
   max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
   color: var(--text-h, #0b0b0b);
 }
@@ -892,14 +894,48 @@ header h1 {
   margin: 0 0 14px;
   font-size: 15px;
 }
+.record-finalize-modal h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-h, #0b0b0b);
+}
 .record-finalize-preview {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 220px;
-  object-fit: contain;
   background: #000;
   border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.record-finalize-preview-frame {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+.record-finalize-preview-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.record-finalize-scrub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--text-muted, #898781);
+}
+.record-finalize-scrub input[type='range'] {
+  flex: 1;
+  accent-color: #d64545;
+}
+.record-finalize-scrub-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
 }
 .record-finalize-field {
   display: flex;
@@ -961,4 +997,161 @@ header h1 {
 }
 .record-finalize-primary:hover {
   filter: brightness(1.1);
+}
+.record-finalize-modal .btn {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.record-finalize-modal .btn:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.record-finalize-modal .btn.icon {
+  padding: 5px 7px;
+  line-height: 1;
+}
+
+.record-finalize-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.record-finalize-add-moment {
+  border: 1px dashed var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.record-finalize-add-moment:hover {
+  border-color: #d64545;
+  color: #d64545;
+}
+.record-finalize-add-moment:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.record-finalize-moments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.record-finalize-moment {
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 7px;
+  padding: 8px 9px;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 6px 8px;
+  align-items: center;
+  background: color-mix(in srgb, var(--border, #e1e0d9) 22%, var(--surface-1, #fcfcfb));
+}
+.record-finalize-moment-idx {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted, #898781);
+  text-align: center;
+}
+.record-finalize-moment input[type='text'] {
+  grid-column: 2 / 3;
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  background: var(--surface-1, #fcfcfb);
+  color: var(--text-h, #0b0b0b);
+  font-family: inherit;
+  width: 100%;
+}
+.record-finalize-moment-time {
+  grid-column: 2 / 3;
+  font-size: 11px;
+  color: var(--text-muted, #898781);
+  font-variant-numeric: tabular-nums;
+}
+.record-finalize-moment-actions {
+  grid-column: 3 / 4;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.record-finalize-modal .moment-editor {
+  position: absolute;
+  inset: 0;
+  user-select: none;
+  touch-action: none;
+}
+.record-finalize-modal .moment-editor-chip {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: #d64545;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 100px;
+  z-index: 3;
+}
+.record-finalize-modal .moment-editor-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: visible;
+}
+.record-finalize-modal .moment-editor-arrow path {
+  stroke: var(--text-h, #0b0b0b);
+  stroke-width: 2.5;
+  fill: none;
+}
+.record-finalize-modal .moment-editor-bubble {
+  position: absolute;
+  max-width: 46%;
+  transform: translate(-50%, -50%);
+  background: var(--surface-1, #fcfcfb);
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-h, #0b0b0b);
+  text-align: center;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  cursor: grab;
+  z-index: 2;
+  line-height: 1.3;
+}
+.record-finalize-modal .moment-editor-bubble:active {
+  cursor: grabbing;
+}
+.record-finalize-modal .moment-editor-anchor {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: rgba(214, 69, 69, 0.3);
+  border: 2px solid #d64545;
+  cursor: grab;
+  z-index: 2;
+}
+.record-finalize-modal .moment-editor-anchor:active {
+  cursor: grabbing;
 }
