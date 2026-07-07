@@ -286,8 +286,14 @@ export function LapPositionChart({
 
   // Grid slot only makes sense as the origin of a real race running order
   // — practice/qualifying's own 'bestLapSoFar' ranking has no green flag to
-  // start from.
-  const showGridStart = Boolean(startingGrid) && rankBy === 'elapsed'
+  // start from. It also only makes sense when the visible window actually
+  // starts at the race's own first lap — narrowing the Laps filter to
+  // start later (e.g. 85-180) means the user wants that window on its own
+  // terms, not the whole field dragged back to a lap-0 grid dot outside
+  // it, which used to force the axis to always span from Grid regardless
+  // of the chosen start (see xDomainMin below) and drew a long diagonal
+  // from Grid to lap 85 crammed into the same space as one real lap.
+  const showGridStart = Boolean(startingGrid) && rankBy === 'elapsed' && effectiveLapRange[0] <= lapBounds[0]
 
   const cars = useMemo(() => {
     const byCar = new Map<string, CarSeries>()
