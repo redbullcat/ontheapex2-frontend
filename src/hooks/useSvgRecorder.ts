@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import logoWhiteRaw from '../assets/logo-white.svg?raw'
 import logoBlackRaw from '../assets/logo-black.svg?raw'
 import { contrastTextColorForColor } from '../lib/contrastColor'
+import { ensureTitleFontLoaded, titleFontCss, type TitleFontOptions } from '../lib/fonts'
 
 // Records an <svg> element as a video by continuously rasterizing it onto
 // an offscreen canvas and feeding that canvas's own MediaStream to a
@@ -161,19 +162,26 @@ function wrapTitleLines(ctx: CanvasRenderingContext2D, title: string, maxWidth: 
 // — never on top of the chart, which is placed below this band. Text
 // color follows the band's own background (the chart's real background
 // color, same as everywhere else) rather than a fixed white, which would
-// vanish against a light theme.
-function drawTitleInBand(ctx: CanvasRenderingContext2D, title: string, width: number, bandHeight: number, bandBackground: string) {
-  const maxFontSize = Math.round(bandHeight * 0.32)
-  let fontSize = maxFontSize
+// vanish against a light theme. The requested font size is honored as-is
+// where it fits; it's only shrunk below that if the wrapped title would
+// otherwise overflow the band (a very long title at a large chosen size).
+function drawTitleInBand(
+  ctx: CanvasRenderingContext2D,
+  title: string,
+  width: number,
+  bandHeight: number,
+  bandBackground: string,
+  font: TitleFontOptions,
+) {
+  let fontSize = font.size
   let lines: string[] = []
-  // Shrink the font until the wrapped title actually fits the band's
-  // height, rather than a fixed size that could overflow a long title.
   for (; fontSize >= 12; fontSize -= 2) {
-    ctx.font = `700 ${fontSize}px system-ui, sans-serif`
+    ctx.font = titleFontCss(font, fontSize)
     lines = wrapTitleLines(ctx, title, width * 0.9)
     const lineHeight = fontSize * 1.3
     if (lines.length * lineHeight <= bandHeight * 0.86) break
   }
+  ctx.font = titleFontCss(font, fontSize)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const lineHeight = fontSize * 1.3
@@ -197,18 +205,44 @@ function downloadBlob(blob: Blob, filename: string) {
 export interface FinalizeOptions {
   title: string | null
   includeLogo: boolean
+  font: TitleFontOptions
+}
+
+// Draws one composited frame — the already-recorded frame uniformly scaled
+// down (never stretched) into whatever space is left, plus the title/logo
+// bands, whichever are requested — onto ctx. Shared by the actual
+// finalize/re-encode pass below and by RecordPreview's live preview, so
+// the preview is guaranteed to look exactly like the real export.
+export function composeFrame(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  srcWidth: number,
+  srcHeight: number,
+  backgroundColor: string,
+  options: FinalizeOptions,
+) {
+  const titleBandHeight = options.title ? Math.round(srcHeight * TITLE_BAND_FRACTION) : 0
+  const logoBandHeight = options.includeLogo ? Math.round(srcHeight * LOGO_BAND_FRACTION) : 0
+  const availableHeight = srcHeight - titleBandHeight - logoBandHeight
+  const scale = availableHeight / srcHeight
+  const scaledWidth = srcWidth * scale
+  const offsetX = (srcWidth - scaledWidth) / 2
+
+  ctx.fillStyle = backgroundColor
+  ctx.fillRect(0, 0, srcWidth, srcHeight)
+  ctx.drawImage(video, offsetX, titleBandHeight, scaledWidth, availableHeight)
+  if (options.title) drawTitleInBand(ctx, options.title, srcWidth, titleBandHeight, backgroundColor, options.font)
+  if (options.includeLogo) drawLogo(ctx, srcWidth, titleBandHeight + availableHeight, srcHeight)
 }
 
 // Re-encodes an already-recorded clip with an optional title band and/or
 // logo added — done as a second pass (replay the recorded blob through a
-// <video>, redraw each frame onto a fresh canvas of the same size with the
-// original frame uniformly scaled down into whatever space is left plus
-// the requested band(s) drawn in, re-capture that) rather than during the
-// original recording, since both are only decided *after* recording
-// finishes. Scaling uniformly (never stretching) and letterboxing with the
-// chart's own background color means the chart itself never looks any
-// different, just smaller when a band is added.
-function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: string, backgroundColor: string): Promise<Blob> {
+// <video>, redraw each frame via composeFrame onto a fresh canvas of the
+// same size, re-capture that) rather than during the original recording,
+// since the title/font/logo choice is only made *after* recording finishes.
+async function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: string, backgroundColor: string): Promise<Blob> {
+  if (options.title) await ensureTitleFontLoaded(options.font)
+
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.muted = true
@@ -233,13 +267,6 @@ function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: str
         return reject(new Error('2D canvas context unavailable'))
       }
 
-      const titleBandHeight = options.title ? Math.round(srcHeight * TITLE_BAND_FRACTION) : 0
-      const logoBandHeight = options.includeLogo ? Math.round(srcHeight * LOGO_BAND_FRACTION) : 0
-      const availableHeight = srcHeight - titleBandHeight - logoBandHeight
-      const scale = availableHeight / srcHeight
-      const scaledWidth = srcWidth * scale
-      const offsetX = (srcWidth - scaledWidth) / 2
-
       const stream = canvas.captureStream(CAPTURE_FPS)
       const outRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
       const outChunks: Blob[] = []
@@ -253,14 +280,7 @@ function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: str
 
       let rafId: number | null = null
       const drawFrame = () => {
-        ctx.fillStyle = backgroundColor
-        ctx.fillRect(0, 0, srcWidth, srcHeight)
-        // The already-recorded frame, uniformly scaled down (never
-        // stretched) and placed below the title band / above the logo
-        // band, whichever are present.
-        ctx.drawImage(video, offsetX, titleBandHeight, scaledWidth, availableHeight)
-        if (options.title) drawTitleInBand(ctx, options.title, srcWidth, titleBandHeight, backgroundColor)
-        if (options.includeLogo) drawLogo(ctx, srcWidth, titleBandHeight + availableHeight, srcHeight)
+        composeFrame(ctx, video, srcWidth, srcHeight, backgroundColor, options)
         if (!video.ended) rafId = requestAnimationFrame(drawFrame)
       }
       video.onended = () => {
@@ -291,6 +311,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [processing, setProcessing] = useState(false)
   const [awaitingFinalize, setAwaitingFinalize] = useState(false)
+  const [previewSource, setPreviewSource] = useState<{ blob: Blob; backgroundColor: string } | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -436,6 +457,8 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       // rather than up front, since neither the title nor whether to
       // include the logo need to be decided in advance. See
       // RecordFinalizeModal, rendered by RecordControls when this is true.
+      // previewSource feeds RecordPreview's live preview of the same clip.
+      setPreviewSource({ blob: rawBlob, backgroundColor: bgColorRef.current })
       setAwaitingFinalize(true)
     }
     recorderRef.current = recorder
@@ -463,6 +486,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const cancelFinalize = useCallback(() => {
     pendingRef.current = null
     setAwaitingFinalize(false)
+    setPreviewSource(null)
   }, [])
 
   // Called by RecordFinalizeModal's Download button.
@@ -470,6 +494,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     const pending = pendingRef.current
     pendingRef.current = null
     setAwaitingFinalize(false)
+    setPreviewSource(null)
     if (!pending) return
 
     const title = options.title?.trim() || null
@@ -480,7 +505,7 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
 
     setProcessing(true)
     try {
-      const finalBlob = await finalizeVideo(pending.blob, { title, includeLogo: options.includeLogo }, pending.mimeType, bgColorRef.current)
+      const finalBlob = await finalizeVideo(pending.blob, { title, includeLogo: options.includeLogo, font: options.font }, pending.mimeType, bgColorRef.current)
       downloadBlob(finalBlob, pending.filename)
     } catch (err) {
       console.error('Failed to finalize video — downloading the plain recording instead', err)
@@ -490,5 +515,5 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     }
   }, [])
 
-  return { recording, elapsedSeconds, processing, awaitingFinalize, submitFinalize, cancelFinalize, start, stop }
+  return { recording, elapsedSeconds, processing, awaitingFinalize, previewSource, submitFinalize, cancelFinalize, start, stop }
 }

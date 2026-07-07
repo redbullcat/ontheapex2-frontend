@@ -1540,7 +1540,7 @@ button.replay-play:hover {
   border: 1px solid var(--replay-line-strong);
   border-radius: 8px;
   padding: 20px 22px;
-  width: 340px;
+  width: 420px;
   max-width: calc(100vw - 32px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
   color: var(--replay-ink);
@@ -1548,6 +1548,15 @@ button.replay-play:hover {
 .replay-root .record-finalize-modal h3 {
   margin: 0 0 14px;
   font-size: 15px;
+}
+.replay-root .record-finalize-preview {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 6px;
+  margin-bottom: 14px;
 }
 .replay-root .record-finalize-field {
   display: flex;
@@ -1557,13 +1566,23 @@ button.replay-play:hover {
   color: var(--replay-muted);
   margin-bottom: 14px;
 }
-.replay-root .record-finalize-field input[type='text'] {
+.replay-root .record-finalize-field input[type='text'],
+.replay-root .record-finalize-field input[type='number'],
+.replay-root .record-finalize-field select {
   border: 1px solid var(--replay-line-strong);
   border-radius: 6px;
   padding: 7px 9px;
   font-size: 13px;
   background: var(--replay-surface);
   color: var(--replay-ink);
+}
+.replay-root .record-finalize-font-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) 72px;
+  gap: 10px;
+}
+.replay-root .record-finalize-size input {
+  width: 100%;
 }
 .replay-root .record-finalize-checkbox {
   display: flex;

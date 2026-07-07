@@ -14,6 +14,7 @@ interface RecorderLike {
   elapsedSeconds: number
   processing: boolean
   awaitingFinalize: boolean
+  previewSource: { blob: Blob; backgroundColor: string } | null
   submitFinalize: (options: FinalizeOptions) => void
   cancelFinalize: () => void
   start: (aspect?: RecordAspect) => void
@@ -70,7 +71,7 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
         {recorder.recording ? '⏹ Stop' : '⏺ Record'}
       </button>
       {recorder.awaitingFinalize && (
-        <RecordFinalizeModal onSubmit={recorder.submitFinalize} onCancel={recorder.cancelFinalize} />
+        <RecordFinalizeModal preview={recorder.previewSource} onSubmit={recorder.submitFinalize} onCancel={recorder.cancelFinalize} />
       )}
     </>
   )
