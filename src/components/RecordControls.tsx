@@ -1,37 +1,55 @@
 import { useState } from 'react'
-import type { FinalizeOptions, RecordAspect } from '../hooks/useSvgRecorder'
-import type { RaceMoment } from '../lib/raceMoments'
+import type { EditableAspectOptions, FinalizeOptions, PreviewSource, RecordAspect } from '../hooks/useSvgRecorder'
+import { ASPECT_OPTIONS } from '../lib/recordAspects'
 import { RecordFinalizeModal } from './RecordFinalizeModal'
-
-const ASPECT_OPTIONS: { value: RecordAspect; label: string }[] = [
-  { value: 'landscape', label: 'Landscape (16:9)' },
-  { value: 'portrait', label: 'Portrait (9:16) — Reels/Shorts/Stories' },
-  { value: 'square', label: 'Square (1:1)' },
-  { value: 'portrait-4-5', label: 'Portrait (4:5) — feed post' },
-]
 
 interface RecorderLike {
   recording: boolean
   elapsedSeconds: number
   processing: boolean
+  processingProgress: number | null
   awaitingFinalize: boolean
-  previewSource: { blob: Blob; backgroundColor: string } | null
-  moments: RaceMoment[]
-  setMoments: (moments: RaceMoment[] | ((prev: RaceMoment[]) => RaceMoment[])) => void
-  submitFinalize: (options: FinalizeOptions) => void
+  previewSources: PreviewSource[]
+  perAspectOptions: Partial<Record<RecordAspect, EditableAspectOptions>>
+  setPerAspectOptions: (
+    update:
+      | Partial<Record<RecordAspect, EditableAspectOptions>>
+      | ((prev: Partial<Record<RecordAspect, EditableAspectOptions>>) => Partial<Record<RecordAspect, EditableAspectOptions>>),
+  ) => void
+  submitFinalize: (optionsByAspect: Partial<Record<RecordAspect, FinalizeOptions>>) => void
   cancelFinalize: () => void
-  start: (aspect?: RecordAspect) => void
+  start: (aspects: RecordAspect[]) => void
   stop: () => void
 }
 
 // Shared by every chart with a Record button (ReplayTrendChart,
-// LapPositionChart, GapEvolutionChart) — an aspect-ratio picker plus the
-// record/stop button and a recording-time indicator. Portrait/square modes
-// crop-and-track a moving window of the chart rather than squashing the
-// whole (wide) chart into a tall frame — see useSvgRecorder's
-// findRevealEdgeX for how the tracked window follows the reveal animation.
+// LapPositionChart, GapEvolutionChart) — an aspect-ratio picker (one or
+// more shapes, all recorded simultaneously from a single live playthrough)
+// plus the record/stop button and a recording-time indicator.
+// Portrait/square modes crop-and-track a moving window of the chart rather
+// than squashing the whole (wide) chart into a tall frame — see
+// useSvgRecorder's findRevealEdgeX for how the tracked window follows the
+// reveal animation.
 export function RecordControls({ recorder }: { recorder: RecorderLike }) {
-  const [aspect, setAspect] = useState<RecordAspect>('landscape')
+  const [selectedAspects, setSelectedAspects] = useState<RecordAspect[]>(['landscape'])
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  function toggleAspect(aspect: RecordAspect) {
+    setSelectedAspects((prev) => {
+      if (prev.includes(aspect)) {
+        // Always leave at least one selected — there's nothing to record
+        // with zero shapes chosen.
+        if (prev.length === 1) return prev
+        return prev.filter((a) => a !== aspect)
+      }
+      return [...prev, aspect]
+    })
+  }
+
+  const summary =
+    selectedAspects.length === 1
+      ? (ASPECT_OPTIONS.find((o) => o.value === selectedAspects[0])?.shortLabel ?? selectedAspects[0])
+      : `${selectedAspects.length} formats`
 
   return (
     <>
@@ -42,29 +60,48 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
         </span>
       )}
       {recorder.processing && (
-        <span className="chart-record-indicator" title="Re-encoding with your chosen title/logo — this takes about as long as the recording itself">
-          <span className="chart-record-dot" /> Finalizing…
+        <span
+          className="chart-record-indicator"
+          title="Re-encoding with your chosen title/logo/moments — this can take about as long as the recording itself, per format"
+        >
+          <span className="chart-record-dot" />
+          Finalizing{recorder.processingProgress != null ? `… ${Math.round(recorder.processingProgress * 100)}%` : '…'}
         </span>
       )}
       {!recorder.recording && !recorder.processing && (
-        <select
-          className="chart-record-aspect"
-          value={aspect}
-          onChange={(e) => setAspect(e.target.value as RecordAspect)}
-          title="Video shape — portrait/square crop and follow the current lap instead of shrinking the whole chart"
-        >
-          {ASPECT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="chart-record-aspect-picker">
+          <button
+            type="button"
+            className="chart-record-aspect-btn"
+            onClick={() => setPickerOpen((v) => !v)}
+            title="Video shape(s) — pick more than one to export several sizes from the same recording"
+          >
+            {summary} ▾
+          </button>
+          {pickerOpen && (
+            <>
+              <div className="chart-record-aspect-backdrop" onClick={() => setPickerOpen(false)} />
+              <div className="chart-record-aspect-menu">
+                {ASPECT_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="chart-record-aspect-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedAspects.includes(opt.value)}
+                      onChange={() => toggleAspect(opt.value)}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
       <button
         type="button"
         className="chart-record-btn"
         disabled={recorder.processing}
-        onClick={() => (recorder.recording ? recorder.stop() : recorder.start(aspect))}
+        onClick={() => (recorder.recording ? recorder.stop() : recorder.start(selectedAspects))}
         title={
           recorder.recording
             ? 'Stop recording — you\'ll be asked for a title and logo before it downloads'
@@ -75,9 +112,11 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
       </button>
       {recorder.awaitingFinalize && (
         <RecordFinalizeModal
-          preview={recorder.previewSource}
-          moments={recorder.moments}
-          onMomentsChange={recorder.setMoments}
+          previewSources={recorder.previewSources}
+          perAspectOptions={recorder.perAspectOptions}
+          onAspectOptionsChange={(aspect, options) =>
+            recorder.setPerAspectOptions((prev) => ({ ...prev, [aspect]: options }))
+          }
           onSubmit={recorder.submitFinalize}
           onCancel={recorder.cancelFinalize}
         />

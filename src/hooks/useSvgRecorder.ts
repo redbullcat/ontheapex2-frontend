@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
+import JSZip from 'jszip'
 import logoWhiteRaw from '../assets/logo-white.svg?raw'
 import logoBlackRaw from '../assets/logo-black.svg?raw'
 import { contrastTextColorForColor } from '../lib/contrastColor'
-import { ensureTitleFontLoaded, titleFontCss, type TitleFontOptions } from '../lib/fonts'
+import { DEFAULT_TITLE_FONT, ensureTitleFontLoaded, titleFontCss, type TitleFontFamily, type TitleFontOptions } from '../lib/fonts'
 import { drawMomentOverlay, MomentPlayer, type MomentOverlayState, type RaceMoment } from '../lib/raceMoments'
 
 // Records an <svg> element as a video by continuously rasterizing it onto
@@ -12,6 +13,13 @@ import { drawMomentOverlay, MomentPlayer, type MomentOverlayState, type RaceMome
 // control, so the output is exactly the chart with no surrounding UI.
 // Crucially, this captures the *actual* live-playing chart exactly as it
 // renders — not a reconstruction — so it's as smooth as watching it play.
+//
+// Every selected aspect ratio records *simultaneously* from this one live
+// playthrough (one canvas + one MediaRecorder per aspect, all fed from the
+// same per-tick SVG rasterization) rather than one at a time — sitting
+// through the same real-time animation multiple times to get multiple
+// output shapes would be a poor tradeoff for what's ultimately the same
+// underlying capture.
 //
 // Render at a fixed multiple of the SVG's own displayed size for a
 // crisper-than-screen result without needing a separate "resolution" UI.
@@ -210,6 +218,41 @@ export interface FinalizeOptions {
   moments: RaceMoment[]
 }
 
+// The editable form of FinalizeOptions used while a recording's still being
+// set up in RecordFinalizeModal — title as a plain (possibly-empty) string
+// rather than string | null, so a text input can bind to it directly.
+// toFinalizeOptions below is the one place that trims/nullifies it.
+export interface EditableAspectOptions {
+  title: string
+  family: TitleFontFamily
+  weight: number
+  italic: boolean
+  size: number
+  includeLogo: boolean
+  moments: RaceMoment[]
+}
+
+export function defaultAspectOptions(): EditableAspectOptions {
+  return {
+    title: '',
+    family: DEFAULT_TITLE_FONT.family,
+    weight: DEFAULT_TITLE_FONT.weight,
+    italic: DEFAULT_TITLE_FONT.italic,
+    size: DEFAULT_TITLE_FONT.size,
+    includeLogo: true,
+    moments: [],
+  }
+}
+
+export function toFinalizeOptions(e: EditableAspectOptions): FinalizeOptions {
+  return {
+    title: e.title.trim() || null,
+    includeLogo: e.includeLogo,
+    font: { family: e.family, weight: e.weight, italic: e.italic, size: e.size },
+    moments: e.moments,
+  }
+}
+
 // The rectangle (in canvas-pixel space) the chart itself occupies once the
 // title/logo bands are carved out — everything moment-related is positioned
 // relative to this, not the full canvas, so toggling a band on/off doesn't
@@ -256,7 +299,15 @@ export function composeFrame(
 // <video>, redraw each frame via composeFrame onto a fresh canvas of the
 // same size, re-capture that) rather than during the original recording,
 // since the title/font/logo choice is only made *after* recording finishes.
-async function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: string, backgroundColor: string): Promise<Blob> {
+// onProgress is fed video.currentTime/video.duration each frame — the one
+// meaningful proxy for "how much of this re-encode is left" available here.
+async function finalizeVideo(
+  sourceBlob: Blob,
+  options: FinalizeOptions,
+  mimeType: string,
+  backgroundColor: string,
+  onProgress?: (fraction: number) => void,
+): Promise<Blob> {
   if (options.title) await ensureTitleFontLoaded(options.font)
 
   return new Promise((resolve, reject) => {
@@ -299,10 +350,14 @@ async function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeTyp
       const drawFrame = () => {
         const overlay = options.moments.length > 0 ? momentPlayer.update(options.moments, video, performance.now()) : null
         composeFrame(ctx, video, srcWidth, srcHeight, backgroundColor, options, overlay)
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          onProgress?.(Math.min(1, video.currentTime / video.duration))
+        }
         if (!video.ended) rafId = requestAnimationFrame(drawFrame)
       }
       video.onended = () => {
         if (rafId !== null) cancelAnimationFrame(rafId)
+        onProgress?.(1)
         outRecorder.stop()
       }
 
@@ -319,46 +374,58 @@ async function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeTyp
 }
 
 interface PendingRecording {
+  aspect: RecordAspect
   blob: Blob
   mimeType: string
   filename: string
+}
+
+export interface PreviewSource {
+  aspect: RecordAspect
+  blob: Blob
+  backgroundColor: string
 }
 
 export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, filenameBase: string) {
   const [recording, setRecording] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [processing, setProcessing] = useState(false)
+  // 0..1 while processing; null the rest of the time, including right
+  // before the first frame of a re-encode pass has reported in.
+  const [processingProgress, setProcessingProgress] = useState<number | null>(null)
   const [awaitingFinalize, setAwaitingFinalize] = useState(false)
-  const [previewSource, setPreviewSource] = useState<{ blob: Blob; backgroundColor: string } | null>(null)
+  const [previewSources, setPreviewSources] = useState<PreviewSource[]>([])
   // Deliberately lives here rather than inside RecordFinalizeModal's own
   // state: the modal unmounts between recordings (each Stop press mounts a
-  // fresh one), but a moment set built for one aspect ratio should still be
-  // there — positions carried over best-effort — when you record the same
-  // chart again in a different aspect ratio, rather than starting over.
-  const [moments, setMoments] = useState<RaceMoment[]>([])
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  // fresh one), but title/font/logo/moments set up for one aspect ratio
+  // should still be there — carried over best-effort — when you record the
+  // same chart again, rather than starting over. Keyed by aspect so each
+  // one can diverge independently once edited.
+  const [perAspectOptions, setPerAspectOptions] = useState<Partial<Record<RecordAspect, EditableAspectOptions>>>({})
+  const recordersRef = useRef<Map<RecordAspect, MediaRecorder>>(new Map())
+  const chunksRef = useRef<Map<RecordAspect, Blob[]>>(new Map())
+  const canvasesRef = useRef<Map<RecordAspect, HTMLCanvasElement>>(new Map())
+  const activeAspectsRef = useRef<RecordAspect[]>([])
+  const stoppedCountRef = useRef(0)
   const loopTimerRef = useRef<number | null>(null)
   const timerRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
-  const aspectRef = useRef<RecordAspect>('landscape')
   const bgColorRef = useRef('#ffffff')
-  const pendingRef = useRef<PendingRecording | null>(null)
+  const pendingRef = useRef<PendingRecording[]>([])
 
-  // Renders exactly one frame onto the canvas; resolves once it's actually
-  // painted. Used both to pre-warm the canvas before recording starts (so
-  // the video doesn't open on a blank/incomplete first frame while the
-  // very first async image decode is still in flight) and, in a loop, for
-  // every frame while recording. No logo/title here — those are only ever
-  // added at finalize time (see finalizeVideo), since whether to include
-  // the logo and what the title should be are both asked after the fact.
+  // Renders exactly one frame into every currently-recording aspect's own
+  // canvas; resolves once they're actually painted. Used both to pre-warm
+  // the canvases before recording starts (so the saved videos don't open on
+  // a blank/incomplete first frame while the very first async SVG-decode is
+  // still in flight) and, in a loop, for every frame while recording. No
+  // logo/title here — those are only ever added at finalize time (see
+  // finalizeVideo), since whether to include the logo and what the title
+  // should be are both asked after the fact, once per aspect.
   const drawOnce = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const svg = svgRef.current
-      const canvas = canvasRef.current
-      const ctx = canvas?.getContext('2d', { alpha: false }) ?? null
-      if (!svg || !canvas || !ctx) return resolve()
+      const aspects = activeAspectsRef.current
+      if (!svg || aspects.length === 0) return resolve()
 
       const rect = svg.getBoundingClientRect()
       // The chart's own width/height attributes ARE its coordinate system
@@ -366,46 +433,19 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       // source crop math needs to work in, not the on-screen CSS size.
       const naturalWidth = Number(svg.getAttribute('width')) || rect.width
       const naturalHeight = Number(svg.getAttribute('height')) || rect.height
+      const edge = findRevealEdgeX(svg)
 
-      const preset = ASPECT_PRESETS[aspectRef.current]
-      let destWidth: number
-      let destHeight: number
-      let srcX = 0
-      let srcY = 0
-      let srcWidth = naturalWidth
-      let srcHeight = naturalHeight
-
-      if (preset) {
-        destWidth = preset.width
-        destHeight = preset.height
-        // Full chart height, but only as much width as this destination's
-        // aspect ratio needs — cropping a wide lap chart down to a tall
-        // frame instead of squashing it into an illegible sliver.
-        srcHeight = naturalHeight
-        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
-        const edge = findRevealEdgeX(svg)
-        if (edge !== null) {
-          srcX = Math.min(Math.max(0, edge - srcWidth * TRACK_POSITION_FRACTION), Math.max(0, naturalWidth - srcWidth))
-        }
-      } else {
-        destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
-        destHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
-      }
-
-      if (canvas.width !== destWidth || canvas.height !== destHeight) {
-        canvas.width = destWidth
-        canvas.height = destHeight
-      }
-
-      // Deliberately NOT overriding the clone's width/height to the scaled
+      // Deliberately NOT overriding the clone's width/height to some scaled
       // canvas size here: these charts size their <svg> in raw pixels with
       // no viewBox, so the width/height attributes ARE the coordinate
       // system every path was drawn in. Forcing them to a bigger number
       // doesn't rescale existing content — it just declares a bigger,
-      // mostly-blank canvas around the same small drawing (the "canvas is
-      // much bigger than the chart" bug). Leaving them at the SVG's own
-      // real size and letting drawImage's source/destination rects below
-      // do the crop-and-scale is what actually renders it correctly.
+      // mostly-blank canvas around the same small drawing. Leaving them at
+      // the SVG's own real size and letting drawImage's source/destination
+      // rects below do the crop-and-scale is what actually renders it
+      // correctly, and doing it once per tick (not once per aspect) is why
+      // recording several aspect ratios at once costs one SVG serialize +
+      // decode per frame, not several.
       const clone = svg.cloneNode(true) as SVGSVGElement
       inlineComputedStyles(svg, clone)
       const serialized = new XMLSerializer().serializeToString(clone)
@@ -427,12 +467,48 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
         resolve()
       }
       img.onload = () => {
-        // alpha:false already makes every pixel fully opaque, but the fill
-        // still matters so the chart's own background shows through
-        // wherever the SVG itself is transparent (empty margins etc).
-        ctx.fillStyle = resolvedBg
-        ctx.fillRect(0, 0, destWidth, destHeight)
-        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
+        for (const aspect of aspects) {
+          const canvas = canvasesRef.current.get(aspect)
+          const ctx = canvas?.getContext('2d', { alpha: false })
+          if (!canvas || !ctx) continue
+
+          const preset = ASPECT_PRESETS[aspect]
+          let destWidth: number
+          let destHeight: number
+          let srcX = 0
+          let srcY = 0
+          let srcWidth = naturalWidth
+          let srcHeight = naturalHeight
+
+          if (preset) {
+            destWidth = preset.width
+            destHeight = preset.height
+            // Full chart height, but only as much width as this
+            // destination's aspect ratio needs — cropping a wide lap chart
+            // down to a tall frame instead of squashing it into an
+            // illegible sliver.
+            srcHeight = naturalHeight
+            srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
+            if (edge !== null) {
+              srcX = Math.min(Math.max(0, edge - srcWidth * TRACK_POSITION_FRACTION), Math.max(0, naturalWidth - srcWidth))
+            }
+          } else {
+            destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
+            destHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
+          }
+
+          if (canvas.width !== destWidth || canvas.height !== destHeight) {
+            canvas.width = destWidth
+            canvas.height = destHeight
+          }
+
+          // alpha:false already makes every pixel fully opaque, but the
+          // fill still matters so the chart's own background shows through
+          // wherever the SVG itself is transparent (empty margins etc).
+          ctx.fillStyle = resolvedBg
+          ctx.fillRect(0, 0, destWidth, destHeight)
+          ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
+        }
         proceed()
       }
       img.onerror = proceed
@@ -449,44 +525,57 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     // tail) the instant you looked away or switched tabs while it ran.
     // setTimeout keeps firing in a background tab, so the recording keeps
     // progressing regardless of whether the tab is actively being watched.
-    if (recorderRef.current?.state === 'recording') {
+    const stillRecording = [...recordersRef.current.values()].some((r) => r.state === 'recording')
+    if (stillRecording) {
       loopTimerRef.current = window.setTimeout(() => loop(), 1000 / CAPTURE_FPS)
     }
   }, [drawOnce])
 
-  const start = useCallback(async (aspect: RecordAspect = 'landscape') => {
+  const start = useCallback(async (aspects: RecordAspect[]) => {
     const svg = svgRef.current
-    if (!svg || recorderRef.current) return
+    if (!svg || recordersRef.current.size > 0 || aspects.length === 0) return
 
-    aspectRef.current = aspect
-    const canvas = document.createElement('canvas')
-    canvasRef.current = canvas
-    // Pre-warm: paint a real frame before the recorder (and its capture
-    // timer) starts, so the saved video doesn't open on a blank frame
-    // while the first async SVG-decode is still in flight.
+    activeAspectsRef.current = aspects
+    canvasesRef.current = new Map(aspects.map((a) => [a, document.createElement('canvas')]))
+    // Pre-warm: paint a real frame before any recorder (and the capture
+    // timer) starts, so the saved videos don't open on a blank frame while
+    // the first async SVG-decode is still in flight.
     await drawOnce()
 
-    const stream = canvas.captureStream(CAPTURE_FPS)
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
-    chunksRef.current = []
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
+    chunksRef.current = new Map(aspects.map((a) => [a, []]))
+    recordersRef.current = new Map()
+    stoppedCountRef.current = 0
+
+    for (const aspect of aspects) {
+      const canvas = canvasesRef.current.get(aspect)!
+      const stream = canvas.captureStream(CAPTURE_FPS)
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.get(aspect)?.push(e.data)
+      }
+      // Each aspect's own MediaRecorder stops independently, but they were
+      // all told to stop at the same instant (see stop() below) — waiting
+      // for every one of them before surfacing anything means
+      // RecordFinalizeModal always sees a complete, consistent set of
+      // pending recordings, never a partial one from whichever happened to
+      // finish encoding first.
+      recorder.onstop = () => {
+        stoppedCountRef.current += 1
+        if (stoppedCountRef.current < aspects.length) return
+        const pending: PendingRecording[] = aspects.map((a) => {
+          const blob = new Blob(chunksRef.current.get(a) ?? [], { type: mimeType })
+          const aspectSuffix = a === 'landscape' ? '' : `_${a}`
+          return { aspect: a, blob, mimeType, filename: `${filenameBase}${aspectSuffix}.webm` }
+        })
+        pendingRef.current = pending
+        setPreviewSources(pending.map((p) => ({ aspect: p.aspect, blob: p.blob, backgroundColor: bgColorRef.current })))
+        setAwaitingFinalize(true)
+      }
+      recordersRef.current.set(aspect, recorder)
     }
-    recorder.onstop = () => {
-      const rawBlob = new Blob(chunksRef.current, { type: mimeType })
-      const aspectSuffix = aspectRef.current === 'landscape' ? '' : `_${aspectRef.current}`
-      pendingRef.current = { blob: rawBlob, mimeType, filename: `${filenameBase}${aspectSuffix}.webm` }
-      // Asked here — after the recording is done, before it's saved —
-      // rather than up front, since neither the title nor whether to
-      // include the logo need to be decided in advance. See
-      // RecordFinalizeModal, rendered by RecordControls when this is true.
-      // previewSource feeds RecordPreview's live preview of the same clip.
-      setPreviewSource({ blob: rawBlob, backgroundColor: bgColorRef.current })
-      setAwaitingFinalize(true)
-    }
-    recorderRef.current = recorder
-    recorder.start()
+
+    for (const recorder of recordersRef.current.values()) recorder.start()
     setRecording(true)
     startedAtRef.current = Date.now()
     setElapsedSeconds(0)
@@ -497,52 +586,86 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   }, [svgRef, filenameBase, drawOnce, loop])
 
   const stop = useCallback(() => {
-    recorderRef.current?.stop()
-    recorderRef.current = null
-    canvasRef.current = null
+    for (const recorder of recordersRef.current.values()) recorder.stop()
+    recordersRef.current = new Map()
+    canvasesRef.current = new Map()
     setRecording(false)
     if (loopTimerRef.current !== null) window.clearTimeout(loopTimerRef.current)
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
   }, [])
 
-  // Called by RecordFinalizeModal's Cancel — discards the recording
-  // entirely rather than downloading it.
+  // Called by RecordFinalizeModal's Cancel — discards the recording(s)
+  // entirely rather than downloading them.
   const cancelFinalize = useCallback(() => {
-    pendingRef.current = null
+    pendingRef.current = []
     setAwaitingFinalize(false)
-    setPreviewSource(null)
+    setPreviewSources([])
   }, [])
 
-  // Called by RecordFinalizeModal's Download button.
-  const submitFinalize = useCallback(async (options: FinalizeOptions) => {
+  // Called by RecordFinalizeModal's Download button — one FinalizeOptions
+  // per pending aspect. A single aspect downloads as its own .webm exactly
+  // as before; more than one bundles into a single .zip, since prompting
+  // for N separate browser save dialogs in a row is worse than one archive.
+  const submitFinalize = useCallback(async (optionsByAspect: Partial<Record<RecordAspect, FinalizeOptions>>) => {
     const pending = pendingRef.current
-    pendingRef.current = null
+    pendingRef.current = []
     setAwaitingFinalize(false)
-    setPreviewSource(null)
-    if (!pending) return
-
-    const title = options.title?.trim() || null
-    if (!title && !options.includeLogo && options.moments.length === 0) {
-      downloadBlob(pending.blob, pending.filename)
-      return
-    }
+    setPreviewSources([])
+    if (pending.length === 0) return
 
     setProcessing(true)
+    setProcessingProgress(0)
+    const results: { filename: string; blob: Blob }[] = []
     try {
-      const finalBlob = await finalizeVideo(
-        pending.blob,
-        { title, includeLogo: options.includeLogo, font: options.font, moments: options.moments },
-        pending.mimeType,
-        bgColorRef.current,
-      )
-      downloadBlob(finalBlob, pending.filename)
+      for (let i = 0; i < pending.length; i++) {
+        const item = pending[i]
+        const options = optionsByAspect[item.aspect]
+        const needsFinalize = !!(options && (options.title || options.includeLogo || options.moments.length > 0))
+
+        if (!needsFinalize) {
+          results.push({ filename: item.filename, blob: item.blob })
+          setProcessingProgress((i + 1) / pending.length)
+          continue
+        }
+
+        const finalBlob = await finalizeVideo(item.blob, options, item.mimeType, bgColorRef.current, (fraction) => {
+          setProcessingProgress((i + fraction) / pending.length)
+        })
+        results.push({ filename: item.filename, blob: finalBlob })
+      }
     } catch (err) {
-      console.error('Failed to finalize video — downloading the plain recording instead', err)
-      downloadBlob(pending.blob, pending.filename)
+      console.error('Failed to finalize one or more videos — downloading the plain recording(s) instead', err)
+      results.length = 0
+      for (const item of pending) results.push({ filename: item.filename, blob: item.blob })
+    }
+
+    try {
+      if (results.length === 1) {
+        downloadBlob(results[0].blob, results[0].filename)
+      } else {
+        const zip = new JSZip()
+        for (const r of results) zip.file(r.filename, r.blob)
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        downloadBlob(zipBlob, `${filenameBase}.zip`)
+      }
     } finally {
       setProcessing(false)
+      setProcessingProgress(null)
     }
-  }, [])
+  }, [filenameBase])
 
-  return { recording, elapsedSeconds, processing, awaitingFinalize, previewSource, moments, setMoments, submitFinalize, cancelFinalize, start, stop }
+  return {
+    recording,
+    elapsedSeconds,
+    processing,
+    processingProgress,
+    awaitingFinalize,
+    previewSources,
+    perAspectOptions,
+    setPerAspectOptions,
+    submitFinalize,
+    cancelFinalize,
+    start,
+    stop,
+  }
 }
