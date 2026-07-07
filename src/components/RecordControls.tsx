@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FinalizeOptions, RecordAspect } from '../hooks/useSvgRecorder'
+import type { RaceMoment } from '../lib/raceMoments'
 import { RecordFinalizeModal } from './RecordFinalizeModal'
 
 const ASPECT_OPTIONS: { value: RecordAspect; label: string }[] = [
@@ -15,6 +16,8 @@ interface RecorderLike {
   processing: boolean
   awaitingFinalize: boolean
   previewSource: { blob: Blob; backgroundColor: string } | null
+  moments: RaceMoment[]
+  setMoments: (moments: RaceMoment[] | ((prev: RaceMoment[]) => RaceMoment[])) => void
   submitFinalize: (options: FinalizeOptions) => void
   cancelFinalize: () => void
   start: (aspect?: RecordAspect) => void
@@ -71,7 +74,13 @@ export function RecordControls({ recorder }: { recorder: RecorderLike }) {
         {recorder.recording ? '⏹ Stop' : '⏺ Record'}
       </button>
       {recorder.awaitingFinalize && (
-        <RecordFinalizeModal preview={recorder.previewSource} onSubmit={recorder.submitFinalize} onCancel={recorder.cancelFinalize} />
+        <RecordFinalizeModal
+          preview={recorder.previewSource}
+          moments={recorder.moments}
+          onMomentsChange={recorder.setMoments}
+          onSubmit={recorder.submitFinalize}
+          onCancel={recorder.cancelFinalize}
+        />
       )}
     </>
   )

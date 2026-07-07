@@ -3,6 +3,7 @@ import logoWhiteRaw from '../assets/logo-white.svg?raw'
 import logoBlackRaw from '../assets/logo-black.svg?raw'
 import { contrastTextColorForColor } from '../lib/contrastColor'
 import { ensureTitleFontLoaded, titleFontCss, type TitleFontOptions } from '../lib/fonts'
+import { drawMomentOverlay, MomentPlayer, type MomentOverlayState, type RaceMoment } from '../lib/raceMoments'
 
 // Records an <svg> element as a video by continuously rasterizing it onto
 // an offscreen canvas and feeding that canvas's own MediaStream to a
@@ -206,13 +207,31 @@ export interface FinalizeOptions {
   title: string | null
   includeLogo: boolean
   font: TitleFontOptions
+  moments: RaceMoment[]
+}
+
+// The rectangle (in canvas-pixel space) the chart itself occupies once the
+// title/logo bands are carved out — everything moment-related is positioned
+// relative to this, not the full canvas, so toggling a band on/off doesn't
+// shift where a moment's arrow points relative to the chart content, and a
+// moment placed while looking at one recording still lands in the same
+// relative spot in another (see raceMoments.ts).
+export function chartRectFor(srcWidth: number, srcHeight: number, options: Pick<FinalizeOptions, 'title' | 'includeLogo'>) {
+  const titleBandHeight = options.title ? Math.round(srcHeight * TITLE_BAND_FRACTION) : 0
+  const logoBandHeight = options.includeLogo ? Math.round(srcHeight * LOGO_BAND_FRACTION) : 0
+  const availableHeight = srcHeight - titleBandHeight - logoBandHeight
+  const scale = availableHeight / srcHeight
+  const scaledWidth = srcWidth * scale
+  const offsetX = (srcWidth - scaledWidth) / 2
+  return { x: offsetX, y: titleBandHeight, width: scaledWidth, height: availableHeight }
 }
 
 // Draws one composited frame — the already-recorded frame uniformly scaled
 // down (never stretched) into whatever space is left, plus the title/logo
-// bands, whichever are requested — onto ctx. Shared by the actual
-// finalize/re-encode pass below and by RecordPreview's live preview, so
-// the preview is guaranteed to look exactly like the real export.
+// bands, whichever are requested, plus a moment's arrow/caption if one is
+// currently active — onto ctx. Shared by the actual finalize/re-encode pass
+// below and by RecordPreview's live preview, so the preview is guaranteed
+// to look exactly like the real export.
 export function composeFrame(
   ctx: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -220,19 +239,16 @@ export function composeFrame(
   srcHeight: number,
   backgroundColor: string,
   options: FinalizeOptions,
+  momentOverlay?: MomentOverlayState | null,
 ) {
-  const titleBandHeight = options.title ? Math.round(srcHeight * TITLE_BAND_FRACTION) : 0
-  const logoBandHeight = options.includeLogo ? Math.round(srcHeight * LOGO_BAND_FRACTION) : 0
-  const availableHeight = srcHeight - titleBandHeight - logoBandHeight
-  const scale = availableHeight / srcHeight
-  const scaledWidth = srcWidth * scale
-  const offsetX = (srcWidth - scaledWidth) / 2
+  const chartRect = chartRectFor(srcWidth, srcHeight, options)
 
   ctx.fillStyle = backgroundColor
   ctx.fillRect(0, 0, srcWidth, srcHeight)
-  ctx.drawImage(video, offsetX, titleBandHeight, scaledWidth, availableHeight)
-  if (options.title) drawTitleInBand(ctx, options.title, srcWidth, titleBandHeight, backgroundColor, options.font)
-  if (options.includeLogo) drawLogo(ctx, srcWidth, titleBandHeight + availableHeight, srcHeight)
+  ctx.drawImage(video, chartRect.x, chartRect.y, chartRect.width, chartRect.height)
+  if (options.title) drawTitleInBand(ctx, options.title, srcWidth, chartRect.y, backgroundColor, options.font)
+  if (options.includeLogo) drawLogo(ctx, srcWidth, chartRect.y + chartRect.height, srcHeight)
+  if (momentOverlay) drawMomentOverlay(ctx, chartRect, momentOverlay, backgroundColor)
 }
 
 // Re-encodes an already-recorded clip with an optional title band and/or
@@ -278,9 +294,11 @@ async function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeTyp
         resolve(new Blob(outChunks, { type: mimeType }))
       }
 
+      const momentPlayer = new MomentPlayer()
       let rafId: number | null = null
       const drawFrame = () => {
-        composeFrame(ctx, video, srcWidth, srcHeight, backgroundColor, options)
+        const overlay = options.moments.length > 0 ? momentPlayer.update(options.moments, video, performance.now()) : null
+        composeFrame(ctx, video, srcWidth, srcHeight, backgroundColor, options, overlay)
         if (!video.ended) rafId = requestAnimationFrame(drawFrame)
       }
       video.onended = () => {
@@ -312,6 +330,12 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const [processing, setProcessing] = useState(false)
   const [awaitingFinalize, setAwaitingFinalize] = useState(false)
   const [previewSource, setPreviewSource] = useState<{ blob: Blob; backgroundColor: string } | null>(null)
+  // Deliberately lives here rather than inside RecordFinalizeModal's own
+  // state: the modal unmounts between recordings (each Stop press mounts a
+  // fresh one), but a moment set built for one aspect ratio should still be
+  // there — positions carried over best-effort — when you record the same
+  // chart again in a different aspect ratio, rather than starting over.
+  const [moments, setMoments] = useState<RaceMoment[]>([])
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -498,14 +522,19 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     if (!pending) return
 
     const title = options.title?.trim() || null
-    if (!title && !options.includeLogo) {
+    if (!title && !options.includeLogo && options.moments.length === 0) {
       downloadBlob(pending.blob, pending.filename)
       return
     }
 
     setProcessing(true)
     try {
-      const finalBlob = await finalizeVideo(pending.blob, { title, includeLogo: options.includeLogo, font: options.font }, pending.mimeType, bgColorRef.current)
+      const finalBlob = await finalizeVideo(
+        pending.blob,
+        { title, includeLogo: options.includeLogo, font: options.font, moments: options.moments },
+        pending.mimeType,
+        bgColorRef.current,
+      )
       downloadBlob(finalBlob, pending.filename)
     } catch (err) {
       console.error('Failed to finalize video — downloading the plain recording instead', err)
@@ -515,5 +544,5 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     }
   }, [])
 
-  return { recording, elapsedSeconds, processing, awaitingFinalize, previewSource, submitFinalize, cancelFinalize, start, stop }
+  return { recording, elapsedSeconds, processing, awaitingFinalize, previewSource, moments, setMoments, submitFinalize, cancelFinalize, start, stop }
 }
