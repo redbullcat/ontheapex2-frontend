@@ -1526,7 +1526,7 @@ button.replay-play:hover {
   color: var(--replay-accent);
 }
 
-.record-finalize-backdrop {
+.replay-root .record-finalize-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
@@ -1535,7 +1535,7 @@ button.replay-play:hover {
   justify-content: center;
   z-index: 60;
 }
-.record-finalize-modal {
+.replay-root .record-finalize-modal {
   background: var(--replay-surface);
   border: 1px solid var(--replay-line-strong);
   border-radius: 8px;
@@ -1545,11 +1545,11 @@ button.replay-play:hover {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
   color: var(--replay-ink);
 }
-.record-finalize-modal h3 {
+.replay-root .record-finalize-modal h3 {
   margin: 0 0 14px;
   font-size: 15px;
 }
-.record-finalize-field {
+.replay-root .record-finalize-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1557,7 +1557,7 @@ button.replay-play:hover {
   color: var(--replay-muted);
   margin-bottom: 14px;
 }
-.record-finalize-field input[type='text'] {
+.replay-root .record-finalize-field input[type='text'] {
   border: 1px solid var(--replay-line-strong);
   border-radius: 6px;
   padding: 7px 9px;
@@ -1565,7 +1565,7 @@ button.replay-play:hover {
   background: var(--replay-surface);
   color: var(--replay-ink);
 }
-.record-finalize-checkbox {
+.replay-root .record-finalize-checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1574,12 +1574,12 @@ button.replay-play:hover {
   margin-bottom: 18px;
   cursor: pointer;
 }
-.record-finalize-actions {
+.replay-root .record-finalize-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
 }
-.record-finalize-actions button {
+.replay-root .record-finalize-actions button {
   border: 1px solid var(--replay-line-strong);
   background: transparent;
   color: var(--replay-muted);
@@ -1588,15 +1588,15 @@ button.replay-play:hover {
   padding: 6px 14px;
   cursor: pointer;
 }
-.record-finalize-actions button:hover {
+.replay-root .record-finalize-actions button:hover {
   border-color: #d64545;
   color: #d64545;
 }
-.record-finalize-primary {
+.replay-root .record-finalize-primary {
   background: #d64545 !important;
   border-color: #d64545 !important;
   color: #fff !important;
 }
-.record-finalize-primary:hover {
+.replay-root .record-finalize-primary:hover {
   filter: brightness(1.1);
 }
