@@ -16,11 +16,10 @@ import { contrastTextColorForColor } from '../lib/contrastColor'
 const RESOLUTION_SCALE = 2
 const CAPTURE_FPS = 30
 
-// The logo and (optional) title live in their own reserved strips rather
-// than painted over the chart — these are how much of the frame each
-// strip takes. The chart itself is always drawn at its own correct aspect
-// ratio *within* whatever space is left, never stretched/squashed to fill
-// a mismatched box.
+// The logo/title (when included) live in their own reserved strips of the
+// *finalized* video rather than painted over the chart — these are how
+// much of the frame each strip takes, as a fraction of the raw recording's
+// own height. See finalizeVideo.
 const LOGO_BAND_FRACTION = 0.09
 const TITLE_BAND_FRACTION = 0.16
 
@@ -93,7 +92,7 @@ function inlineComputedStyles(original: Element, clone: Element) {
   }
 }
 
-// --- On The Apex watermark, baked into every recorded frame -----------
+// --- On The Apex watermark, added at finalize time if requested --------
 
 function svgToDataUri(raw: string): string {
   return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(raw)))}`
@@ -122,7 +121,7 @@ function isDarkTheme(): boolean {
 
 // Draws the logo inside its own reserved band (from y=bandTop to the
 // bottom of the canvas) — never on top of the chart, which is drawn only
-// above bandTop (see drawOnce/burnInTitle).
+// above bandTop (see finalizeVideo).
 function drawLogo(ctx: CanvasRenderingContext2D, width: number, bandTop: number, canvasHeight: number) {
   const logoImg = isDarkTheme() ? logoWhiteImg : logoBlackImg
   if (!logoImg.complete || logoImg.naturalWidth === 0) return
@@ -139,7 +138,7 @@ function drawLogo(ctx: CanvasRenderingContext2D, width: number, bandTop: number,
   ctx.drawImage(logoImg, x, y, logoWidth, logoHeight)
 }
 
-// --- Optional title overlay, added in a second re-encode pass ---------
+// --- Optional title band, added at finalize time if given --------------
 
 function wrapTitleLines(ctx: CanvasRenderingContext2D, title: string, maxWidth: number): string[] {
   const words = title.split(/\s+/).filter(Boolean)
@@ -195,16 +194,21 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// Re-encodes an already-recorded clip with a title band added above it —
-// done as a second pass (replay the recorded blob through a <video>,
-// redraw each frame onto a fresh, slightly taller canvas with the
-// original frame uniformly scaled down into the remaining space plus the
-// title drawn in the new strip, re-capture that) rather than during the
-// original recording, since the whole point is asking for the title
-// *after* recording so it isn't decided in advance. Scaling uniformly
-// (not stretching) and letterboxing with the chart's own background color
-// keeps the chart+logo exactly as they were, just smaller — no distortion.
-function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgroundColor: string): Promise<Blob> {
+export interface FinalizeOptions {
+  title: string | null
+  includeLogo: boolean
+}
+
+// Re-encodes an already-recorded clip with an optional title band and/or
+// logo added — done as a second pass (replay the recorded blob through a
+// <video>, redraw each frame onto a fresh canvas of the same size with the
+// original frame uniformly scaled down into whatever space is left plus
+// the requested band(s) drawn in, re-capture that) rather than during the
+// original recording, since both are only decided *after* recording
+// finishes. Scaling uniformly (never stretching) and letterboxing with the
+// chart's own background color means the chart itself never looks any
+// different, just smaller when a band is added.
+function finalizeVideo(sourceBlob: Blob, options: FinalizeOptions, mimeType: string, backgroundColor: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.muted = true
@@ -214,7 +218,7 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgrou
 
     video.onerror = () => {
       URL.revokeObjectURL(sourceUrl)
-      reject(new Error('Failed to load recorded video for title overlay'))
+      reject(new Error('Failed to load recorded video for finalizing'))
     }
 
     video.onloadedmetadata = () => {
@@ -229,8 +233,9 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgrou
         return reject(new Error('2D canvas context unavailable'))
       }
 
-      const titleBandHeight = Math.round(srcHeight * TITLE_BAND_FRACTION)
-      const availableHeight = srcHeight - titleBandHeight
+      const titleBandHeight = options.title ? Math.round(srcHeight * TITLE_BAND_FRACTION) : 0
+      const logoBandHeight = options.includeLogo ? Math.round(srcHeight * LOGO_BAND_FRACTION) : 0
+      const availableHeight = srcHeight - titleBandHeight - logoBandHeight
       const scale = availableHeight / srcHeight
       const scaledWidth = srcWidth * scale
       const offsetX = (srcWidth - scaledWidth) / 2
@@ -250,11 +255,12 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgrou
       const drawFrame = () => {
         ctx.fillStyle = backgroundColor
         ctx.fillRect(0, 0, srcWidth, srcHeight)
-        // The already-recorded frame (chart + logo, exactly as captured)
-        // scaled down uniformly and placed below the title band — never
-        // stretched, so nothing in it looks different, just smaller.
+        // The already-recorded frame, uniformly scaled down (never
+        // stretched) and placed below the title band / above the logo
+        // band, whichever are present.
         ctx.drawImage(video, offsetX, titleBandHeight, scaledWidth, availableHeight)
-        drawTitleInBand(ctx, title, srcWidth, titleBandHeight, backgroundColor)
+        if (options.title) drawTitleInBand(ctx, options.title, srcWidth, titleBandHeight, backgroundColor)
+        if (options.includeLogo) drawLogo(ctx, srcWidth, titleBandHeight + availableHeight, srcHeight)
         if (!video.ended) rafId = requestAnimationFrame(drawFrame)
       }
       video.onended = () => {
@@ -274,10 +280,17 @@ function burnInTitle(sourceBlob: Blob, title: string, mimeType: string, backgrou
   })
 }
 
+interface PendingRecording {
+  blob: Blob
+  mimeType: string
+  filename: string
+}
+
 export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, filenameBase: string) {
   const [recording, setRecording] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [processing, setProcessing] = useState(false)
+  const [awaitingFinalize, setAwaitingFinalize] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -286,12 +299,15 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
   const startedAtRef = useRef(0)
   const aspectRef = useRef<RecordAspect>('landscape')
   const bgColorRef = useRef('#ffffff')
+  const pendingRef = useRef<PendingRecording | null>(null)
 
   // Renders exactly one frame onto the canvas; resolves once it's actually
   // painted. Used both to pre-warm the canvas before recording starts (so
   // the video doesn't open on a blank/incomplete first frame while the
   // very first async image decode is still in flight) and, in a loop, for
-  // every frame while recording.
+  // every frame while recording. No logo/title here — those are only ever
+  // added at finalize time (see finalizeVideo), since whether to include
+  // the logo and what the title should be are both asked after the fact.
   const drawOnce = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const svg = svgRef.current
@@ -309,36 +325,26 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       const preset = ASPECT_PRESETS[aspectRef.current]
       let destWidth: number
       let destHeight: number
-      // The chart itself is only ever drawn into (0,0,destWidth,chartDrawHeight)
-      // — the remaining strip below is reserved for the logo, so the chart's
-      // own content is never painted over.
-      let chartDrawHeight: number
       let srcX = 0
       let srcY = 0
       let srcWidth = naturalWidth
       let srcHeight = naturalHeight
 
       if (preset) {
-        // Exact requested output size (matters for social-media specs like
-        // a true 1080x1920) — the logo band is carved out of it, not added
-        // on top, so the final video still matches that exact resolution.
         destWidth = preset.width
         destHeight = preset.height
-        chartDrawHeight = Math.round(destHeight * (1 - LOGO_BAND_FRACTION))
+        // Full chart height, but only as much width as this destination's
+        // aspect ratio needs — cropping a wide lap chart down to a tall
+        // frame instead of squashing it into an illegible sliver.
         srcHeight = naturalHeight
-        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / chartDrawHeight))
+        srcWidth = Math.min(naturalWidth, srcHeight * (destWidth / destHeight))
         const edge = findRevealEdgeX(svg)
         if (edge !== null) {
           srcX = Math.min(Math.max(0, edge - srcWidth * TRACK_POSITION_FRACTION), Math.max(0, naturalWidth - srcWidth))
         }
       } else {
-        // Landscape isn't chasing an exact social-media resolution, so
-        // instead of shrinking the chart to make room for the logo, just
-        // grow the canvas — the chart keeps its own exact on-screen aspect
-        // ratio (no distortion) and the logo gets genuinely extra space.
         destWidth = Math.max(1, Math.round(rect.width * RESOLUTION_SCALE))
-        chartDrawHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
-        destHeight = Math.round(chartDrawHeight / (1 - LOGO_BAND_FRACTION))
+        destHeight = Math.max(1, Math.round(rect.height * RESOLUTION_SCALE))
       }
 
       if (canvas.width !== destWidth || canvas.height !== destHeight) {
@@ -378,12 +384,10 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
       img.onload = () => {
         // alpha:false already makes every pixel fully opaque, but the fill
         // still matters so the chart's own background shows through
-        // wherever the SVG itself is transparent (empty margins etc), and
-        // fills the logo band behind the logo's own transparency.
+        // wherever the SVG itself is transparent (empty margins etc).
         ctx.fillStyle = resolvedBg
         ctx.fillRect(0, 0, destWidth, destHeight)
-        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, chartDrawHeight)
-        drawLogo(ctx, destWidth, chartDrawHeight, destHeight)
+        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, destWidth, destHeight)
         proceed()
       }
       img.onerror = proceed
@@ -424,30 +428,15 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
     }
-    recorder.onstop = async () => {
+    recorder.onstop = () => {
       const rawBlob = new Blob(chunksRef.current, { type: mimeType })
       const aspectSuffix = aspectRef.current === 'landscape' ? '' : `_${aspectRef.current}`
-      const filename = `${filenameBase}${aspectSuffix}.webm`
-
+      pendingRef.current = { blob: rawBlob, mimeType, filename: `${filenameBase}${aspectSuffix}.webm` }
       // Asked here — after the recording is done, before it's saved —
-      // rather than up front, since the whole point is not having to
-      // decide the title before you've seen how the recording turned out.
-      const title = window.prompt('Title for this video (shown at the top of the frame — leave blank for none):', '')?.trim()
-      if (!title) {
-        downloadBlob(rawBlob, filename)
-        return
-      }
-
-      setProcessing(true)
-      try {
-        const finalBlob = await burnInTitle(rawBlob, title, mimeType, bgColorRef.current)
-        downloadBlob(finalBlob, filename)
-      } catch (err) {
-        console.error('Failed to add title overlay — downloading without it', err)
-        downloadBlob(rawBlob, filename)
-      } finally {
-        setProcessing(false)
-      }
+      // rather than up front, since neither the title nor whether to
+      // include the logo need to be decided in advance. See
+      // RecordFinalizeModal, rendered by RecordControls when this is true.
+      setAwaitingFinalize(true)
     }
     recorderRef.current = recorder
     recorder.start()
@@ -469,5 +458,37 @@ export function useSvgRecorder(svgRef: React.RefObject<SVGSVGElement | null>, fi
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
   }, [])
 
-  return { recording, elapsedSeconds, processing, start, stop }
+  // Called by RecordFinalizeModal's Cancel — discards the recording
+  // entirely rather than downloading it.
+  const cancelFinalize = useCallback(() => {
+    pendingRef.current = null
+    setAwaitingFinalize(false)
+  }, [])
+
+  // Called by RecordFinalizeModal's Download button.
+  const submitFinalize = useCallback(async (options: FinalizeOptions) => {
+    const pending = pendingRef.current
+    pendingRef.current = null
+    setAwaitingFinalize(false)
+    if (!pending) return
+
+    const title = options.title?.trim() || null
+    if (!title && !options.includeLogo) {
+      downloadBlob(pending.blob, pending.filename)
+      return
+    }
+
+    setProcessing(true)
+    try {
+      const finalBlob = await finalizeVideo(pending.blob, { title, includeLogo: options.includeLogo }, pending.mimeType, bgColorRef.current)
+      downloadBlob(finalBlob, pending.filename)
+    } catch (err) {
+      console.error('Failed to finalize video — downloading the plain recording instead', err)
+      downloadBlob(pending.blob, pending.filename)
+    } finally {
+      setProcessing(false)
+    }
+  }, [])
+
+  return { recording, elapsedSeconds, processing, awaitingFinalize, submitFinalize, cancelFinalize, start, stop }
 }
