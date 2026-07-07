@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import { getTeamColor } from '../lib/identityColors'
 import { clearTeamOverride, getTeamOverrides, setTeamOverride } from '../lib/identityOverrides'
+import { clearLapDeleted, listDeletedLaps } from '../lib/lapOverrides'
+
+function formatDeletedAt(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
 
 export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: () => void }) {
   const [overrides, setOverrides] = useState(() => getTeamOverrides())
   const [addTeam, setAddTeam] = useState('')
   const [addColor, setAddColor] = useState('#2a78d6')
   const [addName, setAddName] = useState('')
+  const [deletedLaps, setDeletedLaps] = useState(() => listDeletedLaps())
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -27,6 +37,11 @@ export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: ()
   const removeOverride = (team: string) => {
     clearTeamOverride(team)
     setOverrides(getTeamOverrides())
+  }
+
+  const restoreLap = (sessionId: number, carNumber: string, lapNumber: number) => {
+    clearLapDeleted(sessionId, carNumber, lapNumber)
+    setDeletedLaps(listDeletedLaps())
   }
 
   return (
@@ -111,6 +126,38 @@ export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: ()
             </button>
           </div>
         </div>
+
+        <h3 className="settings-section-head">Deleted laps</h3>
+        <p className="hint">
+          Laps flagged deleted (a steward's decision, e.g. a struck-down pole lap) here are excluded from
+          fastest-lap classification — Results, Fastest Laps, and the race starting grid — everywhere in the app.
+          The lap itself is never removed from the data. Flag a lap from its Results row.
+        </p>
+        {deletedLaps.length === 0 ? (
+          <p className="hint">No laps flagged yet.</p>
+        ) : (
+          <div className="settings-list">
+            {deletedLaps.map((d) => (
+              <div className="settings-row settings-row-deleted-lap" key={`${d.sessionId}:${d.carNumber}:${d.lapNumber}`}>
+                <div className="settings-row-team">
+                  <span className="settings-row-original">
+                    Session {d.sessionId} — #{d.carNumber} — Lap {d.lapNumber}
+                  </span>
+                  <span className="settings-deleted-lap-reason">
+                    {d.reason} <span className="settings-deleted-lap-date">({formatDeletedAt(d.deletedAt)})</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="entity-filter-reset"
+                  onClick={() => restoreLap(d.sessionId, d.carNumber, d.lapNumber)}
+                >
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
