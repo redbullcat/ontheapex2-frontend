@@ -34,6 +34,9 @@ import { FastestLapsTable } from './components/FastestLapsTable'
 import { PaceConsistencyChart } from './components/PaceConsistencyChart'
 import { TopSpeedChart } from './components/TopSpeedChart'
 import { PitTimeChart } from './components/PitTimeChart'
+import { PitStopAverageChart } from './components/PitStopAverageChart'
+import { DriverConsistencyChart } from './components/DriverConsistencyChart'
+import { HeadToHeadChart } from './components/HeadToHeadChart'
 import { StoryChart } from './components/StoryChart'
 import { FlagGanttChart } from './components/FlagGanttChart'
 import { SectorAnalysisChart } from './components/SectorAnalysisChart'
@@ -55,6 +58,7 @@ const RACE_TABS: Tab[] = [
   { id: 'longruns', label: 'Long Runs' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
+  { id: 'headtohead', label: 'Head to Head' },
   { id: 'story', label: 'Story' },
 ]
 
@@ -508,6 +512,17 @@ function App() {
                         <p className="hint">No lap data for this session.</p>
                       ))}
                   </section>
+
+                  <section className="chart-section">
+                    <h2>Driver consistency (class-wide)</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading consistency data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <DriverConsistencyChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
                 </>
               )}
 
@@ -599,16 +614,29 @@ function App() {
               )}
 
               {activeTab === 'pit' && (
-                <section className="chart-section">
-                  <h2>Pit stops</h2>
-                  {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
-                  {lapsState.status === 'success' &&
-                    (lapsState.data.length > 0 ? (
-                      <PitTimeChart laps={lapsState.data} />
-                    ) : (
-                      <p className="hint">No lap data for this session.</p>
-                    ))}
-                </section>
+                <>
+                  <section className="chart-section">
+                    <h2>Pit stops</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PitTimeChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Average pit stop time by team / manufacturer</h2>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PitStopAverageChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+                </>
               )}
 
               {activeTab === 'stints' && (
@@ -633,6 +661,19 @@ function App() {
                         ))}
                     </>
                   )}
+                </section>
+              )}
+
+              {activeTab === 'headtohead' && (
+                <section className="chart-section">
+                  <h2>Head to head</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading lap data…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <HeadToHeadChart laps={lapsState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
                 </section>
               )}
 

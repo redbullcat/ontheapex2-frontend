@@ -17,9 +17,10 @@ const SCATTER_MARGIN = { top: 16, right: 24, bottom: 40, left: 56 }
 const SCATTER_HEIGHT = 320
 const R = 5
 
-interface PitStop {
+export interface PitStop {
   car: string
   team: string | null
+  manufacturer: string | null
   lap: number
   lossSeconds: number
 }
@@ -34,7 +35,7 @@ interface CarPitStats {
   maxLoss: number
 }
 
-function computePitStops(laps: LapRead[], activeClasses: Set<string>): PitStop[] {
+export function computePitStops(laps: LapRead[], activeClasses: Set<string>): PitStop[] {
   const byCar = new Map<string, LapRead[]>()
   for (const lap of laps) {
     if (!activeClasses.has(lap.class ?? 'Unknown')) continue
@@ -71,7 +72,7 @@ function computePitStops(laps: LapRead[], activeClasses: Set<string>): PitStop[]
       if (!isGreen(row.flag_at_fl) || !isGreen(outLap.flag_at_fl)) continue
       if (row.lap_time_seconds > greenMedian * 3 || outLap.lap_time_seconds > greenMedian * 3) continue
       const lossSeconds = row.lap_time_seconds + outLap.lap_time_seconds - 2 * greenMedian
-      stops.push({ car, team: row.team, lap: row.lap_number, lossSeconds })
+      stops.push({ car, team: row.team, manufacturer: row.manufacturer, lap: row.lap_number, lossSeconds })
     }
   }
   return stops
