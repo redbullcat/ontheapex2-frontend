@@ -124,7 +124,15 @@ function BarRow({
     const height = plotHeight + MARGIN.top + MARGIN.bottom
     svg.attr('width', width).attr('height', height)
 
-    const x = d3.scaleLinear().domain([0, (d3.max(sorted, (d) => d.value) ?? 1) * 1.1]).range([0, innerWidth])
+    // Zoom the axis to the spread of values actually present (like PaceChart's
+    // bar chart) instead of always anchoring at 0 — head-to-head differences
+    // between drivers are often small relative to the absolute value (e.g.
+    // 2:06.5 vs 2:07.3), so a 0-based axis would flatten every bar to
+    // near-identical lengths.
+    const xMin = d3.min(sorted, (d) => d.value) ?? 0
+    const xMax = d3.max(sorted, (d) => d.value) ?? 1
+    const pad = (xMax - xMin) * 0.1 || xMax * 0.05 || 1
+    const x = d3.scaleLinear().domain([Math.max(0, xMin - pad), xMax + pad]).range([0, innerWidth])
     const y = d3
       .scaleBand()
       .domain(sorted.map((d) => d.key))
