@@ -51,7 +51,7 @@ function labelFor(scope: Scope, value: string, laps: LapRead[]): string {
   return value
 }
 
-function buildDriverStats(laps: LapRead[]): DriverStats[] {
+function buildDriverStats(laps: LapRead[], topPercent: number): DriverStats[] {
   const byDriver = new Map<string, number[]>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null || !lap.driver_name) continue
@@ -62,18 +62,19 @@ function buildDriverStats(laps: LapRead[]): DriverStats[] {
 
   const result: DriverStats[] = []
   for (const [driver, times] of byDriver) {
-    // Clean laps: within 105% of this driver's own median, excluding
-    // pit/SC/outlier laps — same convention as the Streamlit driver
-    // head-to-head chart and PaceConsistencyChart.
-    const median = d3.median(times) ?? 0
-    const clean = times.filter((t) => t <= median * 1.05)
-    if (clean.length === 0) continue
+    // Top-N% fastest laps kept per driver for the pace/consistency figures,
+    // same convention as PaceChart's "Top % of laps" filter — fastest single
+    // lap always comes from every lap, unaffected by this filter.
+    const sortedAll = [...times].sort((a, b) => a - b)
+    const keepCount = topPercent <= 0 ? 0 : Math.max(1, Math.ceil((sortedAll.length * topPercent) / 100))
+    if (keepCount === 0) continue
+    const kept = sortedAll.slice(0, keepCount)
     result.push({
       driver,
       color: getEntityColor(driver),
-      laps: clean.length,
-      avgPace: d3.mean(clean) ?? 0,
-      std: sampleStd(clean),
+      laps: kept.length,
+      avgPace: d3.mean(kept) ?? 0,
+      std: sampleStd(kept),
       fastestLap: d3.min(times) ?? 0,
     })
   }
@@ -202,6 +203,7 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
   const [classValue, setClassValue] = useState('')
   const [scope, setScope] = useState<Scope>('car')
   const [entityValue, setEntityValue] = useState('')
+  const [topPercentInput, setTopPercentInput] = useState('100')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -243,7 +245,9 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
     return classLaps.filter((l) => field(l) === entityValue)
   }, [classLaps, scope, entityValue])
 
-  const driverStats = useMemo(() => buildDriverStats(scopedLaps), [scopedLaps])
+  const topPercent = Math.max(0, Math.min(100, Number(topPercentInput) || 0))
+
+  const driverStats = useMemo(() => buildDriverStats(scopedLaps, topPercent), [scopedLaps, topPercent])
 
   const carsInvolved = useMemo(() => {
     if (scope === 'car') return 1
@@ -310,6 +314,10 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
           onChange={setEntityValue}
           options={entityOptions}
         />
+        <label className="top-percent">
+          <span className="field-label">Top % of laps</span>
+          <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
+        </label>
       </div>
 
       {driverStats.length === 0 ? (
@@ -320,6 +328,11 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
             <p className="hint">
               Comparing {driverStats.length} driver{driverStats.length === 1 ? '' : 's'} across {carsInvolved} car
               {carsInvolved === 1 ? '' : 's'} for this {scope}.
+            </p>
+          )}
+          {topPercent < 100 && (
+            <p className="hint">
+              Top % of laps applies to average pace and consistency below — fastest single lap always uses every lap.
             </p>
           )}
           <div className="h2h-stack">
