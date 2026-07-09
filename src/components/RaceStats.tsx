@@ -3,6 +3,7 @@ import type { LapRead } from '../api/types'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { getTeamDisplayName } from '../lib/identityColors'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const FLAG_LABELS: Record<string, string> = {
   GF: 'Green',
@@ -151,9 +152,11 @@ export function RaceStats({ laps }: { laps: LapRead[] }) {
 
   return (
     <div className="race-stats">
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-      </div>
+      <CollapsibleFilters>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+      </CollapsibleFilters>
       <div className="stat-row">
         <div className="stat-tile">
           <span className="stat-label">Race laps</span>

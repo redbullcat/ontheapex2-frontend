@@ -1067,6 +1067,45 @@ header h1 {
   color-scheme: light;
 }
 
+.collapsible-filters {
+  margin-bottom: 12px;
+}
+
+.collapsible-filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.collapsible-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.collapsible-filters-arrow {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.collapsible-filters-arrow.open {
+  transform: rotate(90deg);
+}
+
+.collapsible-filters-body {
+  margin-top: 10px;
+}
+
 .record-finalize-backdrop {
   position: fixed;
   inset: 0;

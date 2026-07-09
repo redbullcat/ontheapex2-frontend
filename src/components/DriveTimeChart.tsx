@@ -8,6 +8,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -240,25 +241,26 @@ export function DriveTimeChart({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <ChartExportButtons svgRef={svgRef} filename="drive_time" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter items={teamOptions} selection={teamSelection} onChange={setTeamSelection} addLabel="Add team" resetLabel="Show all teams" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={manufacturerOptions}
-          selection={manufacturerSelection}
-          onChange={setManufacturerSelection}
-          addLabel="Add manufacturer"
-          resetLabel="Show all manufacturers"
-        />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter items={driverOptions} selection={driverSelection} onChange={setDriverSelection} addLabel="Add driver" resetLabel="Show all drivers" />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="drive_time" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter items={teamOptions} selection={teamSelection} onChange={setTeamSelection} addLabel="Add team" resetLabel="Show all teams" />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={manufacturerOptions}
+            selection={manufacturerSelection}
+            onChange={setManufacturerSelection}
+            addLabel="Add manufacturer"
+            resetLabel="Show all manufacturers"
+          />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter items={driverOptions} selection={driverSelection} onChange={setDriverSelection} addLabel="Add driver" resetLabel="Show all drivers" />
+        </div>
+      </CollapsibleFilters>
       {driverTimes.length === 0 ? (
         <p className="hint">No driver lap data for this selection.</p>
       ) : (

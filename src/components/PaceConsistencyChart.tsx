@@ -5,6 +5,7 @@ import { getTeamColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 24, bottom: 40, left: 56 }
 const HEIGHT = 440
@@ -252,10 +253,11 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
           font-size: 13px;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <ChartExportButtons svgRef={svgRef} filename="pace_consistency" />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pace_consistency" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+      </CollapsibleFilters>
       {points.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>

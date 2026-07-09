@@ -8,6 +8,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 420
@@ -297,19 +298,20 @@ export function LongRunChart({ laps }: { laps: LapRead[] }) {
           font-size: 13px;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <ChartExportButtons svgRef={svgRef} filename="longest_run_pace" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="longest_run_pace" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
+        </div>
+      </CollapsibleFilters>
       {runs.length === 0 ? (
         <p className="hint">No stint data long enough for this selection.</p>
       ) : (

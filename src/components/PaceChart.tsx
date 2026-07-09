@@ -10,6 +10,9 @@ import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { CollapsibleFilters } from './CollapsibleFilters'
+import { GapModeToggle } from './GapModeToggle'
+import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -136,6 +139,7 @@ export function PaceChart({
   const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [topPercentInput, setTopPercentInput] = useState('100')
+  const [gapMode, setGapMode] = useState<GapMode>('ahead')
   const [hover, setHover] = useState<HoverState | null>(null)
 
   useEffect(() => {
@@ -198,6 +202,9 @@ export function PaceChart({
     () => buildGroups(laps, activeClasses, groupBy, carSelection, driverSelection, effectiveLapRange, topPercent),
     [laps, activeClasses, groupBy, carSelection, driverSelection, effectiveLapRange, topPercent],
   )
+
+  // groups is already sorted ascending by mean (fastest first, see buildGroups).
+  const gaps = useMemo(() => computeGaps(groups.map((g) => g.mean), gapMode), [groups, gapMode])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -272,7 +279,10 @@ export function PaceChart({
         .attr('dominant-baseline', 'central')
         .attr('fill', 'var(--text-secondary)')
         .attr('font-size', 11)
-        .text((d) => formatSeconds(d.mean))
+        .text((d, i) => {
+          const gapText = formatGap(gaps[i])
+          return `${formatSeconds(d.mean)}${gapText ? `, ${gapText}` : ''}`
+        })
     } else {
       const row = g
         .append('g')
@@ -344,7 +354,7 @@ export function PaceChart({
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [groups, width, chartType])
+  }, [groups, width, chartType, gaps])
 
   const filterControls = (
     <>
@@ -369,7 +379,7 @@ export function PaceChart({
           <span className="field-label">Top % of laps</span>
           <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
         </label>
-        <ChartExportButtons svgRef={svgRef} filename="pace_chart" />
+        {chartType === 'bar' && <GapModeToggle value={gapMode} onChange={setGapMode} />}
       </div>
       {!hideCarFilter && (
         <div className="chart-controls">
@@ -447,7 +457,11 @@ export function PaceChart({
           font-size: 13px;
         }
       `}</style>
-      {compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls}
+      {compactFilters ? (
+        <PanelSettingsPopover>{filterControls}</PanelSettingsPopover>
+      ) : (
+        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pace_chart" />}>{filterControls}</CollapsibleFilters>
+      )}
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>

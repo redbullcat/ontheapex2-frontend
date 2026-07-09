@@ -5,6 +5,9 @@ import { getEntityColor, getTeamDisplayName } from '../lib/identityColors'
 import { Select } from './Select'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { CollapsibleFilters } from './CollapsibleFilters'
+import { GapModeToggle } from './GapModeToggle'
+import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -87,12 +90,14 @@ function BarRow({
   format,
   filename,
   sortAsc,
+  gapMode,
 }: {
   title: string
   data: { key: string; color: string; value: number; detail: string }[]
   format: (n: number) => string
   filename: string
   sortAsc: boolean
+  gapMode: GapMode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -113,6 +118,10 @@ function BarRow({
     () => [...data].sort((a, b) => (sortAsc ? a.value - b.value : b.value - a.value)),
     [data, sortAsc],
   )
+
+  // computeGaps expects ascending order (index 0 = leader) — true whenever
+  // sortAsc is set, which every BarRow caller here uses.
+  const gaps = useMemo(() => (sortAsc ? computeGaps(sorted.map((d) => d.value), gapMode) : sorted.map(() => null)), [sorted, sortAsc, gapMode])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -175,7 +184,10 @@ function BarRow({
       .attr('dominant-baseline', 'central')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 11)
-      .text((d) => `${format(d.value)}${d.detail ? ` — ${d.detail}` : ''}`)
+      .text((d, i) => {
+        const gapText = formatGap(gaps[i])
+        return `${format(d.value)}${gapText ? `, ${gapText}` : ''}${d.detail ? ` — ${d.detail}` : ''}`
+      })
 
     const xAxis = d3.axisBottom(x).ticks(5).tickFormat((d) => format(d as number)).tickSizeOuter(0)
     g.append('g')
@@ -184,7 +196,7 @@ function BarRow({
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [sorted, width, format])
+  }, [sorted, width, format, gaps])
 
   return (
     <div>
@@ -204,6 +216,7 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
   const [scope, setScope] = useState<Scope>('car')
   const [entityValue, setEntityValue] = useState('')
   const [topPercentInput, setTopPercentInput] = useState('100')
+  const [gapMode, setGapMode] = useState<GapMode>('ahead')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -299,26 +312,29 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
           margin-top: 20px;
         }
       `}</style>
-      <div className="chart-controls">
-        <Select label="Class" value={classValue} onChange={setClassValue} options={allClasses.map((c) => ({ value: c, label: c }))} />
-        <div className="color-mode-toggle" role="radiogroup" aria-label="Compare by">
-          {(['car', 'team', 'manufacturer'] as const).map((s) => (
-            <button key={s} type="button" className={scope === s ? 'active' : ''} onClick={() => setScope(s)}>
-              {s[0].toUpperCase() + s.slice(1)}
-            </button>
-          ))}
+      <CollapsibleFilters defaultOpen>
+        <div className="chart-controls">
+          <Select label="Class" value={classValue} onChange={setClassValue} options={allClasses.map((c) => ({ value: c, label: c }))} />
+          <div className="color-mode-toggle" role="radiogroup" aria-label="Compare by">
+            {(['car', 'team', 'manufacturer'] as const).map((s) => (
+              <button key={s} type="button" className={scope === s ? 'active' : ''} onClick={() => setScope(s)}>
+                {s[0].toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+          <Select
+            label={scope === 'car' ? 'Car' : scope === 'team' ? 'Team' : 'Manufacturer'}
+            value={entityValue}
+            onChange={setEntityValue}
+            options={entityOptions}
+          />
+          <label className="top-percent">
+            <span className="field-label">Top % of laps</span>
+            <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
+          </label>
+          <GapModeToggle value={gapMode} onChange={setGapMode} />
         </div>
-        <Select
-          label={scope === 'car' ? 'Car' : scope === 'team' ? 'Team' : 'Manufacturer'}
-          value={entityValue}
-          onChange={setEntityValue}
-          options={entityOptions}
-        />
-        <label className="top-percent">
-          <span className="field-label">Top % of laps</span>
-          <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
-        </label>
-      </div>
+      </CollapsibleFilters>
 
       {driverStats.length === 0 ? (
         <p className="hint">No driver lap data for this selection.</p>
@@ -342,6 +358,7 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
               format={formatSeconds}
               filename="h2h_pace"
               sortAsc
+              gapMode={gapMode}
             />
             <BarRow
               title="Consistency (std dev)"
@@ -349,6 +366,7 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
               format={(s) => `${s.toFixed(3)}s`}
               filename="h2h_consistency"
               sortAsc
+              gapMode={gapMode}
             />
             <BarRow
               title="Fastest single lap"
@@ -356,6 +374,7 @@ export function HeadToHeadChart({ laps }: { laps: LapRead[] }) {
               format={formatSeconds}
               filename="h2h_fastest_lap"
               sortAsc
+              gapMode={gapMode}
             />
           </div>
         </>

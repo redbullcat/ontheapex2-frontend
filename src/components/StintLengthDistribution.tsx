@@ -7,6 +7,7 @@ import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const PANEL_WIDTH = 170
 const PANEL_HEIGHT = 120
@@ -203,18 +204,20 @@ export function StintLengthDistribution({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+      <CollapsibleFilters>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
+        </div>
+      </CollapsibleFilters>
       {panels.length === 0 ? (
         <p className="hint">No stint data for this selection.</p>
       ) : (

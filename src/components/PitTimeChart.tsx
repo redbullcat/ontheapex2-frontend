@@ -7,6 +7,9 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { CollapsibleFilters } from './CollapsibleFilters'
+import { GapModeToggle } from './GapModeToggle'
+import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 
 const BAR_MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const BAR_MARGIN_LEFT_MIN = 80
@@ -92,6 +95,7 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
   const [barWidth, setBarWidth] = useState(800)
   const [scatterWidth, setScatterWidth] = useState(800)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [gapMode, setGapMode] = useState<GapMode>('ahead')
 
   useEffect(() => {
     const el = barContainerRef.current
@@ -151,6 +155,9 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
     return result.sort((a, b) => a.avgLoss - b.avgLoss)
   }, [stops])
 
+  // carStats is already sorted ascending by avgLoss (lowest loss/fastest first).
+  const gaps = useMemo(() => computeGaps(carStats.map((c) => c.avgLoss), gapMode), [carStats, gapMode])
+
   useEffect(() => {
     const svg = d3.select(barSvgRef.current)
     svg.selectAll('*').remove()
@@ -207,7 +214,10 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .attr('dominant-baseline', 'central')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 11)
-      .text((d) => `${formatSeconds(d.avgLoss)} (${d.stops} stops)`)
+      .text((d, i) => {
+        const gapText = formatGap(gaps[i])
+        return `${formatSeconds(d.avgLoss)}${gapText ? `, ${gapText}` : ''} (${d.stops} stops)`
+      })
 
     const xAxis = d3.axisBottom(x).ticks(6).tickFormat((d) => `${d}s`).tickSizeOuter(0)
     g.append('g')
@@ -216,7 +226,7 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [carStats, barWidth])
+  }, [carStats, barWidth, gaps])
 
   useEffect(() => {
     const svg = d3.select(scatterSvgRef.current)
@@ -308,12 +318,16 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
         <PanelSettingsPopover>
           <div className="chart-controls">
             <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+            <GapModeToggle value={gapMode} onChange={setGapMode} />
           </div>
         </PanelSettingsPopover>
       ) : (
-        <div className="chart-controls">
-          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        </div>
+        <CollapsibleFilters>
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+            <GapModeToggle value={gapMode} onChange={setGapMode} />
+          </div>
+        </CollapsibleFilters>
       )}
       {carStats.length === 0 ? (
         <p className="hint">No pit stop data for this selection.</p>

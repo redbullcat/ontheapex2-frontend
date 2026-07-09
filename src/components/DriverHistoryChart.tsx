@@ -4,6 +4,7 @@ import type { LapRead, Stint } from '../api/types'
 import { getEntityColor, getTeamDisplayName } from '../lib/identityColors'
 import { CarPicker, type CarOption } from './CarPicker'
 import { ChartExportButtons } from './ChartExportButtons'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 140 }
 const MARGIN_LEFT_MIN = 44
@@ -390,10 +391,11 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           flex: none;
         }
       `}</style>
-      <div className="chart-controls">
-        <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
-        <ChartExportButtons svgRef={svgRef} filename="driver_stint_history" />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="driver_stint_history" />}>
+        <div className="chart-controls">
+          <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
+        </div>
+      </CollapsibleFilters>
       {rows.length === 0 ? (
         <p className="hint">Pick one or more cars above to see their driver stint history.</p>
       ) : (

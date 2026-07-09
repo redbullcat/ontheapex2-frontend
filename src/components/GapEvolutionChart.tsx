@@ -15,6 +15,7 @@ import { usePlayback } from '../hooks/usePlayback'
 import { PlaybackControls } from './PlaybackControls'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
 import { RecordControls } from './RecordControls'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 400
@@ -655,46 +656,47 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           color: var(--text-primary);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
-        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
-        <label className="class-filter-item">
-          <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
-          Show flag periods
-        </label>
-        <label className="class-filter-item ref-car-picker">
-          Reference
-          <select
-            value={referenceCarOverride ?? ''}
-            onChange={(e) => setReferenceCarOverride(e.target.value || null)}
-          >
-            <option value="">Auto (race leader)</option>
-            {carOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <ChartExportButtons svgRef={svgRef} filename="gap_evolution" />
-        <RecordControls recorder={recorder} />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="gap_evolution" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
+          <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+          <label className="class-filter-item">
+            <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
+            Show flag periods
+          </label>
+          <label className="class-filter-item ref-car-picker">
+            Reference
+            <select
+              value={referenceCarOverride ?? ''}
+              onChange={(e) => setReferenceCarOverride(e.target.value || null)}
+            >
+              <option value="">Auto (race leader)</option>
+              {carOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <RecordControls recorder={recorder} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
+        </div>
+      </CollapsibleFilters>
       <div className="chart-controls">
         <PlaybackControls
           playback={playback}
           min={minLap}
           max={maxLap}
           formatValue={(v) => `Lap ${Math.round(v)}`}
-        />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
         />
       </div>
       {colorMode === 'class' && (
