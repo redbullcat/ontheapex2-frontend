@@ -37,6 +37,7 @@ import { PitTimeChart } from './components/PitTimeChart'
 import { PitStopAverageChart } from './components/PitStopAverageChart'
 import { DriverConsistencyChart } from './components/DriverConsistencyChart'
 import { HeadToHeadChart } from './components/HeadToHeadChart'
+import { DriveTimeChart } from './components/DriveTimeChart'
 import { StoryChart } from './components/StoryChart'
 import { FlagGanttChart } from './components/FlagGanttChart'
 import { SectorAnalysisChart } from './components/SectorAnalysisChart'
@@ -640,6 +641,7 @@ function App() {
               )}
 
               {activeTab === 'stints' && (
+                <>
                 <section className="chart-section">
                   <h2>Driver stint history</h2>
                   {combinedBucket ? (
@@ -662,6 +664,18 @@ function App() {
                     </>
                   )}
                 </section>
+
+                <section className="chart-section">
+                  <h2>Drive time by driver</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading lap data…</p>}
+                  {lapsState.status === 'success' &&
+                    (lapsState.data.length > 0 ? (
+                      <DriveTimeChart laps={lapsState.data} />
+                    ) : (
+                      <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+                </>
               )}
 
               {activeTab === 'headtohead' && (
