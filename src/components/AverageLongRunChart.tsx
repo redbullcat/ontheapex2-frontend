@@ -8,6 +8,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 420
@@ -332,38 +333,39 @@ export function AverageLongRunChart({ laps }: { laps: LapRead[] }) {
           font-size: 13px;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <label className="top-percent">
-          <span className="field-label">Min stint length</span>
-          <input
-            type="number"
-            min={1}
-            value={minStintInput}
-            onChange={(e) => setMinStintInput(e.target.value)}
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="average_long_run_pace" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          <label className="top-percent">
+            <span className="field-label">Min stint length</span>
+            <input
+              type="number"
+              min={1}
+              value={minStintInput}
+              onChange={(e) => setMinStintInput(e.target.value)}
+            />
+          </label>
+          <label className="top-percent">
+            <span className="field-label">Top % of laps</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={topPercentInput}
+              onChange={(e) => setTopPercentInput(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
           />
-        </label>
-        <label className="top-percent">
-          <span className="field-label">Top % of laps</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={topPercentInput}
-            onChange={(e) => setTopPercentInput(e.target.value)}
-          />
-        </label>
-        <ChartExportButtons svgRef={svgRef} filename="average_long_run_pace" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+        </div>
+      </CollapsibleFilters>
       {runs.length === 0 ? (
         <p className="hint">No stints of at least {minStintLength} laps for this selection.</p>
       ) : (

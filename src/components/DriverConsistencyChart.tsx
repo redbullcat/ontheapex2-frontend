@@ -8,6 +8,9 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
+import { CollapsibleFilters } from './CollapsibleFilters'
+import { GapModeToggle } from './GapModeToggle'
+import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -75,6 +78,7 @@ export function DriverConsistencyChart({ laps }: { laps: LapRead[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
   const [topPercentInput, setTopPercentInput] = useState('100')
+  const [gapMode, setGapMode] = useState<GapMode>('ahead')
 
   useEffect(() => {
     const el = containerRef.current
@@ -113,6 +117,9 @@ export function DriverConsistencyChart({ laps }: { laps: LapRead[] }) {
     () => buildDriverStats(laps, activeClasses, driverSelection, topPercent),
     [laps, activeClasses, driverSelection, topPercent],
   )
+
+  // stats is already sorted ascending by std (most consistent first).
+  const gaps = useMemo(() => computeGaps(stats.map((d) => d.std), gapMode), [stats, gapMode])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -167,7 +174,10 @@ export function DriverConsistencyChart({ laps }: { laps: LapRead[] }) {
       .attr('dominant-baseline', 'central')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 11)
-      .text((d) => `±${d.std.toFixed(3)}s (${d.laps} laps)`)
+      .text((d, i) => {
+        const gapText = formatGap(gaps[i])
+        return `±${d.std.toFixed(3)}s${gapText ? `, ${gapText}` : ''} (${d.laps} laps)`
+      })
 
     const xAxis = d3.axisBottom(x).ticks(6).tickFormat((d) => `${d}s`).tickSizeOuter(0)
     g.append('g')
@@ -176,7 +186,7 @@ export function DriverConsistencyChart({ laps }: { laps: LapRead[] }) {
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [stats, width])
+  }, [stats, width, gaps])
 
   return (
     <div className="viz-root pace-consistency-chart" ref={containerRef}>
@@ -220,23 +230,25 @@ export function DriverConsistencyChart({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <label className="top-percent">
-          <span className="field-label">Top % of laps</span>
-          <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
-        </label>
-        <ChartExportButtons svgRef={svgRef} filename="driver_consistency" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={driverOptions}
-          selection={driverSelection}
-          onChange={setDriverSelection}
-          addLabel="Add driver"
-          resetLabel="Show all drivers"
-        />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="driver_consistency" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          <label className="top-percent">
+            <span className="field-label">Top % of laps</span>
+            <input type="number" min={0} max={100} value={topPercentInput} onChange={(e) => setTopPercentInput(e.target.value)} />
+          </label>
+          <GapModeToggle value={gapMode} onChange={setGapMode} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={driverOptions}
+            selection={driverSelection}
+            onChange={setDriverSelection}
+            addLabel="Add driver"
+            resetLabel="Show all drivers"
+          />
+        </div>
+      </CollapsibleFilters>
       {stats.length === 0 ? (
         <p className="hint">No lap data for this selection.</p>
       ) : (

@@ -9,6 +9,7 @@ import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelec
 import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
 import { findTrackMapUrl } from '../lib/trackMaps'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 24, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 420
@@ -403,38 +404,39 @@ export function SectorAnalysisChart({
           <img src={trackMapUrl} alt={`${eventName} track map`} />
         </div>
       )}
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
-        <label className="class-filter-item">
-          <input
-            type="checkbox"
-            checked={useRefCar}
-            onChange={(e) => setUseRefCar(e.target.checked)}
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="sector_analysis" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
+          <label className="class-filter-item">
+            <input
+              type="checkbox"
+              checked={useRefCar}
+              onChange={(e) => setUseRefCar(e.target.checked)}
+            />
+            Use a specific car as reference
+          </label>
+          {useRefCar && (
+            <select value={refCar} onChange={(e) => setRefCar(e.target.value)}>
+              <option value="">Select a car…</option>
+              {carOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
           />
-          Use a specific car as reference
-        </label>
-        {useRefCar && (
-          <select value={refCar} onChange={(e) => setRefCar(e.target.value)}>
-            <option value="">Select a car…</option>
-            {carOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        )}
-        <ChartExportButtons svgRef={svgRef} filename="sector_analysis" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={carOptions}
-          selection={carSelection}
-          onChange={setCarSelection}
-          addLabel="Add car"
-          resetLabel="Show all cars"
-        />
-      </div>
+        </div>
+      </CollapsibleFilters>
       {series.length === 0 ? (
         <p className="hint">No sector time data for this selection.</p>
       ) : (

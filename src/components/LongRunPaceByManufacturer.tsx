@@ -7,6 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 140, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 460
@@ -277,19 +278,20 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
           --axis: #c3c2b7;
         }
       `}</style>
-      <div className="chart-controls">
-        <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-        <ChartExportButtons svgRef={svgRef} filename="long_run_pace_by_manufacturer" />
-      </div>
-      <div className="chart-controls">
-        <EntityFilter
-          items={manufacturerOptions}
-          selection={manufacturerSelection}
-          onChange={setManufacturerSelection}
-          addLabel="Add manufacturer"
-          resetLabel="Show all manufacturers"
-        />
-      </div>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="long_run_pace_by_manufacturer" />}>
+        <div className="chart-controls">
+          <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={manufacturerOptions}
+            selection={manufacturerSelection}
+            onChange={setManufacturerSelection}
+            addLabel="Add manufacturer"
+            resetLabel="Show all manufacturers"
+          />
+        </div>
+      </CollapsibleFilters>
       {series.length === 0 ? (
         <p className="hint">No stint data ({MIN_STINT_LENGTH}+ laps) for this selection.</p>
       ) : (

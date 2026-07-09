@@ -7,6 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -213,15 +214,20 @@ export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compa
           background: var(--surface-1);
         }
       `}</style>
-      {(() => {
-        const filterControls = (
+      {compactFilters ? (
+        <PanelSettingsPopover>
           <div className="chart-controls">
             <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
             <ChartExportButtons svgRef={svgRef} filename="top_speed" />
           </div>
-        )
-        return compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls
-      })()}
+        </PanelSettingsPopover>
+      ) : (
+        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="top_speed" />}>
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          </div>
+        </CollapsibleFilters>
+      )}
       {cars.length === 0 ? <p className="hint">No top speed data for this selection.</p> : <svg ref={svgRef} />}
     </div>
   )
