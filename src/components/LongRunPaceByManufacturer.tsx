@@ -100,6 +100,10 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
   const [width, setWidth] = useState(800)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(null)
+  // Defaults to zoomed on the actual long-run trend lines — a raw-point
+  // domain gets blown out by rare outlier laps (traffic, yellow flags),
+  // squashing the trends themselves into an illegible band at the bottom.
+  const [zoomToTrend, setZoomToTrend] = useState(true)
 
   useEffect(() => {
     const el = containerRef.current
@@ -153,14 +157,34 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
 
     const allPoints = series.flatMap((s) => s.points)
     const maxLapInStint = d3.max(allPoints, (p) => p.lapInStint) ?? 1
-    const minTime = d3.min(allPoints, (p) => p.lapTime) ?? 0
-    const maxTime = d3.max(allPoints, (p) => p.lapTime) ?? 1
-    const pad = (maxTime - minTime) * 0.08 || 1
+
+    // Zoomed mode sizes the y-domain to the trend lines (the actual signal
+    // this chart exists to show), not the raw scatter — a single outlier
+    // lap can otherwise blow the domain out several seconds and squash
+    // every trend into a thin band. "Show all laps" reverts to the full
+    // raw-point range.
+    const allTrendPoints = series.flatMap((s) => s.trend)
+    const domainSource = zoomToTrend && allTrendPoints.length > 0 ? allTrendPoints : allPoints
+    const minTime = d3.min(domainSource, (p) => p.lapTime) ?? 0
+    const maxTime = d3.max(domainSource, (p) => p.lapTime) ?? 1
+    const pad = (maxTime - minTime) * (zoomToTrend ? 0.25 : 0.08) || 1
 
     const x = d3.scaleLinear().domain([1, maxLapInStint]).range([0, innerWidth])
     const y = d3.scaleLinear().domain([minTime - pad, maxTime + pad]).range([innerHeight, 0])
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+
+    // Scatter dots that fall outside a zoomed domain would otherwise spill
+    // above/below the plot into the axis-label margins.
+    const clipId = `long-run-clip-${Math.random().toString(36).slice(2)}`
+    svg
+      .append('clipPath')
+      .attr('id', clipId)
+      .append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerWidth)
+      .attr('height', innerHeight)
 
     const yTicks = y.ticks(6)
     g.append('g')
@@ -176,6 +200,7 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
 
     for (const s of series) {
       g.append('g')
+        .attr('clip-path', `url(#${clipId})`)
         .selectAll('circle')
         .data(s.points)
         .join('circle')
@@ -238,7 +263,7 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
           .attr('font-size', 11)
           .text(d.manufacturer)
       })
-  }, [series, width])
+  }, [series, width, zoomToTrend])
 
   return (
     <div className="viz-root long-run-manufacturer-chart" ref={containerRef}>
@@ -283,6 +308,14 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
       <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="long_run_pace_by_manufacturer" />}>
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+          <div className="color-mode-toggle" role="radiogroup" aria-label="Y-axis range">
+            <button type="button" className={zoomToTrend ? 'active' : ''} onClick={() => setZoomToTrend(true)}>
+              Zoomed
+            </button>
+            <button type="button" className={!zoomToTrend ? 'active' : ''} onClick={() => setZoomToTrend(false)}>
+              All laps
+            </button>
+          </div>
         </div>
         <div className="chart-controls">
           <EntityFilter
