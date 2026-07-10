@@ -19,6 +19,7 @@ import { RecordControls } from './RecordControls'
 import { contrastTextColor } from '../lib/contrastColor'
 import { isLapDeleted } from '../lib/lapOverrides'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
+import { isLapValid } from '../lib/lapValidity'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -236,6 +237,7 @@ export function LapPositionChart({
       for (const lapNumber of allLapNumbers) {
         for (const r of lapsByNumber.get(lapNumber)!) {
           if (r.lap_time_seconds == null) continue
+          if (!isLapValid(r)) continue
           if (!activeClasses.has(r.class ?? 'Unknown') || !activeCars.has(r.car_number)) continue
           if (isLapDeleted(r.session_id, r.car_number, r.lap_number)) continue
           const prev = bestSoFar.get(r.car_number)

@@ -13,6 +13,7 @@ import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
+import { isLapValid } from '../lib/lapValidity'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -68,6 +69,7 @@ function buildGroups(
   const byGroup = new Map<string, number[]>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null) continue
+    if (!isLapValid(lap)) continue
     if (!activeClasses.has(lap.class ?? 'Unknown')) continue
     if (carSelection && !carSelection.has(lap.car_number)) continue
     if (groupBy === 'driver' && driverSelection && lap.driver_name && !driverSelection.has(lap.driver_name)) continue

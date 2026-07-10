@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { computeCarStints } from '../lib/stints'
+import { isLapValid } from '../lib/lapValidity'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -50,7 +51,7 @@ function computeLongestRuns(laps: LapRead[], activeClasses: Set<string>, activeC
       team: s.team,
       stintLength: s.laps.length,
       points: s.laps
-        .filter((l) => l.lap_time_seconds != null)
+        .filter((l) => l.lap_time_seconds != null && isLapValid(l))
         .map((l, i) => ({ lapInStint: i + 1, lapTime: l.lap_time_seconds! })),
     }))
     .filter((c) => c.points.length > 0)

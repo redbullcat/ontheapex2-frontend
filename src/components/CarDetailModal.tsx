@@ -153,7 +153,7 @@ export function CarDetailModal({
         <SectionLabel kind="car-lap-history" onAdd={onAddToDashboard}>
           Full lap history
         </SectionLabel>
-        <CarLapHistoryTable laps={carLaps} />
+        <CarLapHistoryTable laps={carLaps} allLaps={allLaps} />
       </div>
     </>
   )

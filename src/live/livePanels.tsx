@@ -425,7 +425,7 @@ export function renderLivePanel(
       if (panel.kind === 'car-pace') return <PaceChart laps={laps} hideCarFilter compactFilters={compactFilters} />
       if (panel.kind === 'car-stints') return <CarStintTable laps={laps} />
       if (panel.kind === 'car-pit-stops') return <PitTimeChart laps={laps} compactFilters={compactFilters} />
-      return <CarLapHistoryTable laps={laps} />
+      return <CarLapHistoryTable laps={laps} allLaps={adaptedLaps} />
     }
     default:
       return null

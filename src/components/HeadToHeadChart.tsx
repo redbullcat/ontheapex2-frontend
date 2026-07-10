@@ -8,6 +8,7 @@ import { truncateLabel } from '../lib/textTruncate'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
+import { isLapValid } from '../lib/lapValidity'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -58,6 +59,7 @@ function buildDriverStats(laps: LapRead[], topPercent: number): DriverStats[] {
   const byDriver = new Map<string, number[]>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null || !lap.driver_name) continue
+    if (!isLapValid(lap)) continue
     const arr = byDriver.get(lap.driver_name)
     if (arr) arr.push(lap.lap_time_seconds)
     else byDriver.set(lap.driver_name, [lap.lap_time_seconds])

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { computeCarStints } from '../lib/stints'
+import { isLapValid } from '../lib/lapValidity'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -60,6 +61,7 @@ function computeSeries(
     const arr = byManufacturer.get(manufacturer) ?? []
     stint.laps.forEach((lap, i) => {
       if (lap.lap_time_seconds == null) return
+      if (!isLapValid(lap)) return
       arr.push({ manufacturer, lapInStint: i + 1, lapTime: lap.lap_time_seconds })
     })
     byManufacturer.set(manufacturer, arr)
