@@ -3,6 +3,9 @@ import type { LapRead } from '../api/types'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { getDeletedLapOverride } from '../lib/lapOverrides'
+import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
+import { FlagLapDeletedModal } from './FlagLapDeletedModal'
 
 interface ResultsRow {
   position: number
@@ -14,7 +17,8 @@ interface ResultsRow {
   totalTime: string | null
   gap: string
   interval: string
-  fastestLap: string
+  fastest: LapRead | null
+  deletedReasons: string[]
   pits: number
 }
 
@@ -51,17 +55,29 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
 
   const driversByCar = new Map<string, string>()
   const fastestByCar = new Map<string, LapRead>()
+  const deletedReasonsByCar = new Map<string, string[]>()
   const pitsByCar = new Map<string, number>()
   for (const [car, rows] of byCar) {
     const names = [...new Set(rows.map((r) => r.driver_name).filter((n): n is string => !!n))].sort()
     driversByCar.set(car, names.join(' / '))
 
     let fastest: LapRead | null = null
+    const deletedReasons: string[] = []
     for (const r of rows) {
       if (r.lap_time_seconds == null) continue
+      // A lap flagged deleted (e.g. a steward's decision) is skipped for
+      // "fastest lap" purposes — the lap itself still counts towards laps
+      // completed/car order above, only its time is excluded here, same
+      // as SessionResultsTable.
+      const override = getDeletedLapOverride(r.session_id, r.car_number, r.lap_number)
+      if (override) {
+        deletedReasons.push(`Lap ${r.lap_number}: ${override.reason}`)
+        continue
+      }
       if (!fastest || r.lap_time_seconds < fastest.lap_time_seconds!) fastest = r
     }
     if (fastest) fastestByCar.set(car, fastest)
+    deletedReasonsByCar.set(car, deletedReasons)
 
     pitsByCar.set(car, rows.filter((r) => r.crossing_finish_line_in_pit === 'B').length)
   }
@@ -86,7 +102,6 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
           : `${(lastLap.elapsed_seconds! - prev.elapsed_seconds!).toFixed(3)}s`
     }
 
-    const fastest = fastestByCar.get(car)
     return {
       position: i + 1,
       car_number: car,
@@ -97,7 +112,8 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
       totalTime: lastLap.elapsed,
       gap,
       interval,
-      fastestLap: fastest ? `${formatLapTime(fastest.lap_time_seconds!)} (${fastest.driver_name ?? '—'})` : '—',
+      fastest: fastestByCar.get(car) ?? null,
+      deletedReasons: deletedReasonsByCar.get(car) ?? [],
       pits: pitsByCar.get(car) ?? 0,
     }
   })
@@ -105,6 +121,8 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
 
 export function ResultsTable({ laps }: { laps: LapRead[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; lapNumber: number; lapTimeSeconds: number } | null>(null)
+  const deletedLapsVersion = useDeletedLapsVersion()
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -117,7 +135,11 @@ export function ResultsTable({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const rows = useMemo(() => buildResults(laps, activeClasses), [laps, activeClasses])
+  const rows = useMemo(
+    () => buildResults(laps, activeClasses),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [laps, activeClasses, deletedLapsVersion],
+  )
   const showClassColumn = classSelection === null || classSelection.size > 1
 
   return (
@@ -143,6 +165,7 @@ export function ResultsTable({ laps }: { laps: LapRead[] }) {
                 <th>Interval</th>
                 <th>Fastest lap</th>
                 <th>Pits</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -160,13 +183,48 @@ export function ResultsTable({ laps }: { laps: LapRead[] }) {
                   <td>{row.totalTime ?? '—'}</td>
                   <td>{row.gap}</td>
                   <td>{row.interval}</td>
-                  <td>{row.fastestLap}</td>
+                  <td>
+                    {row.fastest ? `${formatLapTime(row.fastest.lap_time_seconds!)} (${row.fastest.driver_name ?? '—'})` : '—'}
+                    {row.deletedReasons.length > 0 && (
+                      <span className="deleted-lap-badge" title={row.deletedReasons.join('\n')}>
+                        🚩 adjusted
+                      </span>
+                    )}
+                  </td>
                   <td>{row.pits}</td>
+                  <td>
+                    {row.fastest && (
+                      <button
+                        type="button"
+                        className="deleted-lap-flag-btn"
+                        title="Flag this lap as deleted (e.g. a steward's decision)"
+                        onClick={() =>
+                          setFlagging({
+                            sessionId: row.fastest!.session_id,
+                            carNumber: row.car_number,
+                            lapNumber: row.fastest!.lap_number,
+                            lapTimeSeconds: row.fastest!.lap_time_seconds!,
+                          })
+                        }
+                      >
+                        Flag lap
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {flagging && (
+        <FlagLapDeletedModal
+          sessionId={flagging.sessionId}
+          carNumber={flagging.carNumber}
+          lapNumber={flagging.lapNumber}
+          lapTimeSeconds={flagging.lapTimeSeconds}
+          onClose={() => setFlagging(null)}
+        />
       )}
     </div>
   )
