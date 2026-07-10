@@ -1,15 +1,25 @@
 import type { LapRead } from '../api/types'
 import { isLapValid } from './lapValidity'
+import { isLapDeleted } from './lapOverrides'
 
 // Three-tier highlight, checked in this priority order (a session-best cell
 // is trivially also a car-best and a personal-best, so only the highest
 // tier that applies is kept): 'session' = fastest in this class across the
 // whole session (purple), 'car' = fastest among every driver of this car
 // (bold), 'personal' = fastest among this specific driver's own laps in
-// this car (green). Invalid laps (see lapValidity.ts) are never a
-// reference time for any tier — a track-limits-deleted lap shouldn't get
-// highlighted as anyone's best, even though it still appears in the table.
+// this car (green). A lap that's either flagged invalid by the timing
+// system (see lapValidity.ts) or flagged deleted by a user (see
+// lapOverrides.ts — a steward's decision the timing feed has no way to
+// represent) is never a reference time for any tier, even though it still
+// appears in the table.
 export type HighlightTier = 'session' | 'car' | 'personal' | null
+
+// Exported so callers (e.g. CarLapHistoryTable, to decide row styling and
+// the flag/restore button's label) can check the same combined condition
+// without duplicating it.
+export function isLapExcluded(lap: LapRead): boolean {
+  return !isLapValid(lap) || isLapDeleted(lap.session_id, lap.car_number, lap.lap_number)
+}
 
 export interface LapHighlight {
   lap: HighlightTier
@@ -37,12 +47,12 @@ function minValid<T>(items: T[], pick: (item: T) => number | null): number | nul
 }
 
 // `carLaps` = this car's own laps; `allLaps` = the whole session (for the
-// class-best reference) — both should include invalid laps (the table
-// still displays them), this function does its own validity filtering
-// internally for the "best" reference values only.
+// class-best reference) — both should include excluded laps (the table
+// still displays them), this function does its own filtering internally
+// for the "best" reference values only.
 export function computeLapHighlights(carLaps: LapRead[], allLaps: LapRead[], carClass: string | null): Map<number, LapHighlight> {
-  const validCarLaps = carLaps.filter(isLapValid)
-  const validClassLaps = carClass == null ? [] : allLaps.filter((l) => isLapValid(l) && (l.class ?? 'Unknown') === carClass)
+  const validCarLaps = carLaps.filter((l) => !isLapExcluded(l))
+  const validClassLaps = carClass == null ? [] : allLaps.filter((l) => !isLapExcluded(l) && (l.class ?? 'Unknown') === carClass)
 
   const classBest = {
     lap: minValid(validClassLaps, (l) => l.lap_time_seconds),
@@ -74,14 +84,14 @@ export function computeLapHighlights(carLaps: LapRead[], allLaps: LapRead[], car
   const result = new Map<number, LapHighlight>()
   for (const lap of carLaps) {
     const driverBest = (lap.driver_name && driverBestByDriver.get(lap.driver_name)) || { lap: null, s1: null, s2: null, s3: null }
-    // An invalid lap's own time is never itself a highlight target, even if
-    // it numerically matches a best value some other valid lap also set.
-    const valid = isLapValid(lap)
+    // An excluded lap's own time is never itself a highlight target, even if
+    // it numerically matches a best value some other counted lap also set.
+    const counted = !isLapExcluded(lap)
     result.set(lap.lap_number, {
-      lap: valid ? tierFor(lap.lap_time_seconds, classBest.lap, carBest.lap, driverBest.lap) : null,
-      s1: valid ? tierFor(lap.s1_seconds, classBest.s1, carBest.s1, driverBest.s1) : null,
-      s2: valid ? tierFor(lap.s2_seconds, classBest.s2, carBest.s2, driverBest.s2) : null,
-      s3: valid ? tierFor(lap.s3_seconds, classBest.s3, carBest.s3, driverBest.s3) : null,
+      lap: counted ? tierFor(lap.lap_time_seconds, classBest.lap, carBest.lap, driverBest.lap) : null,
+      s1: counted ? tierFor(lap.s1_seconds, classBest.s1, carBest.s1, driverBest.s1) : null,
+      s2: counted ? tierFor(lap.s2_seconds, classBest.s2, carBest.s2, driverBest.s2) : null,
+      s3: counted ? tierFor(lap.s3_seconds, classBest.s3, carBest.s3, driverBest.s3) : null,
     })
   }
   return result
