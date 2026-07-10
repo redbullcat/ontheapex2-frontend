@@ -49,6 +49,7 @@ import { AverageLongRunChart } from './components/AverageLongRunChart'
 import { StintLengthDistribution } from './components/StintLengthDistribution'
 import { LongRunPaceByManufacturer } from './components/LongRunPaceByManufacturer'
 import { TyresPanel } from './components/TyresPanel'
+import { TyreHistoryChart } from './components/TyreHistoryChart'
 import { latestTyresByCar } from './lib/carTyres'
 import './App.css'
 
@@ -729,7 +730,11 @@ function App() {
                   {lapsState.status === 'loading' && <p className="hint">Loading tyre data…</p>}
                   {lapsState.status === 'success' &&
                     (tyreRows.length > 0 ? (
-                      <TyresPanel rows={tyreRows} />
+                      <>
+                        <TyresPanel rows={tyreRows} />
+                        <h3>Tyre history</h3>
+                        <TyreHistoryChart laps={lapsState.data} />
+                      </>
                     ) : (
                       <p className="hint">No tyre data for this session.</p>
                     ))}
