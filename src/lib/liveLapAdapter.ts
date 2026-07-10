@@ -42,5 +42,17 @@ export function liveLapToLapRead(lap: LiveLap, index: number): LapRead {
     team: lap.team,
     manufacturer: lap.manufacturer,
     flag_at_fl: lap.flag_at_fl,
+    tire_fl_compound: lap.tire_fl_compound,
+    tire_fl_age_laps: lap.tire_fl_age_laps,
+    tire_fl_changed: lap.tire_fl_changed,
+    tire_fr_compound: lap.tire_fr_compound,
+    tire_fr_age_laps: lap.tire_fr_age_laps,
+    tire_fr_changed: lap.tire_fr_changed,
+    tire_rl_compound: lap.tire_rl_compound,
+    tire_rl_age_laps: lap.tire_rl_age_laps,
+    tire_rl_changed: lap.tire_rl_changed,
+    tire_rr_compound: lap.tire_rr_compound,
+    tire_rr_age_laps: lap.tire_rr_age_laps,
+    tire_rr_changed: lap.tire_rr_changed,
   }
 }
