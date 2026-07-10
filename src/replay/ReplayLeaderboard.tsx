@@ -3,6 +3,7 @@ import { getTeamDisplayName } from '../lib/identityColors'
 import { formatGap, formatLapTime, formatSplit } from './format'
 import { useFlash } from '../hooks/useFlash'
 import { PositionChangeArrow } from '../components/PositionChangeArrow'
+import { tyreSummary, type TyreFields } from '../lib/carTyres'
 
 // Arrow shown for much longer (10s) than the cell's own 700ms flash pulse —
 // the flash draws the eye the instant it happens, the arrow gives a few
@@ -17,13 +18,16 @@ function badgeClass(badge: RowState['s1Badge']): string {
 
 function ReplayRow({
   row,
+  tyres,
   highlighted,
   onClick,
 }: {
   row: RowState
+  tyres: TyreFields | undefined
   highlighted: boolean
   onClick?: (carNumber: string) => void
 }) {
+  const tyre = tyreSummary(tyres ?? {})
   const s1Flash = useFlash(row.s1UpdatedAt)
   const s2Flash = useFlash(row.s2UpdatedAt)
   const s3Flash = useFlash(row.s3UpdatedAt)
@@ -54,6 +58,8 @@ function ReplayRow({
       </td>
       <td className="al driver">{row.driver_name ?? '—'}</td>
       <td className="al team">{getTeamDisplayName(row.team)}</td>
+      <td className="al tyre">{tyre.compound ?? '—'}</td>
+      <td className="num tyre-age">{tyre.age ?? '—'}</td>
       <td className="num gap">{formatGap(row.gap)}</td>
       <td className="num interval">{formatGap(row.interval)}</td>
       <td className="num">{row.lap || ''}</td>
@@ -78,11 +84,13 @@ function ReplayRow({
 
 export function ReplayLeaderboard({
   rows,
+  tyresByCar,
   activeClasses,
   highlightedCars,
   onRowClick,
 }: {
   rows: RowState[]
+  tyresByCar?: Map<string, TyreFields>
   activeClasses: Set<string>
   highlightedCars?: Set<string>
   onRowClick?: (carNumber: string) => void
@@ -99,6 +107,8 @@ export function ReplayLeaderboard({
             <th className="al">Car</th>
             <th className="al">Driver</th>
             <th className="al">Team</th>
+            <th className="al">Tyre</th>
+            <th>Age</th>
             <th>Gap</th>
             <th>Int</th>
             <th>Lap</th>
@@ -113,7 +123,13 @@ export function ReplayLeaderboard({
         </thead>
         <tbody>
           {visible.map((r) => (
-            <ReplayRow key={r.car_number} row={r} highlighted={highlightedCars?.has(r.car_number) ?? false} onClick={onRowClick} />
+            <ReplayRow
+              key={r.car_number}
+              row={r}
+              tyres={tyresByCar?.get(r.car_number)}
+              highlighted={highlightedCars?.has(r.car_number) ?? false}
+              onClick={onRowClick}
+            />
           ))}
         </tbody>
       </table>

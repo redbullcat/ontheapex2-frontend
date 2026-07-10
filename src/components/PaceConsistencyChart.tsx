@@ -130,11 +130,14 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
       .attr('stroke', 'var(--grid)')
       .attr('stroke-width', 1)
 
+    // y pixel 0 is the top of the plot, which the scale (range [innerHeight,
+    // 0]) maps to the *largest* std-deviation value — so the top row of
+    // labels is the inconsistent one, not the consistent one.
     const quadrants = [
-      { label: 'Fast & consistent', x: 4, y: 4, anchor: 'start' as const, xFast: true, yLow: true },
-      { label: 'Fast & inconsistent', x: 4, y: innerHeight - 8, anchor: 'start' as const, xFast: true, yLow: false },
-      { label: 'Slow & consistent', x: innerWidth - 4, y: 4, anchor: 'end' as const, xFast: false, yLow: true },
-      { label: 'Slow & inconsistent', x: innerWidth - 4, y: innerHeight - 8, anchor: 'end' as const, xFast: false, yLow: false },
+      { label: 'Fast & inconsistent', x: 4, y: 4, anchor: 'start' as const, xFast: true, yLow: false },
+      { label: 'Fast & consistent', x: 4, y: innerHeight - 8, anchor: 'start' as const, xFast: true, yLow: true },
+      { label: 'Slow & inconsistent', x: innerWidth - 4, y: 4, anchor: 'end' as const, xFast: false, yLow: false },
+      { label: 'Slow & consistent', x: innerWidth - 4, y: innerHeight - 8, anchor: 'end' as const, xFast: false, yLow: true },
     ]
     g.append('g')
       .selectAll('text')

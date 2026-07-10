@@ -27,6 +27,8 @@ import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
 import { formatClock } from './format'
 import type { RaceLogType } from '../api/types'
+import { TyresPanel } from '../components/TyresPanel'
+import { latestTyresByCar } from '../lib/carTyres'
 
 export interface ReplayPanelContext {
   data: ReplayData
@@ -77,6 +79,7 @@ export const REPLAY_PANEL_DEFS: Record<string, PanelDef> = {
   'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
+  tyres: { kind: 'tyres', title: 'Tyres', category: 'field', defaultSize: { w: 4, h: 12 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -111,6 +114,7 @@ function LeaderboardPanel({
 }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const activeClasses = useMemo(() => resolveClassSelection(classSelection, ctx.data.classes), [classSelection, ctx.data.classes])
+  const tyresByCar = useMemo(() => latestTyresByCar(ctx.visibleLaps), [ctx.visibleLaps])
   const filterControls = (
     <div className="replay-trend-controls">
       <ClassFilter classes={ctx.data.classes} selection={classSelection} onChange={setClassSelection} />
@@ -126,7 +130,7 @@ function LeaderboardPanel({
         </span>
       </p>
       {compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls}
-      <ReplayLeaderboard rows={ctx.rows} activeClasses={activeClasses} onRowClick={onRowClick} />
+      <ReplayLeaderboard rows={ctx.rows} tyresByCar={tyresByCar} activeClasses={activeClasses} onRowClick={onRowClick} />
     </div>
   )
 }
@@ -251,6 +255,31 @@ export function renderReplayPanel(
           getRaceLocalTimestamp={() => null}
         />
       )
+    case 'tyres': {
+      const latest = latestTyresByCar(ctx.visibleLaps)
+      return (
+        <TyresPanel
+          rows={ctx.rows
+            .filter((r) => ctx.activeClasses.has(r.class))
+            .map((r) => {
+              const lap = latest.get(r.car_number)
+              return {
+                car_number: r.car_number,
+                team: r.team,
+                position: r.position,
+                tire_fl_compound: lap?.tire_fl_compound ?? null,
+                tire_fl_age_laps: lap?.tire_fl_age_laps ?? null,
+                tire_fr_compound: lap?.tire_fr_compound ?? null,
+                tire_fr_age_laps: lap?.tire_fr_age_laps ?? null,
+                tire_rl_compound: lap?.tire_rl_compound ?? null,
+                tire_rl_age_laps: lap?.tire_rl_age_laps ?? null,
+                tire_rr_compound: lap?.tire_rr_compound ?? null,
+                tire_rr_age_laps: lap?.tire_rr_age_laps ?? null,
+              }
+            })}
+        />
+      )
+    }
     case 'car-position-history':
       return panel.carNumber ? (
         <LapPositionChart
