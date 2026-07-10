@@ -6,6 +6,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { getDeletedLapOverride } from '../lib/lapOverrides'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 import { FlagLapDeletedModal } from './FlagLapDeletedModal'
+import { isLapValid } from '../lib/lapValidity'
 
 interface SessionResultRow {
   position: number
@@ -55,6 +56,7 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): SessionResul
     const deletedReasons: string[] = []
     for (const r of rows) {
       if (r.lap_time_seconds == null) continue
+      if (!isLapValid(r)) continue
       const override = getDeletedLapOverride(r.session_id, r.car_number, r.lap_number)
       if (override) {
         deletedReasons.push(`Lap ${r.lap_number}: ${override.reason}`)
@@ -108,7 +110,7 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): SessionResul
   })
 }
 
-export function SessionResultsTable({ laps }: { laps: LapRead[] }) {
+export function SessionResultsTable({ laps, onSelectCar }: { laps: LapRead[]; onSelectCar?: (carNumber: string) => void }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; lapNumber: number; lapTimeSeconds: number } | null>(null)
   const deletedLapsVersion = useDeletedLapsVersion()
@@ -162,7 +164,15 @@ export function SessionResultsTable({ laps }: { laps: LapRead[] }) {
                 <tr key={row.car_number}>
                   <td>{row.position}</td>
                   {showClassColumn && <td>{row.classPosition}</td>}
-                  <td>#{row.car_number}</td>
+                  <td>
+                    {onSelectCar ? (
+                      <button type="button" className="car-number-link" onClick={() => onSelectCar(row.car_number)}>
+                        #{row.car_number}
+                      </button>
+                    ) : (
+                      `#${row.car_number}`
+                    )}
+                  </td>
                   <td>
                     <span className="team-key" style={{ background: getTeamColor(row.team) }} />
                     {row.team ? getTeamDisplayName(row.team) : '—'}

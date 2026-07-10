@@ -57,6 +57,11 @@ export interface LapRead {
   lap_time: string | null
   lap_time_seconds: number | null
   lap_improvement: boolean
+  // False for a lap the timing system flagged as not a legitimate timed
+  // lap (track-limit violation, pit-in lap, driver-change/red-flag
+  // out-lap, etc). Absent on older cached data — treat missing the same
+  // as true (see isLapValid in lib/lapValidity.ts).
+  is_valid?: boolean
   crossing_finish_line_in_pit: string | null
   s1: string | null
   s2: string | null

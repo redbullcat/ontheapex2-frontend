@@ -6,6 +6,7 @@ import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { isLapValid } from '../lib/lapValidity'
 
 const MARGIN = { top: 16, right: 24, bottom: 40, left: 56 }
 const HEIGHT = 440
@@ -72,6 +73,7 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
     const byCar = new Map<string, { team: string | null; times: number[] }>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null) continue
+      if (!isLapValid(lap)) continue
       if (!activeClasses.has(lap.class ?? 'Unknown')) continue
       let car = byCar.get(lap.car_number)
       if (!car) {

@@ -1,5 +1,6 @@
 import type { LapRead } from '../api/types'
 import { isLapDeleted } from './lapOverrides'
+import { isLapValid } from './lapValidity'
 
 // The combined (not per-class) grid order from a qualifying session's own
 // laps — same convention as SessionResultsTable's overall `position`
@@ -45,6 +46,7 @@ export function computeStartingGrid(qualifyingLaps: LapRead[]): Map<string, numb
   const bestByCar = new Map<string, number>()
   for (const lap of qualifyingLaps) {
     if (lap.lap_time_seconds == null) continue
+    if (!isLapValid(lap)) continue
     if (lastRoundForCar.get(lap.car_number) !== lap.session_id) continue
     if (isLapDeleted(lap.session_id, lap.car_number, lap.lap_number)) continue
     const prev = bestByCar.get(lap.car_number)

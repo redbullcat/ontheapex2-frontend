@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { computeCarStints } from '../lib/stints'
+import { isLapValid } from '../lib/lapValidity'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -57,6 +58,7 @@ function computeAverageRuns(
     }
     stint.laps.forEach((lap, i) => {
       if (lap.lap_time_seconds == null) return
+      if (!isLapValid(lap)) return
       const arr = byPosition!.get(i + 1)
       if (arr) arr.push(lap.lap_time_seconds)
       else byPosition!.set(i + 1, [lap.lap_time_seconds])

@@ -274,7 +274,7 @@ export function renderReplayPanel(
         <PitTimeChart laps={carLapsFor(ctx, panel.carNumber)} compactFilters={compactFilters} />
       ) : null
     case 'car-lap-history':
-      return panel.carNumber ? <CarLapHistoryTable laps={carLapsFor(ctx, panel.carNumber)} /> : null
+      return panel.carNumber ? <CarLapHistoryTable laps={carLapsFor(ctx, panel.carNumber)} allLaps={ctx.visibleLaps} /> : null
     default:
       return null
   }

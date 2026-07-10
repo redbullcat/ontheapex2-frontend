@@ -295,6 +295,19 @@ table.replay-board tr:last-child td {
   color: var(--replay-moved);
   font-weight: 700;
 }
+/* fastest of this car's own laps (any driver), but not a class/personal
+   best already covered by the two classes above — weight only, no color */
+.replay-row td.car-best {
+  font-weight: 700;
+  color: var(--replay-ink);
+}
+/* a lap the timing system flagged not a legitimate timed lap (pit-in,
+   track limits, etc) — still shown, just visually de-emphasized so it
+   reads as "happened but doesn't count" rather than a normal lap */
+.replay-row.lap-invalid td {
+  opacity: 0.55;
+  font-style: italic;
+}
 /* an active flash (new value just landed) still wins visually so the tick
    is visible even on an already-purple/green cell */
 .replay-row td.flash {

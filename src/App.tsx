@@ -25,6 +25,7 @@ import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
 import { ResultsTable } from './components/ResultsTable'
 import { SessionResultsTable } from './components/SessionResultsTable'
+import { CarDetailModal } from './components/CarDetailModal'
 import { PaceChart } from './components/PaceChart'
 import { GapEvolutionChart } from './components/GapEvolutionChart'
 import { DriverHistoryChart } from './components/DriverHistoryChart'
@@ -103,6 +104,7 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [selectedCarDetail, setSelectedCarDetail] = useState<string | null>(null)
   const [colorVersion, setColorVersion] = useState(0)
 
   useEffect(() => onIdentityOverridesChanged(() => setColorVersion((v) => v + 1)), [])
@@ -395,7 +397,7 @@ function App() {
                     {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
-                        <ResultsTable laps={lapsState.data} />
+                        <ResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} />
                       ) : (
                         <p className="hint">No results for this session.</p>
                       ))}
@@ -421,7 +423,7 @@ function App() {
                     {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
-                        <SessionResultsTable laps={lapsState.data} />
+                        <SessionResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} />
                       ) : (
                         <p className="hint">No results for this session.</p>
                       ))}
@@ -711,6 +713,16 @@ function App() {
       </div>
       {settingsOpen && (
         <SettingsPanel teams={knownTeams} onClose={() => setSettingsOpen(false)} />
+      )}
+      {selectedCarDetail && lapsState.status === 'success' && (
+        <div className="replay-root car-detail-modal-scope">
+          <CarDetailModal
+            carNumber={selectedCarDetail}
+            allLaps={lapsState.data}
+            isRaceSession={sessionSection === 'race'}
+            onClose={() => setSelectedCarDetail(null)}
+          />
+        </div>
       )}
     </div>
   )

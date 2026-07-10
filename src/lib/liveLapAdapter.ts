@@ -18,6 +18,7 @@ export function liveLapToLapRead(lap: LiveLap, index: number): LapRead {
     lap_time: lap.lap_time,
     lap_time_seconds: lap.lap_time_seconds,
     lap_improvement: lap.lap_improvement,
+    is_valid: lap.is_valid,
     crossing_finish_line_in_pit: lap.crossing_finish_line_in_pit,
     s1: lap.s1,
     s2: lap.s2,

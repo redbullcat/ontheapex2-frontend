@@ -425,6 +425,36 @@ header h1 {
   background: color-mix(in srgb, var(--text, #52514e) 6%, transparent);
 }
 
+/* CarDetailModal (and everything it composes) is styled against
+   replay.css's --replay-* custom properties, which are only ever defined
+   on .replay-root — the top-level wrapper of the Live/Replay apps this
+   modal was built for. The plain historical app has no such wrapper, so
+   opening it here needs one added around just the modal; .replay-root
+   itself sets min-height:100vh + a background (fine for a full page, not
+   for a wrapper around a position:fixed overlay), so neutralize both —
+   the modal's own backdrop/panel are already position:fixed and don't
+   depend on this element's box for layout, only for variable scope. */
+.car-detail-modal-scope {
+  min-height: 0;
+  background: none;
+}
+
+.car-number-link {
+  border: none;
+  background: transparent;
+  color: var(--text-h, #0b0b0b);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+}
+.car-number-link:hover {
+  text-decoration-color: currentColor;
+}
+
 .deleted-lap-badge {
   display: inline-block;
   margin-left: 8px;

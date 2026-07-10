@@ -10,6 +10,7 @@ import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
 import { findTrackMapUrl } from '../lib/trackMaps'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { isLapValid } from '../lib/lapValidity'
 
 const MARGIN = { top: 24, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 420
@@ -111,6 +112,7 @@ export function SectorAnalysisChart({
         (l) =>
           hasSectors(l) &&
           l.lap_time_seconds != null &&
+          isLapValid(l) &&
           activeClasses.has(l.class ?? 'Unknown') &&
           l.lap_number >= effectiveLapRange[0] &&
           l.lap_number <= effectiveLapRange[1],

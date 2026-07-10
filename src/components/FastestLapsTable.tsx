@@ -27,10 +27,18 @@ export interface FastestLapsTableLap {
   class: string | null
   team: string | null
   session_id?: number
+  is_valid?: boolean
 }
 
 function notDeleted(lap: FastestLapsTableLap): boolean {
   return !isLapDeleted(lap.session_id, lap.car_number, lap.lap_number)
+}
+
+// Mirrors lib/lapValidity.ts's isLapValid, but against this table's own
+// narrowed lap shape (which live laps satisfy too — see the interface
+// comment above) rather than the full LapRead.
+function isValid(lap: FastestLapsTableLap): boolean {
+  return lap.is_valid !== false
 }
 
 export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
@@ -50,7 +58,7 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
 
   const fastestLaps = useMemo(() => {
     return laps
-      .filter((l) => l.lap_time_seconds != null && activeClasses.has(l.class ?? 'Unknown') && notDeleted(l))
+      .filter((l) => l.lap_time_seconds != null && activeClasses.has(l.class ?? 'Unknown') && notDeleted(l) && isValid(l))
       .sort((a, b) => a.lap_time_seconds! - b.lap_time_seconds!)
       .slice(0, TOP_N)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,7 +68,7 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
     const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null) continue
-      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap)) continue
+      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap) || !isValid(lap)) continue
       const prev = best.get(lap.car_number)
       if (!prev || lap.lap_time_seconds < prev.lap_time_seconds!) best.set(lap.car_number, lap)
     }
@@ -76,7 +84,7 @@ export function FastestLapsTable({ laps }: { laps: FastestLapsTableLap[] }) {
     const best = new Map<string, FastestLapsTableLap>()
     for (const lap of laps) {
       if (lap.lap_time_seconds == null || !lap.driver_name) continue
-      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap)) continue
+      if (!activeClasses.has(lap.class ?? 'Unknown') || !notDeleted(lap) || !isValid(lap)) continue
       const prev = best.get(lap.driver_name)
       if (!prev || lap.lap_time_seconds < prev.lap_time_seconds!) best.set(lap.driver_name, lap)
     }
