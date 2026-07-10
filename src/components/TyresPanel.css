@@ -1,0 +1,44 @@
+.tyres-panel-wrap {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.tyres-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--replay-line, var(--border, #e1e0d9));
+  font-family: var(--replay-mono, ui-monospace, 'SF Mono', 'Roboto Mono', Consolas, monospace);
+  font-size: 12.5px;
+}
+
+.tyres-panel-row:last-child {
+  border-bottom: none;
+}
+
+.tyres-panel-badge {
+  flex: 0 0 auto;
+  min-width: 42px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.tyres-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.tyre-wheel {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--replay-ink, var(--text-h, #0b0b0b));
+  display: inline-block;
+}
