@@ -69,6 +69,20 @@ const TEAM_COLORS: [string, string][] = [
   ['Cadillac Whelen', '#D53C35'],
 ]
 
+// WEC Hypercar manufacturer livery colors — matched fuzzily against the
+// LAP row's `manufacturer` field, which carries the full car model name
+// (e.g. "Aston Martin Valkyrie"), not just the marque.
+const MANUFACTURER_COLORS: [string, string][] = [
+  ['Aston Martin', '#01655C'],
+  ['Ferrari', '#D62728'],
+  ['Cadillac', '#D4AF37'],
+  ['Genesis', '#EF732F'],
+  ['Alpine', '#2673E2'],
+  ['Peugeot', '#BBD64D'],
+  ['BMW', '#2426A8'],
+  ['Toyota', '#100100'],
+]
+
 function hslToHex(h: number, s: number, l: number): string {
   const a = s * Math.min(l, 1 - l)
   const f = (n: number) => {
@@ -132,4 +146,22 @@ export function getTeamColor(team: string | null | undefined): string {
 export function getTeamDisplayName(team: string | null | undefined): string {
   if (!team) return 'Unknown'
   return getTeamOverrides()[team]?.name || team
+}
+
+const resolvedManufacturerCache = new Map<string, string>()
+
+export function getManufacturerColor(manufacturer: string | null | undefined): string {
+  if (!manufacturer) return getEntityColor('Unknown')
+  const cached = resolvedManufacturerCache.get(manufacturer)
+  if (cached) return cached
+  const lower = manufacturer.toLowerCase()
+  for (const [key, color] of MANUFACTURER_COLORS) {
+    if (lower.includes(key.toLowerCase())) {
+      resolvedManufacturerCache.set(manufacturer, color)
+      return color
+    }
+  }
+  const fallback = getEntityColor(manufacturer)
+  resolvedManufacturerCache.set(manufacturer, fallback)
+  return fallback
 }

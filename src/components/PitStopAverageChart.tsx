@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
-import { getEntityColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
+import { getManufacturerColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -65,7 +65,7 @@ function buildGroups(
     groups.push({
       key,
       label: groupBy === 'team' ? getTeamDisplayName(key) : key,
-      color: groupBy === 'team' ? getTeamColor(key) : getEntityColor(key),
+      color: groupBy === 'team' ? getTeamColor(key) : getManufacturerColor(key),
       stops: kept.length,
       avgLoss: d3.mean(kept) ?? 0,
     })
