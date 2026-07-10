@@ -85,6 +85,21 @@ export interface LapRead {
   team: string | null
   manufacturer: string | null
   flag_at_fl: string | null
+
+  // Tyre snapshot at the moment this lap finished — null for CSV-imported
+  // sessions and any live session promoted before this existed.
+  tire_fl_compound?: string | null
+  tire_fl_age_laps?: number | null
+  tire_fl_changed?: boolean | null
+  tire_fr_compound?: string | null
+  tire_fr_age_laps?: number | null
+  tire_fr_changed?: boolean | null
+  tire_rl_compound?: string | null
+  tire_rl_age_laps?: number | null
+  tire_rl_changed?: boolean | null
+  tire_rr_compound?: string | null
+  tire_rr_age_laps?: number | null
+  tire_rr_changed?: boolean | null
 }
 
 // Griiip's own per-crossing classification: Green = personal best, Purple =
@@ -120,6 +135,20 @@ export interface LiveStanding {
   // boundaries — can flip mid-lap, before the car's current lap even
   // completes.
   in_pit: boolean
+  // Current tyre snapshot (Griiip's `tires` channel) — updates continuously
+  // mid-stint, unlike the copy attached to each completed lap.
+  tire_fl_compound: string | null
+  tire_fl_age_laps: number | null
+  tire_fl_changed: boolean | null
+  tire_fr_compound: string | null
+  tire_fr_age_laps: number | null
+  tire_fr_changed: boolean | null
+  tire_rl_compound: string | null
+  tire_rl_age_laps: number | null
+  tire_rl_changed: boolean | null
+  tire_rr_compound: string | null
+  tire_rr_age_laps: number | null
+  tire_rr_changed: boolean | null
 }
 
 export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
@@ -182,6 +211,19 @@ export interface LiveLap {
   team: string | null
   manufacturer: string | null
   flag_at_fl: string | null
+
+  tire_fl_compound?: string | null
+  tire_fl_age_laps?: number | null
+  tire_fl_changed?: boolean | null
+  tire_fr_compound?: string | null
+  tire_fr_age_laps?: number | null
+  tire_fr_changed?: boolean | null
+  tire_rl_compound?: string | null
+  tire_rl_age_laps?: number | null
+  tire_rl_changed?: boolean | null
+  tire_rr_compound?: string | null
+  tire_rr_age_laps?: number | null
+  tire_rr_changed?: boolean | null
 }
 
 export interface LiveWeather {

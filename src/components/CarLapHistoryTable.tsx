@@ -13,6 +13,20 @@ function tierClass(tier: HighlightTier): string {
   return 'num'
 }
 
+// All 4 wheels normally share one compound — falls back to "Mixed" for the
+// rare case they don't (e.g. mid-stint tyre change straddling a lap), rather
+// than just showing one wheel and silently hiding the other three.
+function tyreSummary(lap: LapRead): { compound: string | null; age: number | null } {
+  const compounds = [lap.tire_fl_compound, lap.tire_fr_compound, lap.tire_rl_compound, lap.tire_rr_compound]
+  const known = compounds.filter((c): c is string => c != null)
+  const compound = known.length === 0 ? null : known.every((c) => c === known[0]) ? known[0] : 'Mixed'
+  const ages = [lap.tire_fl_age_laps, lap.tire_fr_age_laps, lap.tire_rl_age_laps, lap.tire_rr_age_laps].filter(
+    (a): a is number => a != null,
+  )
+  const age = ages.length === 0 ? null : Math.max(...ages)
+  return { compound, age }
+}
+
 // `laps` expected pre-filtered to one car and pre-sorted by lap_number.
 // `allLaps` (the whole session) is needed to work out the class session-best
 // reference — everything else is computed from `laps` alone.
@@ -46,12 +60,15 @@ export function CarLapHistoryTable({ laps, allLaps }: { laps: LapRead[]; allLaps
             <th>S2</th>
             <th>S3</th>
             <th>Pit</th>
+            <th className="al">Tyre</th>
+            <th>Age</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {laps.map((lap) => {
             const h = highlights.get(lap.lap_number)
+            const tyre = tyreSummary(lap)
             const timingInvalid = !isLapValid(lap)
             const excluded = isLapExcluded(lap)
             // Live/replay laps have no real session_id yet (see
@@ -78,6 +95,8 @@ export function CarLapHistoryTable({ laps, allLaps }: { laps: LapRead[]; allLaps
                 <td className={tierClass(h?.s2 ?? null)}>{formatSplit(lap.s2_seconds)}</td>
                 <td className={tierClass(h?.s3 ?? null)}>{formatSplit(lap.s3_seconds)}</td>
                 <td className="num">{lap.crossing_finish_line_in_pit === 'B' ? 'IN' : ''}</td>
+                <td className="al">{tyre.compound ?? '—'}</td>
+                <td className="num">{tyre.age ?? '—'}</td>
                 <td>
                   {flaggable && (
                     <button
