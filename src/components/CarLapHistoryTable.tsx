@@ -5,26 +5,13 @@ import { computeLapHighlights, isLapExcluded, type HighlightTier } from '../lib/
 import { isLapValid } from '../lib/lapValidity'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 import { FlagLapDeletedModal } from './FlagLapDeletedModal'
+import { tyreSummary } from '../lib/carTyres'
 
 function tierClass(tier: HighlightTier): string {
   if (tier === 'session') return 'num badge-session'
   if (tier === 'car') return 'num car-best'
   if (tier === 'personal') return 'num badge-personal'
   return 'num'
-}
-
-// All 4 wheels normally share one compound — falls back to "Mixed" for the
-// rare case they don't (e.g. mid-stint tyre change straddling a lap), rather
-// than just showing one wheel and silently hiding the other three.
-function tyreSummary(lap: LapRead): { compound: string | null; age: number | null } {
-  const compounds = [lap.tire_fl_compound, lap.tire_fr_compound, lap.tire_rl_compound, lap.tire_rr_compound]
-  const known = compounds.filter((c): c is string => c != null)
-  const compound = known.length === 0 ? null : known.every((c) => c === known[0]) ? known[0] : 'Mixed'
-  const ages = [lap.tire_fl_age_laps, lap.tire_fr_age_laps, lap.tire_rl_age_laps, lap.tire_rr_age_laps].filter(
-    (a): a is number => a != null,
-  )
-  const age = ages.length === 0 ? null : Math.max(...ages)
-  return { compound, age }
 }
 
 // `laps` expected pre-filtered to one car and pre-sorted by lap_number.

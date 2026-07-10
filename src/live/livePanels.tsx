@@ -35,6 +35,7 @@ import { BattleZones } from '../components/BattleZones'
 import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
 import { TyresPanel } from '../components/TyresPanel'
+import { tyreSummary } from '../lib/carTyres'
 
 export interface LivePanelContext {
   data: LiveState
@@ -114,6 +115,7 @@ function LiveStandingsRow({
   onLeaveCar: () => void
 }) {
   const arrow = usePositionArrow(row.position)
+  const tyre = tyreSummary(row)
   return (
     <tr className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'} onClick={onClick}>
       <td className="num pos">
@@ -135,6 +137,8 @@ function LiveStandingsRow({
       <td className="al driver">{row.driver_name ?? '—'}</td>
       <td className="al team">{getTeamDisplayName(row.team)}</td>
       <td className="al manufacturer">{row.manufacturer ?? '—'}</td>
+      <td className="al tyre">{tyre.compound ?? '—'}</td>
+      <td className="num tyre-age">{tyre.age ?? '—'}</td>
       <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
       <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
       <td className="num">{row.total_laps || ''}</td>
@@ -215,6 +219,8 @@ function LeaderboardPanel({
               <th className="al">Driver</th>
               <th className="al">Team</th>
               <th className="al">Manufacturer</th>
+              <th className="al">Tyre</th>
+              <th>Age</th>
               <th>Gap</th>
               <th>Int</th>
               <th>Lap</th>
