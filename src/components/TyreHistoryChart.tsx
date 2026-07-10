@@ -4,6 +4,13 @@ import type { LapRead } from '../api/types'
 import { tyreCompoundColor } from '../lib/tyreColors'
 import { computeTyreStints, type TyreStint } from '../lib/tyreStints'
 import { ChartExportButtons } from './ChartExportButtons'
+import { ClassFilter } from './ClassFilter'
+import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
+import { getTeamDisplayName } from '../lib/identityColors'
+import { CollapsibleFilters } from './CollapsibleFilters'
+import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 
 const MARGIN = { top: 8, right: 16, bottom: 28, left: 48 }
 const ROW_HEIGHT = 22
@@ -19,11 +26,13 @@ interface TooltipState {
 // pit-stop timing and stint length are directly comparable across the
 // field — same construction as FlagGanttChart's single bar, just stacked
 // into N rows instead of one.
-export function TyreHistoryChart({ laps }: { laps: LapRead[] }) {
+export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -36,20 +45,49 @@ export function TyreHistoryChart({ laps }: { laps: LapRead[] }) {
     return () => ro.disconnect()
   }, [])
 
+  const allClasses = useMemo(() => {
+    const s = new Set<string>()
+    for (const l of laps) s.add(l.class ?? 'Unknown')
+    return [...s].sort()
+  }, [laps])
+
+  const activeClasses = useMemo(() => resolveClassSelection(classSelection, allClasses), [classSelection, allClasses])
+
+  const carOptions: EntityOption[] = useMemo(() => {
+    const byCar = new Map<string, string>()
+    for (const lap of laps) {
+      if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+      if (!byCar.has(lap.car_number)) byCar.set(lap.car_number, getTeamDisplayName(lap.team))
+    }
+    return [...byCar.entries()]
+      .map(([car_number, team]) => ({ id: car_number, label: `#${car_number} — ${team}` }))
+      .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+  }, [laps, activeClasses])
+
+  const activeCars = useMemo(
+    () => resolveEntitySelection(carSelection, carOptions.map((o) => o.id)),
+    [carSelection, carOptions],
+  )
+
+  const filteredLaps = useMemo(
+    () => laps.filter((l) => activeClasses.has(l.class ?? 'Unknown') && activeCars.has(l.car_number)),
+    [laps, activeClasses, activeCars],
+  )
+
   const carNumbers = useMemo(() => {
     const s = new Set<string>()
-    for (const l of laps) s.add(l.car_number)
+    for (const l of filteredLaps) s.add(l.car_number)
     return [...s].sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
-  }, [laps])
+  }, [filteredLaps])
 
   const stintsByCar = useMemo(() => {
     const map = new Map<string, TyreStint[]>()
     for (const car of carNumbers) {
-      const stints = computeTyreStints(laps, car)
+      const stints = computeTyreStints(filteredLaps, car)
       if (stints.length > 0) map.set(car, stints)
     }
     return map
-  }, [laps, carNumbers])
+  }, [filteredLaps, carNumbers])
 
   const carsWithData = useMemo(() => carNumbers.filter((c) => stintsByCar.has(c)), [carNumbers, stintsByCar])
 
@@ -167,18 +205,30 @@ export function TyreHistoryChart({ laps }: { laps: LapRead[] }) {
           z-index: 10;
         }
       `}</style>
-      <div className="chart-controls">
-        <div className="legend">
-          {legendCompounds.map((compound) => (
-            <div className="legend-item" key={compound}>
-              <span className="swatch" style={{ background: tyreCompoundColor(compound) }} />
-              <span>{compound}</span>
-            </div>
-          ))}
-        </div>
-        <ChartExportButtons svgRef={svgRef} filename="tyre_history" />
+      {compactFilters ? (
+        <PanelSettingsPopover>
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+            <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all cars" />
+          </div>
+        </PanelSettingsPopover>
+      ) : (
+        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="tyre_history" />}>
+          <div className="chart-controls">
+            <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+            <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all cars" />
+          </div>
+        </CollapsibleFilters>
+      )}
+      <div className="legend">
+        {legendCompounds.map((compound) => (
+          <div className="legend-item" key={compound}>
+            <span className="swatch" style={{ background: tyreCompoundColor(compound) }} />
+            <span>{compound}</span>
+          </div>
+        ))}
       </div>
-      {carsWithData.length === 0 ? <p className="hint">No tyre history for this session.</p> : <svg ref={svgRef} />}
+      {carsWithData.length === 0 ? <p className="hint">No tyre history for this selection.</p> : <svg ref={svgRef} />}
       {tooltip && (
         <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
           <div>
