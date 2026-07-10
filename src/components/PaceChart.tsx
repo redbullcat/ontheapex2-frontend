@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
-import { getEntityColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
+import { getEntityColor, getManufacturerColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -52,6 +52,7 @@ function fieldFor(groupBy: GroupBy): (lap: LapRead) => string | null {
 function colorFor(groupBy: GroupBy, key: string, carTeam: Map<string, string | null>): string {
   if (groupBy === 'team') return getTeamColor(key)
   if (groupBy === 'car') return getTeamColor(carTeam.get(key))
+  if (groupBy === 'manufacturer') return getManufacturerColor(key)
   return getEntityColor(key)
 }
 

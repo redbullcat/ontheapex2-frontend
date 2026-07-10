@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { computeCarStints } from '../lib/stints'
 import { isLapValid } from '../lib/lapValidity'
+import { getManufacturerColor } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -68,7 +69,6 @@ function computeSeries(
   }
 
   const manufacturers = [...byManufacturer.keys()].sort()
-  const colorScale = d3.scaleOrdinal<string, string>().domain(manufacturers).range(d3.schemeTableau10)
 
   const out: ManufacturerSeries[] = []
   for (const manufacturer of manufacturers) {
@@ -83,7 +83,7 @@ function computeSeries(
       .map(([lapInStint, times]) => ({ lapInStint, avg: d3.mean(times) ?? 0 }))
       .sort((a, b) => a.lapInStint - b.lapInStint)
 
-    out.push({ manufacturer, color: colorScale(manufacturer), points, trend: smooth(averaged) })
+    out.push({ manufacturer, color: getManufacturerColor(manufacturer), points, trend: smooth(averaged) })
   }
   return out
 }
