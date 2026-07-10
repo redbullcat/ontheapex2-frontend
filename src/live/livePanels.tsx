@@ -34,6 +34,7 @@ import { SectorLeaderboardTicker } from '../components/SectorLeaderboardTicker'
 import { BattleZones } from '../components/BattleZones'
 import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
+import { TyresPanel } from '../components/TyresPanel'
 
 export interface LivePanelContext {
   data: LiveState
@@ -75,6 +76,7 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'sector-ticker': { kind: 'sector-ticker', title: 'Sector leaderboard', category: 'field', defaultSize: { w: 6, h: 6 } },
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
+  tyres: { kind: 'tyres', title: 'Tyres', category: 'field', defaultSize: { w: 4, h: 12 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -337,6 +339,8 @@ export function renderLivePanel(
       if (panel.kind === 'top-speed') return <TopSpeedChart laps={adaptedLaps} compactFilters={compactFilters} />
       return <RaceStats laps={adaptedLaps} />
     }
+    case 'tyres':
+      return <TyresPanel rows={data.standings} />
     case 'sector-ticker':
       return <SectorLeaderboardTicker laps={data.laps} />
     case 'battle-zones':

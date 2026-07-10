@@ -48,6 +48,8 @@ import { LongRunChart } from './components/LongRunChart'
 import { AverageLongRunChart } from './components/AverageLongRunChart'
 import { StintLengthDistribution } from './components/StintLengthDistribution'
 import { LongRunPaceByManufacturer } from './components/LongRunPaceByManufacturer'
+import { TyresPanel } from './components/TyresPanel'
+import { latestTyresByCar } from './lib/carTyres'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -61,6 +63,7 @@ const RACE_TABS: Tab[] = [
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
   { id: 'headtohead', label: 'Head to Head' },
+  { id: 'tyres', label: 'Tyres' },
   { id: 'story', label: 'Story' },
 ]
 
@@ -78,6 +81,7 @@ const NON_RACE_TABS: Tab[] = [
   { id: 'longruns', label: 'Long Runs' },
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
+  { id: 'tyres', label: 'Tyres' },
 ]
 
 // Selections round-trip through the URL (mirroring the Streamlit app's
@@ -171,6 +175,32 @@ function App() {
     sessionId && !combinedBucket ? () => getStints(Number(sessionId)) : null,
     [sessionId, combinedBucket],
   )
+
+  // "Current" tyres per car for this session — the historical app has no
+  // playback clock to scrub, so this is just each car's most recent lap
+  // that actually carries a tyre snapshot (null for CSV imports and any
+  // live session promoted before tyre capture existed). Sorted by car
+  // number rather than race position, since there's no cheap already-
+  // computed running order available outside ResultsTable's own render.
+  const tyreRows = useMemo(() => {
+    if (lapsState.status !== 'success') return []
+    const latest = latestTyresByCar(lapsState.data)
+    return [...latest.entries()]
+      .map(([carNumber, lap]) => ({
+        car_number: carNumber,
+        team: lap.team,
+        position: null,
+        tire_fl_compound: lap.tire_fl_compound ?? null,
+        tire_fl_age_laps: lap.tire_fl_age_laps ?? null,
+        tire_fr_compound: lap.tire_fr_compound ?? null,
+        tire_fr_age_laps: lap.tire_fr_age_laps ?? null,
+        tire_rl_compound: lap.tire_rl_compound ?? null,
+        tire_rl_age_laps: lap.tire_rl_age_laps ?? null,
+        tire_rr_compound: lap.tire_rr_compound ?? null,
+        tire_rr_age_laps: lap.tire_rr_age_laps ?? null,
+      }))
+      .sort((a, b) => (parseInt(a.car_number, 10) || 0) - (parseInt(b.car_number, 10) || 0))
+  }, [lapsState])
 
   const knownTeams = useMemo(() => {
     if (lapsState.status !== 'success') return []
@@ -689,6 +719,19 @@ function App() {
                       <HeadToHeadChart laps={lapsState.data} />
                     ) : (
                       <p className="hint">No lap data for this session.</p>
+                    ))}
+                </section>
+              )}
+
+              {activeTab === 'tyres' && (
+                <section className="chart-section">
+                  <h2>Tyres</h2>
+                  {lapsState.status === 'loading' && <p className="hint">Loading tyre data…</p>}
+                  {lapsState.status === 'success' &&
+                    (tyreRows.length > 0 ? (
+                      <TyresPanel rows={tyreRows} />
+                    ) : (
+                      <p className="hint">No tyre data for this session.</p>
                     ))}
                 </section>
               )}
