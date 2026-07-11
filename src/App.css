@@ -574,6 +574,75 @@ header h1 {
   cursor: default;
 }
 
+.chart-title-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.chart-title-modal {
+  background: var(--surface-1, #fcfcfb);
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 8px;
+  padding: 20px 22px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  color: var(--text-h, #0b0b0b);
+}
+.chart-title-modal h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.chart-title-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #52514e);
+  margin-bottom: 16px;
+}
+.chart-title-field input {
+  border: 1px solid var(--border, #e1e0d9);
+  border-radius: 6px;
+  padding: 8px 9px;
+  font-size: 13px;
+  background: var(--surface-1, #fcfcfb);
+  color: var(--text-h, #0b0b0b);
+  font-family: inherit;
+}
+.chart-title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.chart-title-actions button {
+  border: 1px solid var(--border, #e1e0d9);
+  background: transparent;
+  color: var(--text-secondary, #52514e);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.chart-title-actions button:hover {
+  border-color: var(--text-h, #0b0b0b);
+  color: var(--text-h, #0b0b0b);
+}
+.chart-title-primary {
+  background: #2673e2 !important;
+  border-color: #2673e2 !important;
+  color: #fff !important;
+}
+.chart-title-primary:hover {
+  filter: brightness(1.1);
+}
+
 .stat-row {
   display: flex;
   flex-wrap: wrap;

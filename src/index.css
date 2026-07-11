@@ -51,6 +51,13 @@
   --text-secondary: #52514e;
 }
 
+/* Chart axis/label text uses Inter rather than the page's system-ui stack,
+   matching the manually-themed reference SVG exports (see chartExport.ts) so
+   on-screen charts and downloaded SVGs look identical. */
+.viz-root svg text {
+  font-family: 'Inter', var(--sans);
+}
+
 html,
 body {
   margin: 0;

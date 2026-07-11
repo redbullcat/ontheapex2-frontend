@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@fontsource/saira": "^5.2.11",
     "@fontsource/saira-condensed": "^5.2.8",
     "d3": "^7.9.0",
