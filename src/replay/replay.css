@@ -152,6 +152,12 @@ table.replay-board {
   border-collapse: collapse;
   font-size: 12.5px;
 }
+/* the leaderboard's 17-column width doesn't apply to this table's 5 —
+   let it size to its own content instead of forcing a horizontal
+   scrollbar in a panel that's nowhere near that wide. */
+.deleted-laps-panel table.replay-board {
+  min-width: 0;
+}
 table.replay-board thead th {
   text-align: right;
   font-family: var(--replay-mono);
@@ -305,6 +311,14 @@ table.replay-board tr:last-child td {
    track limits, etc) — still shown, just visually de-emphasized so it
    reads as "happened but doesn't count" rather than a normal lap */
 .replay-row.lap-invalid td {
+  opacity: 0.55;
+  font-style: italic;
+}
+/* same treatment, scoped to just the sector-split cells of the live/replay
+   leaderboard's "last lap" columns — the row itself is still live/current,
+   only the specific lap those splits came from was flagged not a valid
+   timed lap. */
+.replay-row td.last-lap-invalid {
   opacity: 0.55;
   font-style: italic;
 }

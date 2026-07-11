@@ -36,6 +36,7 @@ import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
 import { TyresPanel } from '../components/TyresPanel'
 import { tyreSummary } from '../lib/carTyres'
+import { DeletedLapsPanel } from '../components/DeletedLapsPanel'
 
 export interface LivePanelContext {
   data: LiveState
@@ -78,6 +79,7 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   tyres: { kind: 'tyres', title: 'Tyres', category: 'field', defaultSize: { w: 4, h: 12 } },
+  'deleted-laps': { kind: 'deleted-laps', title: 'Deleted laps', category: 'field', defaultSize: { w: 5, h: 8 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -148,9 +150,28 @@ function LiveStandingsRow({
         </td>
       ) : (
         <>
-          <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null)}>{formatSplit(lastLap?.s1_seconds ?? null)}</td>
-          <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null)}>{formatSplit(lastLap?.s2_seconds ?? null)}</td>
-          <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null)}>{formatSplit(lastLap?.s3_seconds ?? null)}</td>
+          {(() => {
+            // Griiip flags roughly a fifth of laps in a real session
+            // isValid: false (track-limit deletions, pit-in laps,
+            // red-flag/driver-change out-laps) — de-emphasize the splits
+            // the same way CarLapHistoryTable dims an invalid row, rather
+            // than showing them as if they were a normal timed lap.
+            const invalidTitle = lastLap && !lastLap.is_valid ? 'Not a valid timed lap (pit-in, track limits, etc)' : undefined
+            const invalidClass = invalidTitle ? ' last-lap-invalid' : ''
+            return (
+              <>
+                <td className={'num' + colorBadgeClass(lastLap?.s1_color ?? null) + invalidClass} title={invalidTitle}>
+                  {formatSplit(lastLap?.s1_seconds ?? null)}
+                </td>
+                <td className={'num' + colorBadgeClass(lastLap?.s2_color ?? null) + invalidClass} title={invalidTitle}>
+                  {formatSplit(lastLap?.s2_seconds ?? null)}
+                </td>
+                <td className={'num' + colorBadgeClass(lastLap?.s3_color ?? null) + invalidClass} title={invalidTitle}>
+                  {formatSplit(lastLap?.s3_seconds ?? null)}
+                </td>
+              </>
+            )
+          })()}
         </>
       )}
       <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
@@ -347,6 +368,8 @@ export function renderLivePanel(
     }
     case 'tyres':
       return <TyresPanel rows={data.standings} />
+    case 'deleted-laps':
+      return <DeletedLapsPanel laps={data.laps.map((lap, i) => liveLapToLapRead(lap, i))} />
     case 'sector-ticker':
       return <SectorLeaderboardTicker laps={data.laps} />
     case 'battle-zones':
