@@ -33,6 +33,14 @@ import '@fontsource/saira-condensed/600.css'
 import '@fontsource/saira-condensed/700.css'
 import '@fontsource/saira-condensed/800.css'
 import '@fontsource/saira-condensed/900.css'
+// Inter, self-hosted the same way, for chart axis/label text (matches the
+// font used in the manually-themed reference SVG exports embedded on the
+// marketing site — see chartExport.ts, which also references the
+// Google-hosted Inter/Saira for downloaded SVGs, since those leave the app's
+// own stylesheet context).
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
 
 export type TitleFontFamily = 'Saira' | 'Saira Condensed'
 
