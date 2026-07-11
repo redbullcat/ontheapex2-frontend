@@ -521,7 +521,8 @@ header h1 {
   color: var(--text-secondary, #52514e);
   margin-bottom: 16px;
 }
-.lap-flag-field textarea {
+.lap-flag-field textarea,
+.lap-flag-field select {
   border: 1px solid var(--border, #e1e0d9);
   border-radius: 6px;
   padding: 8px 9px;

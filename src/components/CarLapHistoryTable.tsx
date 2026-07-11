@@ -4,7 +4,7 @@ import { formatLapTime, formatSplit } from '../replay/format'
 import { computeLapHighlights, isLapExcluded, type HighlightTier } from '../lib/lapHighlights'
 import { isLapValid } from '../lib/lapValidity'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
-import { FlagLapDeletedModal } from './FlagLapDeletedModal'
+import { FlagLapDeletedModal, type FlaggableLap } from './FlagLapDeletedModal'
 import { tyreSummary } from '../lib/carTyres'
 
 function tierClass(tier: HighlightTier): string {
@@ -18,7 +18,9 @@ function tierClass(tier: HighlightTier): string {
 // `allLaps` (the whole session) is needed to work out the class session-best
 // reference — everything else is computed from `laps` alone.
 export function CarLapHistoryTable({ laps, allLaps }: { laps: LapRead[]; allLaps: LapRead[] }) {
-  const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; lapNumber: number; lapTimeSeconds: number } | null>(null)
+  const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; carLaps: FlaggableLap[]; initialLapNumber: number } | null>(
+    null,
+  )
   const deletedLapsVersion = useDeletedLapsVersion()
   const carClass = laps[0]?.class ?? null
   const highlights = useMemo(
@@ -94,8 +96,8 @@ export function CarLapHistoryTable({ laps, allLaps }: { laps: LapRead[]; allLaps
                         setFlagging({
                           sessionId: lap.session_id,
                           carNumber: lap.car_number,
-                          lapNumber: lap.lap_number,
-                          lapTimeSeconds: lap.lap_time_seconds!,
+                          carLaps: [{ lapNumber: lap.lap_number, lapTimeSeconds: lap.lap_time_seconds! }],
+                          initialLapNumber: lap.lap_number,
                         })
                       }
                     >
@@ -112,8 +114,8 @@ export function CarLapHistoryTable({ laps, allLaps }: { laps: LapRead[]; allLaps
         <FlagLapDeletedModal
           sessionId={flagging.sessionId}
           carNumber={flagging.carNumber}
-          lapNumber={flagging.lapNumber}
-          lapTimeSeconds={flagging.lapTimeSeconds}
+          carLaps={flagging.carLaps}
+          initialLapNumber={flagging.initialLapNumber}
           onClose={() => setFlagging(null)}
         />
       )}

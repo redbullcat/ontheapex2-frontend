@@ -24,6 +24,10 @@ export interface RowState {
   bestLapDriverName: string | null
   lastLap: number | null
   lastLapBadge: BestBadge
+  // false when Griiip flagged this lap not a valid timed lap (track
+  // limits, pit-in, etc — see lib/lapValidity.ts). true/absent-equivalent
+  // otherwise; only meaningful alongside lastLap.
+  lastLapIsValid: boolean
   gap: number | null
   interval: number | null
   pits: number
@@ -66,6 +70,7 @@ interface CarState {
   bestLapNumber: number | null
   bestLapDriverName: string | null
   lastLap: number | null
+  lastLapIsValid: boolean
 }
 
 // A car is "ahead" of another if it's completed more of the current lap
@@ -130,6 +135,7 @@ export class ReplayEngine {
           bestLapNumber: null,
           bestLapDriverName: null,
           lastLap: null,
+          lastLapIsValid: true,
         },
       ]),
     )
@@ -196,6 +202,7 @@ export class ReplayEngine {
         car.s3UpdatedAt = e.time
         this.updateBests(car, 3, e.value)
         car.lastLap = e.lapTimeSeconds ?? null
+        car.lastLapIsValid = e.lapIsValid !== false
         if (car.lastLap != null) {
           if (car.bestLap == null || car.lastLap < car.bestLap) {
             car.bestLap = car.lastLap
@@ -328,6 +335,7 @@ export class ReplayEngine {
         bestLapDriverName: c.bestLapDriverName,
         lastLap: c.lastLap,
         lastLapBadge: this.badge(c.lastLap, this.sessionBestLap.get(c.meta.class), this.personalBestLap.get(c.meta.car_number)),
+        lastLapIsValid: c.lastLapIsValid,
         gap,
         interval: gap != null && prevGap != null ? gap - prevGap : null,
         pits,

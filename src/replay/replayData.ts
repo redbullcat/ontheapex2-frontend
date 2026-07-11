@@ -26,6 +26,10 @@ export interface SectorEvent {
   // so it carries the payload needed to update best/last lap and look up
   // the gap-to-leader for that lap in the same pass.
   lapTimeSeconds?: number | null
+  // Griiip's isValid for this lap (track-limit deletions, pit-in laps,
+  // etc — see lib/lapValidity.ts). Only meaningful alongside
+  // lapTimeSeconds, same sector-3-only scoping.
+  lapIsValid?: boolean
 }
 
 export interface PitWindow {
@@ -135,6 +139,7 @@ export function buildReplayData(laps: LapRead[]): ReplayData {
         value: lap.s3_seconds ?? t3,
         driverName: lap.driver_name,
         lapTimeSeconds: lap.lap_time_seconds,
+        lapIsValid: lap.is_valid,
       })
       elapsedBySector.set(`${lap.lap_number}:3`, t3)
       // t2/t1 are anchored backward from the finish line (t3), so deriving

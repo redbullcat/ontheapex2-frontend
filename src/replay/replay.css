@@ -308,6 +308,14 @@ table.replay-board tr:last-child td {
   opacity: 0.55;
   font-style: italic;
 }
+/* same treatment, scoped to just the sector-split cells of the live/replay
+   leaderboard's "last lap" columns — the row itself is still live/current,
+   only the specific lap those splits came from was flagged not a valid
+   timed lap. */
+.replay-row td.last-lap-invalid {
+  opacity: 0.55;
+  font-style: italic;
+}
 /* an active flash (new value just landed) still wins visually so the tick
    is visible even on an already-purple/green cell */
 .replay-row td.flash {

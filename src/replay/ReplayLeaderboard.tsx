@@ -75,7 +75,12 @@ function ReplayRow({
         </>
       )}
       <td className="num best">{formatLapTime(row.bestLap)}</td>
-      <td className={'num last' + badgeClass(row.lastLapBadge)}>{formatLapTime(row.lastLap)}</td>
+      <td
+        className={'num last' + badgeClass(row.lastLapBadge) + (row.lastLap != null && !row.lastLapIsValid ? ' last-lap-invalid' : '')}
+        title={row.lastLap != null && !row.lastLapIsValid ? 'Not a valid timed lap (pit-in, track limits, etc)' : undefined}
+      >
+        {formatLapTime(row.lastLap)}
+      </td>
       <td className="num">{row.pits}</td>
       <td className="num">{row.sincePit ?? '—'}</td>
     </tr>
