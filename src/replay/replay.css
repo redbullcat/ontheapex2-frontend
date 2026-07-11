@@ -152,6 +152,12 @@ table.replay-board {
   border-collapse: collapse;
   font-size: 12.5px;
 }
+/* the leaderboard's 17-column width doesn't apply to this table's 5 —
+   let it size to its own content instead of forcing a horizontal
+   scrollbar in a panel that's nowhere near that wide. */
+.deleted-laps-panel table.replay-board {
+  min-width: 0;
+}
 table.replay-board thead th {
   text-align: right;
   font-family: var(--replay-mono);
