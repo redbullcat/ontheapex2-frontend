@@ -66,9 +66,12 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
     const height = BAR_HEIGHT + MARGIN.top + MARGIN.bottom
     svg.attr('width', width).attr('height', height)
 
+    // start_lap/end_lap are inclusive lap numbers, not continuous coordinates, so a
+    // stint's right edge is one lap past end_lap — otherwise single-lap stints
+    // (start_lap === end_lap) collapse to zero width and vanish from the chart.
     const lapMin = d3.min(stints, (d) => d.start_lap) ?? 0
     const lapMax = d3.max(stints, (d) => d.end_lap) ?? 1
-    const x = d3.scaleLinear().domain([lapMin, lapMax]).range([0, innerWidth])
+    const x = d3.scaleLinear().domain([lapMin, lapMax + 1]).range([0, innerWidth])
 
     const g = svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
 
@@ -89,7 +92,7 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
       .join('rect')
       .attr('x', (d) => x(d.start_lap))
       .attr('y', 0)
-      .attr('width', (d) => Math.max(0, x(d.end_lap) - x(d.start_lap) - GAP))
+      .attr('width', (d) => Math.max(0, x(d.end_lap + 1) - x(d.start_lap) - GAP))
       .attr('height', BAR_HEIGHT)
       .attr('fill', (d) => carColor.get(d.car_number) ?? getTeamColor(d.team))
       .style('cursor', 'pointer')
@@ -105,7 +108,7 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
       .selectAll('text')
       .data(stints)
       .join('text')
-      .attr('x', (d) => (x(d.start_lap) + x(d.end_lap) - GAP) / 2)
+      .attr('x', (d) => (x(d.start_lap) + x(d.end_lap + 1) - GAP) / 2)
       .attr('y', BAR_HEIGHT / 2)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
@@ -115,7 +118,7 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
       .attr('pointer-events', 'none')
       .text((d) => `#${d.car_number}`)
       .each(function (d) {
-        const segWidth = x(d.end_lap) - x(d.start_lap) - GAP
+        const segWidth = x(d.end_lap + 1) - x(d.start_lap) - GAP
         const textWidth = (this as SVGTextElement).getBBox().width
         if (textWidth + 12 > segWidth) d3.select(this).remove()
       })
