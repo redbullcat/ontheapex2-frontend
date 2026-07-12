@@ -67,6 +67,18 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const recorder = useSvgRecorder(svgRef, 'gap_evolution')
   const [width, setWidth] = useState(800)
   const [hover, setHover] = useState<HoverState | null>(null)
+  // Synchronous mirror of `hover` for the overlay's click handler below —
+  // that handler is registered once per chart rebuild, so it can't close
+  // over each mousemove's fresh state. Same pattern as LapPositionChart.
+  const hoverRef = useRef<HoverState | null>(null)
+  // Persistent "pinned" highlight, toggled by clicking a car's line — stays
+  // applied while hovering elsewhere or not hovering at all, until the user
+  // clicks the car again or hits "Clear highlight".
+  const [pinnedCars, setPinnedCars] = useState<Set<string>>(new Set())
+  const pinnedCarsRef = useRef<Set<string>>(pinnedCars)
+  useEffect(() => {
+    pinnedCarsRef.current = pinnedCars
+  }, [pinnedCars])
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
@@ -233,6 +245,16 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   )
 
   const pathsSelRef = useRef<d3.Selection<SVGPathElement, CarSeries, SVGGElement, unknown> | null>(null)
+  const applyPinnedStyling = useCallback((pinned: Set<string>) => {
+    if (pinned.size === 0) {
+      pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
+      return
+    }
+    pathsSelRef.current
+      ?.attr('opacity', (d) => (pinned.has(d.car_number) ? 1 : 0.15))
+      .attr('stroke-width', (d) => (pinned.has(d.car_number) ? 3 : d.isReference ? 2.5 : 1.5))
+    pathsSelRef.current?.filter((d) => pinned.has(d.car_number)).raise()
+  }, [])
   const xScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
   const yScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
   const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
@@ -331,6 +353,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       .attr('opacity', 0.7)
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
+    applyPinnedStyling(pinnedCarsRef.current)
 
     const markers = g
       .append('g')
@@ -470,12 +493,14 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
 
         crosshair.style('display', null).attr('x1', x(clampedLap)).attr('x2', x(clampedLap))
         pathsSelRef.current
-          ?.attr('opacity', (d) => (d.car_number === car ? 1 : 0.25))
-          .attr('stroke-width', (d) => (d.car_number === car ? 3 : 2))
+          ?.attr('opacity', (d) =>
+            d.car_number === car ? 1 : pinnedCarsRef.current.has(d.car_number) ? 0.85 : pinnedCarsRef.current.size > 0 ? 0.15 : 0.25,
+          )
+          .attr('stroke-width', (d) => (d.car_number === car || pinnedCarsRef.current.has(d.car_number) ? 3 : 2))
         pathsSelRef.current?.filter((d) => d.car_number === car).raise()
 
         const rect = containerRef.current?.getBoundingClientRect()
-        setHover({
+        const next: HoverState = {
           x: event.clientX - (rect?.left ?? 0),
           y: event.clientY - (rect?.top ?? 0),
           car,
@@ -483,14 +508,33 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           team: entry.team,
           gap: entry.gap,
           lap: clampedLap,
-        })
+        }
+        hoverRef.current = next
+        setHover(next)
       })
       .on('mouseleave', () => {
         crosshair.style('display', 'none')
-        pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
+        applyPinnedStyling(pinnedCarsRef.current)
+        hoverRef.current = null
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, minGap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods])
+      .on('click', () => {
+        const h = hoverRef.current
+        if (!h) return
+        setPinnedCars((prev) => {
+          const next = new Set(prev)
+          if (next.has(h.car)) next.delete(h.car)
+          else next.add(h.car)
+          return next
+        })
+      })
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, minGap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods, applyPinnedStyling])
+
+  // Toggling a pin (or clearing all) restyles the existing paths in place —
+  // no need for the expensive rebuild above.
+  useEffect(() => {
+    applyPinnedStyling(pinnedCars)
+  }, [pinnedCars, applyPinnedStyling])
 
   // Cheap per-frame update: the clip-rect width, marker positions, and a
   // "progressive zoom" y-domain rescaled to whatever's been revealed so far
@@ -655,6 +699,26 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           background: transparent;
           color: var(--text-primary);
         }
+        .gap-evolution-chart .pinned-cars-row {
+          margin-bottom: 8px;
+        }
+        .gap-evolution-chart .pinned-chip {
+          font: inherit;
+          font-size: 12px;
+          border: 1px solid var(--axis);
+          background: var(--surface-1);
+          color: var(--text-secondary);
+          border-radius: 999px;
+          padding: 2px 10px;
+          cursor: pointer;
+        }
+        .gap-evolution-chart .pinned-chip:hover {
+          color: var(--text-primary);
+          border-color: var(--text-secondary);
+        }
+        .gap-evolution-chart .pinned-chip-clear {
+          color: var(--text-muted);
+        }
       `}</style>
       <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="gap_evolution" />}>
         <div className="chart-controls">
@@ -691,6 +755,21 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           />
         </div>
       </CollapsibleFilters>
+      <div className="chart-controls pinned-cars-row">
+        <span className="text-muted" style={{ fontSize: 12 }}>
+          {pinnedCars.size === 0 ? 'Click a car’s line to highlight it' : 'Highlighted:'}
+        </span>
+        {[...pinnedCars].map((car) => (
+          <button key={car} className="pinned-chip" onClick={() => setPinnedCars((prev) => new Set([...prev].filter((c) => c !== car)))}>
+            #{car} ✕
+          </button>
+        ))}
+        {pinnedCars.size > 0 && (
+          <button className="pinned-chip pinned-chip-clear" onClick={() => setPinnedCars(new Set())}>
+            Clear highlight
+          </button>
+        )}
+      </div>
       <div className="chart-controls">
         <PlaybackControls
           playback={playback}
