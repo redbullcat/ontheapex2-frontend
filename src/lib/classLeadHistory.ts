@@ -7,9 +7,19 @@ import type { LapRead, LeadStint } from '../api/types'
 // then consecutive laps led by the same car are collapsed into stints —
 // mirroring how the backend builds the overall stints.
 export function computeClassLeadHistory(laps: LapRead[], cls: string): LeadStint[] {
-  const classLaps = laps.filter(
-    (l) => (l.class ?? 'Unknown') === cls && l.elapsed_seconds != null && l.lap_number != null,
-  )
+  return leadHistoryFromLaps(laps.filter((l) => (l.class ?? 'Unknown') === cls))
+}
+
+// Same algorithm with no class filter — live sessions have no backend
+// lead-history endpoint at all (see live/LiveLeadHistoryPanel.tsx), so
+// "overall" has to be computed the same client-side way as every class tab
+// already is here, not just reused from a historical API response.
+export function computeOverallLeadHistory(laps: LapRead[]): LeadStint[] {
+  return leadHistoryFromLaps(laps)
+}
+
+function leadHistoryFromLaps(laps: LapRead[]): LeadStint[] {
+  const classLaps = laps.filter((l) => l.elapsed_seconds != null && l.lap_number != null)
 
   const byLap = new Map<number, LapRead[]>()
   for (const lap of classLaps) {
