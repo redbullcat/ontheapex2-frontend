@@ -338,6 +338,24 @@ export function LapPositionChart({
     }
     for (const car of byCar.values()) car.points.sort((a, b) => a.lap_number - b.lap_number)
     if (showGridStart) {
+      // startingGrid is one combined grid order across every class (see
+      // lib/startingGrid.ts) — correct for an unfiltered/overall view, but
+      // this chart's own lap-1+ ranking is always class-filtered (see
+      // rankedByLap above), so plotting the raw overall grid number as a
+      // y-position scrambles the "Grid" point whenever the active class
+      // isn't literally P1..N overall (e.g. viewing just HYPERCAR in a
+      // multi-class WEC field) — the line visibly crosses others at Grid
+      // then snaps to the correct order the instant lap 1's real,
+      // class-relative ranking takes over. Re-ranking the same cars
+      // currently in `byCar` by their overall grid number keeps their
+      // relative qualifying order (a car that out-qualified a class rival
+      // overall still starts ahead of them here) while producing a
+      // position number that's actually comparable to every other lap's.
+      const classRelativeGrid = new Map<string, number>()
+      const carsWithGrid = [...byCar.keys()].filter((car) => startingGrid!.has(car))
+      carsWithGrid.sort((a, b) => startingGrid!.get(a)! - startingGrid!.get(b)!)
+      carsWithGrid.forEach((car, i) => classRelativeGrid.set(car, i + 1))
+
       for (const car of byCar.values()) {
         if (car.points.length === 0 || car.points[0].lap_number > 0) {
           // Falls back to the car's own lap-1 position (a flat line, no
@@ -346,7 +364,7 @@ export function LapPositionChart({
           // without a grid point at all, which would make it pop in
           // suddenly at lap 1 while every other car's marker is already
           // sitting in place.
-          const gridPos = startingGrid!.get(car.car_number) ?? car.points[0]?.position
+          const gridPos = classRelativeGrid.get(car.car_number) ?? car.points[0]?.position
           if (gridPos != null) car.points.unshift({ lap_number: 0, position: gridPos, lap_time_seconds: null })
         }
       }
