@@ -37,6 +37,9 @@ import type { PendingNoteLink } from '../lib/raceNotes'
 import { TyresPanel } from '../components/TyresPanel'
 import { tyreSummary } from '../lib/carTyres'
 import { DeletedLapsPanel } from '../components/DeletedLapsPanel'
+import { TyreHistoryChart } from '../components/TyreHistoryChart'
+import { LiveLeadHistoryPanel } from './LiveLeadHistoryPanel'
+import { LiveHourlyResultsPanel } from './LiveHourlyResultsPanel'
 
 export interface LivePanelContext {
   data: LiveState
@@ -79,7 +82,10 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'battle-zones': { kind: 'battle-zones', title: 'Battle zones', category: 'field', defaultSize: { w: 6, h: 6 } },
   'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   tyres: { kind: 'tyres', title: 'Tyres', category: 'field', defaultSize: { w: 4, h: 12 } },
+  'tyre-history': { kind: 'tyre-history', title: 'Tyre history', category: 'field', defaultSize: { w: 8, h: 8 }, hasSettings: true },
   'deleted-laps': { kind: 'deleted-laps', title: 'Deleted laps', category: 'field', defaultSize: { w: 5, h: 8 } },
+  'lead-history': { kind: 'lead-history', title: 'Lead history', category: 'field', defaultSize: { w: 8, h: 12 } },
+  'hourly-results': { kind: 'hourly-results', title: 'Hourly results', category: 'field', defaultSize: { w: 6, h: 8 } },
   'car-position-history': {
     kind: 'car-position-history',
     title: 'Position history',
@@ -358,18 +364,24 @@ export function renderLivePanel(
     case 'pit-stops':
     case 'stints':
     case 'race-stats':
-    case 'top-speed': {
+    case 'top-speed':
+    case 'tyre-history': {
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
       if (panel.kind === 'pace') return <PaceChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'pit-stops') return <PitTimeChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'stints') return <StintLengthDistribution laps={adaptedLaps} />
       if (panel.kind === 'top-speed') return <TopSpeedChart laps={adaptedLaps} compactFilters={compactFilters} />
+      if (panel.kind === 'tyre-history') return <TyreHistoryChart laps={adaptedLaps} compactFilters={compactFilters} />
       return <RaceStats laps={adaptedLaps} />
     }
     case 'tyres':
       return <TyresPanel rows={data.standings} />
     case 'deleted-laps':
       return <DeletedLapsPanel laps={data.laps.map((lap, i) => liveLapToLapRead(lap, i))} />
+    case 'lead-history':
+      return <LiveLeadHistoryPanel laps={data.laps} />
+    case 'hourly-results':
+      return <LiveHourlyResultsPanel laps={data.laps} />
     case 'sector-ticker':
       return <SectorLeaderboardTicker laps={data.laps} />
     case 'battle-zones':
