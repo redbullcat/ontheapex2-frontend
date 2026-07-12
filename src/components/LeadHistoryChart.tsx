@@ -44,10 +44,17 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
   }, [])
 
   const carColor = useMemo(() => {
-    const order: string[] = []
+    // Sorted by total laps led, not by which car happened to lead first —
+    // a real, multi-lap stint (e.g. a pit-cycle lead) should always get a
+    // distinguishable color, rather than losing an OTHER_COLOR coin-flip to
+    // several 1-lap blips that simply occurred earlier in the race. Without
+    // this, a genuine several-lap stint could render as the same flat gray
+    // as "no data", reading as a gap that isn't actually there.
+    const lapsLedByCar = new Map<string, number>()
     for (const s of stints) {
-      if (!order.includes(s.car_number)) order.push(s.car_number)
+      lapsLedByCar.set(s.car_number, (lapsLedByCar.get(s.car_number) ?? 0) + s.laps_led)
     }
+    const order = [...lapsLedByCar.entries()].sort((a, b) => b[1] - a[1]).map(([car]) => car)
     const scale = new Map<string, string>()
     order.forEach((car, i) => {
       scale.set(car, i < CATEGORICAL.length ? CATEGORICAL[i] : OTHER_COLOR)
@@ -55,6 +62,8 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
     return scale
   }, [stints])
 
+  // Legend order follows the chart's own leaderboard convention (most laps
+  // led first), same as the color assignment above.
   const legendCars = useMemo(() => [...carColor.keys()].slice(0, CATEGORICAL.length), [carColor])
 
   useEffect(() => {
