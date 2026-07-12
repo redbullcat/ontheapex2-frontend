@@ -41,6 +41,7 @@ import { DeletedLapsPanel } from '../components/DeletedLapsPanel'
 import { TyreHistoryChart } from '../components/TyreHistoryChart'
 import { LiveLeadHistoryPanel } from './LiveLeadHistoryPanel'
 import { LiveHourlyResultsPanel } from './LiveHourlyResultsPanel'
+import { LivePitHistoryPanel } from './LivePitHistoryPanel'
 
 export interface LivePanelContext {
   data: LiveState
@@ -84,6 +85,7 @@ export const LIVE_PANEL_DEFS: Record<string, PanelDef> = {
   'race-notes': { kind: 'race-notes', title: 'Session notes', category: 'field', defaultSize: { w: 12, h: 12 } },
   tyres: { kind: 'tyres', title: 'Tyres', category: 'field', defaultSize: { w: 4, h: 12 } },
   'tyre-history': { kind: 'tyre-history', title: 'Tyre history', category: 'field', defaultSize: { w: 8, h: 8 }, hasSettings: true },
+  'pit-history': { kind: 'pit-history', title: 'Pit history', category: 'field', defaultSize: { w: 8, h: 8 }, hasSettings: true },
   'deleted-laps': { kind: 'deleted-laps', title: 'Deleted laps', category: 'field', defaultSize: { w: 5, h: 8 } },
   'lead-history': { kind: 'lead-history', title: 'Lead history', category: 'field', defaultSize: { w: 8, h: 12 } },
   'hourly-results': { kind: 'hourly-results', title: 'Hourly results', category: 'field', defaultSize: { w: 6, h: 8 } },
@@ -375,13 +377,15 @@ export function renderLivePanel(
     case 'stints':
     case 'race-stats':
     case 'top-speed':
-    case 'tyre-history': {
+    case 'tyre-history':
+    case 'pit-history': {
       const adaptedLaps = data.laps.map((lap, i) => liveLapToLapRead(lap, i))
       if (panel.kind === 'pace') return <PaceChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'pit-stops') return <PitTimeChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'stints') return <StintLengthDistribution laps={adaptedLaps} />
       if (panel.kind === 'top-speed') return <TopSpeedChart laps={adaptedLaps} compactFilters={compactFilters} />
       if (panel.kind === 'tyre-history') return <TyreHistoryChart laps={adaptedLaps} compactFilters={compactFilters} />
+      if (panel.kind === 'pit-history') return <LivePitHistoryPanel laps={adaptedLaps} />
       return <RaceStats laps={adaptedLaps} />
     }
     case 'tyres':
