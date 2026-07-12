@@ -2,19 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LeadStint } from '../api/types'
 import { ChartExportButtons } from './ChartExportButtons'
-import { getTeamDisplayName } from '../lib/identityColors'
-
-const CATEGORICAL: readonly string[] = [
-  '#2a78d6', // blue
-  '#1baf7a', // aqua
-  '#eda100', // yellow
-  '#008300', // green
-  '#4a3aa7', // violet
-  '#e34948', // red
-  '#e87ba4', // magenta
-  '#eb6834', // orange
-]
-const OTHER_COLOR = '#898781' // muted ink, for cars beyond the 8-slot theme
+import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 16 }
 const BAR_HEIGHT = 48
@@ -43,28 +31,31 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
     return () => ro.disconnect()
   }, [])
 
-  const carColor = useMemo(() => {
-    // Sorted by total laps led, not by which car happened to lead first —
-    // a real, multi-lap stint (e.g. a pit-cycle lead) should always get a
-    // distinguishable color, rather than losing an OTHER_COLOR coin-flip to
-    // several 1-lap blips that simply occurred earlier in the race. Without
-    // this, a genuine several-lap stint could render as the same flat gray
-    // as "no data", reading as a gap that isn't actually there.
-    const lapsLedByCar = new Map<string, number>()
-    for (const s of stints) {
-      lapsLedByCar.set(s.car_number, (lapsLedByCar.get(s.car_number) ?? 0) + s.laps_led)
-    }
-    const order = [...lapsLedByCar.entries()].sort((a, b) => b[1] - a[1]).map(([car]) => car)
-    const scale = new Map<string, string>()
-    order.forEach((car, i) => {
-      scale.set(car, i < CATEGORICAL.length ? CATEGORICAL[i] : OTHER_COLOR)
-    })
-    return scale
+  // Team livery colors, same convention as every other chart's colorMode
+  // 'team' (see lib/identityColors — a real per-team lookup table plus a
+  // hash-based fallback for anything not in it, so this never runs out of
+  // distinct colors or has to fall back to a shared "other" gray the way a
+  // fixed 8-slot categorical palette does. Also picks up any custom team
+  // color the user has set in Settings, same as everywhere else.
+  const carTeam = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const s of stints) if (!map.has(s.car_number)) map.set(s.car_number, s.team)
+    return map
   }, [stints])
 
-  // Legend order follows the chart's own leaderboard convention (most laps
-  // led first), same as the color assignment above.
-  const legendCars = useMemo(() => [...carColor.keys()].slice(0, CATEGORICAL.length), [carColor])
+  const carColor = useMemo(() => {
+    const scale = new Map<string, string>()
+    for (const [car, team] of carTeam) scale.set(car, getTeamColor(team))
+    return scale
+  }, [carTeam])
+
+  // Legend lists every car that led (most laps led first) — no palette
+  // limit to cap it at anymore.
+  const legendCars = useMemo(() => {
+    const lapsLedByCar = new Map<string, number>()
+    for (const s of stints) lapsLedByCar.set(s.car_number, (lapsLedByCar.get(s.car_number) ?? 0) + s.laps_led)
+    return [...lapsLedByCar.entries()].sort((a, b) => b[1] - a[1]).map(([car]) => car)
+  }, [stints])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -100,7 +91,7 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
       .attr('y', 0)
       .attr('width', (d) => Math.max(0, x(d.end_lap) - x(d.start_lap) - GAP))
       .attr('height', BAR_HEIGHT)
-      .attr('fill', (d) => carColor.get(d.car_number) ?? OTHER_COLOR)
+      .attr('fill', (d) => carColor.get(d.car_number) ?? getTeamColor(d.team))
       .style('cursor', 'pointer')
       .on('mousemove', (event: MouseEvent, d) => {
         const rect = containerRef.current?.getBoundingClientRect()
@@ -218,7 +209,9 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
           {legendCars.map((car) => (
             <div className="legend-item" key={car}>
               <span className="swatch" style={{ background: carColor.get(car) }} />
-              <span>#{car}</span>
+              <span>
+                #{car} — {getTeamDisplayName(carTeam.get(car) ?? null)}
+              </span>
             </div>
           ))}
         </div>
