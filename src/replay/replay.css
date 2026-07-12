@@ -1035,6 +1035,27 @@ table.race-notes-grid tr.race-notes-restart-row td {
 .replay-trend-chart {
   position: relative;
 }
+.pinned-cars-row {
+  gap: 8px !important;
+  margin-top: -4px;
+}
+.pinned-chip {
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid var(--replay-line-strong);
+  background: transparent;
+  color: var(--replay-muted);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.pinned-chip:hover {
+  color: var(--replay-text, var(--replay-muted));
+  border-color: var(--replay-accent, var(--replay-line-strong));
+}
+.pinned-chip-clear {
+  opacity: 0.8;
+}
 .replay-trend-chart svg {
   width: 100%;
   display: block;

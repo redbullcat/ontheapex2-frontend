@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { CarMeta } from './replayData'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
@@ -88,6 +88,26 @@ export function ReplayTrendChart({
   // that handler is registered once per chart rebuild, so it can't close
   // over each mousemove's fresh state.
   const hoverRef = useRef<typeof hover>(null)
+  // Persistent "pinned" highlight, toggled by clicking a car's line — stays
+  // applied while hovering elsewhere or not hovering at all, until the user
+  // clicks the car again or hits "Clear highlight". Same pattern as
+  // LapPositionChart's pinnedCars.
+  const [pinnedCars, setPinnedCars] = useState<Set<string>>(new Set())
+  const pinnedCarsRef = useRef<Set<string>>(pinnedCars)
+  useEffect(() => {
+    pinnedCarsRef.current = pinnedCars
+  }, [pinnedCars])
+  const pathsSelRef = useRef<d3.Selection<SVGPathElement, Series, SVGGElement, unknown> | null>(null)
+  const applyPinnedStyling = useCallback((pinned: Set<string>) => {
+    if (pinned.size === 0) {
+      pathsSelRef.current?.attr('opacity', 0.85).attr('stroke-width', 1.6)
+      return
+    }
+    pathsSelRef.current
+      ?.attr('opacity', (d) => (pinned.has(d.car) ? 1 : 0.15))
+      .attr('stroke-width', (d) => (pinned.has(d.car) ? 2.6 : 1.2))
+    pathsSelRef.current?.filter((d) => pinned.has(d.car)).raise()
+  }, [])
 
   const height = expanded ? EXPANDED_HEIGHT : HEIGHT
 
@@ -146,7 +166,6 @@ export function ReplayTrendChart({
     onVisibleCarsChange?.(new Set(visibleSeries.map((s) => s.car)))
   }, [visibleSeries, onVisibleCarsChange])
 
-  const pathsSelRef = useRef<d3.Selection<SVGPathElement, Series, SVGGElement, unknown> | null>(null)
   const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
   const xScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
 
@@ -219,6 +238,7 @@ export function ReplayTrendChart({
       .attr('opacity', 0.85)
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
+    applyPinnedStyling(pinnedCarsRef.current)
 
     const xAxis = d3
       .axisBottom(x)
@@ -283,21 +303,35 @@ export function ReplayTrendChart({
         hoverRef.current = next
         setHover(next)
         const car = nearest.series.car
-        pathsSelRef.current?.attr('opacity', (d) => (d.car === car ? 1 : 0.25)).attr('stroke-width', (d) => (d.car === car ? 2.6 : 1.6))
+        pathsSelRef.current
+          ?.attr('opacity', (d) => (d.car === car ? 1 : pinnedCarsRef.current.has(d.car) ? 0.85 : pinnedCarsRef.current.size > 0 ? 0.15 : 0.25))
+          .attr('stroke-width', (d) => (d.car === car || pinnedCarsRef.current.has(d.car) ? 2.6 : 1.6))
         pathsSelRef.current?.filter((d) => d.car === car).raise()
       })
       .on('mouseleave', () => {
         hoverRef.current = null
         setHover(null)
-        pathsSelRef.current?.attr('opacity', 0.85).attr('stroke-width', 1.6)
+        applyPinnedStyling(pinnedCarsRef.current)
       })
       .on('click', () => {
         const h = hoverRef.current
-        if (!h || !onRequestNoteLink) return
-        onRequestNoteLink(h.car, h.lap)
+        if (!h) return
+        setPinnedCars((prev) => {
+          const next = new Set(prev)
+          if (next.has(h.car)) next.delete(h.car)
+          else next.add(h.car)
+          return next
+        })
+        if (onRequestNoteLink) onRequestNoteLink(h.car, h.lap)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleSeries, width, height, mode, onRequestNoteLink])
+  }, [visibleSeries, width, height, mode, onRequestNoteLink, applyPinnedStyling])
+
+  // Toggling a pin (or clearing all) restyles the existing paths in place —
+  // no need for the expensive rebuild above.
+  useEffect(() => {
+    applyPinnedStyling(pinnedCars)
+  }, [pinnedCars, applyPinnedStyling])
 
   // Cheap per-tick update: just the clip width.
   useEffect(() => {
@@ -337,6 +371,26 @@ export function ReplayTrendChart({
           <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all" />
         </div>
       )}
+      <div className="replay-trend-controls pinned-cars-row">
+        <span className="tooltip-note-hint" style={{ margin: 0 }}>
+          {pinnedCars.size === 0 ? 'Click a car’s line to highlight it' : 'Highlighted:'}
+        </span>
+        {[...pinnedCars].map((car) => (
+          <button
+            key={car}
+            type="button"
+            className="pinned-chip"
+            onClick={() => setPinnedCars((prev) => new Set([...prev].filter((c) => c !== car)))}
+          >
+            #{car} ✕
+          </button>
+        ))}
+        {pinnedCars.size > 0 && (
+          <button type="button" className="pinned-chip pinned-chip-clear" onClick={() => setPinnedCars(new Set())}>
+            Clear highlight
+          </button>
+        )}
+      </div>
       <div className="replay-trend-chart" ref={containerRef}>
         <svg ref={svgRef} />
         {hover && (

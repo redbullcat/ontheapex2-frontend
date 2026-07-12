@@ -131,6 +131,28 @@ export function LapPositionChart({
   // that handler is registered once per chart rebuild (see the effect's
   // dependency list), so it can't close over each mousemove's fresh state.
   const hoverRef = useRef<HoverState | null>(null)
+  // Persistent "pinned" highlight, toggled by clicking a car's line — stays
+  // applied while hovering elsewhere or not hovering at all, until the user
+  // clicks the car again or hits "Clear highlight". Mirrored into a ref for
+  // the same reason as hoverRef: the mousemove/mouseleave handlers are bound
+  // once per chart rebuild and need the latest value without rebuilding.
+  const [pinnedCars, setPinnedCars] = useState<Set<string>>(new Set())
+  const pinnedCarsRef = useRef<Set<string>>(pinnedCars)
+  useEffect(() => {
+    pinnedCarsRef.current = pinnedCars
+  }, [pinnedCars])
+  // Shared by the initial chart build and by the pinned-set-changed effect
+  // below, so pin/unpin never needs a full chart rebuild.
+  const applyPinnedStyling = useCallback((pinned: Set<string>) => {
+    if (pinned.size === 0) {
+      pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
+      return
+    }
+    pathsSelRef.current
+      ?.attr('opacity', (d) => (pinned.has(d.car_number) ? 1 : 0.15))
+      .attr('stroke-width', (d) => (pinned.has(d.car_number) ? 3 : 1.5))
+    pathsSelRef.current?.filter((d) => pinned.has(d.car_number)).raise()
+  }, [])
   const [classSelection, setClassSelection] = useState<ClassSelection>(() => {
     if (!focusCarNumber) return null
     const cls = laps.find((l) => l.car_number === focusCarNumber)?.class
@@ -459,6 +481,7 @@ export function LapPositionChart({
       .attr('opacity', 0.65)
       .attr('d', (d) => line(d.points))
     pathsSelRef.current = paths
+    applyPinnedStyling(pinnedCarsRef.current)
 
     const markerCx = (d: CarSeries) => {
       // A retired/no-more-laps car's marker freezes at its own last known
@@ -634,8 +657,10 @@ export function LapPositionChart({
 
         crosshair.style('display', null).attr('x1', x(clampedLap)).attr('x2', x(clampedLap))
         pathsSelRef.current
-          ?.attr('opacity', (d) => (d.car_number === nearestCar ? 1 : 0.25))
-          .attr('stroke-width', (d) => (d.car_number === nearestCar ? 3 : 2))
+          ?.attr('opacity', (d) =>
+            d.car_number === nearestCar ? 1 : pinnedCarsRef.current.has(d.car_number) ? 0.85 : pinnedCarsRef.current.size > 0 ? 0.15 : 0.25,
+          )
+          .attr('stroke-width', (d) => (d.car_number === nearestCar || pinnedCarsRef.current.has(d.car_number) ? 3 : 2))
         pathsSelRef.current?.filter((d) => d.car_number === nearestCar).raise()
 
         const rect = containerRef.current?.getBoundingClientRect()
@@ -654,16 +679,29 @@ export function LapPositionChart({
       })
       .on('mouseleave', () => {
         crosshair.style('display', 'none')
-        pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
+        applyPinnedStyling(pinnedCarsRef.current)
         hoverRef.current = null
         setHover(null)
       })
       .on('click', () => {
         const h = hoverRef.current
-        if (!h || !onRequestNoteLink) return
-        onRequestNoteLink(h.car, h.lap)
+        if (!h) return
+        setPinnedCars((prev) => {
+          const next = new Set(prev)
+          if (next.has(h.car)) next.delete(h.car)
+          else next.add(h.car)
+          return next
+        })
+        if (onRequestNoteLink) onRequestNoteLink(h.car, h.lap)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink, showGridStart])
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink, showGridStart, applyPinnedStyling])
+
+  // Toggling a pin (or clearing all) restyles the existing paths in place —
+  // no need for the expensive rebuild above, which is why pinnedCars isn't
+  // in that effect's dependency list.
+  useEffect(() => {
+    applyPinnedStyling(pinnedCars)
+  }, [pinnedCars, applyPinnedStyling])
 
   // Cheap per-frame update: just the clip-rect width and marker positions,
   // driven by playback.current — deliberately not touching the dependency
@@ -780,6 +818,28 @@ export function LapPositionChart({
         .position-chart .tooltip strong {
           font-size: 13px;
         }
+        .position-chart .pinned-cars-row {
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .position-chart .pinned-chip {
+          font: inherit;
+          font-size: 12px;
+          border: 1px solid var(--axis);
+          background: var(--surface-1);
+          color: var(--text-secondary);
+          border-radius: 999px;
+          padding: 2px 10px;
+          cursor: pointer;
+        }
+        .position-chart .pinned-chip:hover {
+          color: var(--text-primary);
+          border-color: var(--text-secondary);
+        }
+        .position-chart .pinned-chip-clear {
+          color: var(--text-muted);
+        }
       `}</style>
       {(() => {
         const filterControls = (
@@ -810,6 +870,23 @@ export function LapPositionChart({
         )
         return compactFilters ? <PanelSettingsPopover>{filterControls}</PanelSettingsPopover> : filterControls
       })()}
+      {!focusCarNumber && (
+        <div className="chart-controls pinned-cars-row">
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            {pinnedCars.size === 0 ? 'Click a car’s line to highlight it' : 'Highlighted:'}
+          </span>
+          {[...pinnedCars].map((car) => (
+            <button key={car} className="pinned-chip" onClick={() => setPinnedCars((prev) => new Set([...prev].filter((c) => c !== car)))}>
+              #{car} ✕
+            </button>
+          ))}
+          {pinnedCars.size > 0 && (
+            <button className="pinned-chip pinned-chip-clear" onClick={() => setPinnedCars(new Set())}>
+              Clear highlight
+            </button>
+          )}
+        </div>
+      )}
       <div className="chart-controls">
         <PlaybackControls
           playback={playback}
