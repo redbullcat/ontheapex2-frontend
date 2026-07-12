@@ -36,6 +36,7 @@ import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
 import { TyresPanel } from '../components/TyresPanel'
 import { tyreCode, tyreAgeDisplay } from '../lib/carTyres'
+import { computePitStats, type PitStats } from '../lib/pitStats'
 import { DeletedLapsPanel } from '../components/DeletedLapsPanel'
 import { TyreHistoryChart } from '../components/TyreHistoryChart'
 import { LiveLeadHistoryPanel } from './LiveLeadHistoryPanel'
@@ -112,12 +113,14 @@ export const LIVE_DEFAULT_PANELS: PanelInstance[] = [
 function LiveStandingsRow({
   row,
   lastLap,
+  pitStats,
   onClick,
   onHoverCar,
   onLeaveCar,
 }: {
   row: LiveStanding
   lastLap: LiveLap | undefined
+  pitStats: PitStats | undefined
   onClick: () => void
   onHoverCar: (car: string, e: MouseEvent) => void
   onLeaveCar: () => void
@@ -183,6 +186,8 @@ function LiveStandingsRow({
       )}
       <td className="num best">{formatLapTime(row.best_lap_seconds)}</td>
       <td className={'num last' + colorBadgeClass(row.last_lap_color)}>{formatLapTime(row.last_lap_seconds)}</td>
+      <td className="num">{pitStats?.pits ?? 0}</td>
+      <td className="num">{pitStats?.sincePit ?? '—'}</td>
     </tr>
   )
 }
@@ -216,6 +221,7 @@ function LeaderboardPanel({
   // this car has done so far this session (see lib/carRoster.ts).
   const roster = useMemo(() => buildCarRoster(data.laps), [data.laps])
   const teamByCar = useMemo(() => new Map(data.standings.map((s) => [s.car_number, s.team])), [data.standings])
+  const pitStatsByCar = useMemo(() => computePitStats(data.laps.map((lap, i) => liveLapToLapRead(lap, i))), [data.laps])
   const boardRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ x: number; y: number; car: string } | null>(null)
   // Viewport (clientX/Y), not container-relative — the tooltip is rendered
@@ -257,6 +263,8 @@ function LeaderboardPanel({
               <th>S3</th>
               <th>Best</th>
               <th>Last</th>
+              <th>Pits</th>
+              <th>Since&nbsp;pit</th>
             </tr>
           </thead>
           <tbody>
@@ -265,6 +273,7 @@ function LeaderboardPanel({
                 key={row.car_number}
                 row={row}
                 lastLap={lastLapByCar.get(row.car_number)}
+                pitStats={pitStatsByCar.get(row.car_number)}
                 onClick={() => onRowClick?.(row.car_number)}
                 onHoverCar={handleHoverCar}
                 onLeaveCar={() => setHover(null)}
