@@ -35,7 +35,7 @@ import { BattleZones } from '../components/BattleZones'
 import { RaceNotesPanel } from '../components/RaceNotesPanel'
 import type { PendingNoteLink } from '../lib/raceNotes'
 import { TyresPanel } from '../components/TyresPanel'
-import { tyreSummary } from '../lib/carTyres'
+import { tyreCode, tyreAgeDisplay } from '../lib/carTyres'
 import { DeletedLapsPanel } from '../components/DeletedLapsPanel'
 import { TyreHistoryChart } from '../components/TyreHistoryChart'
 import { LiveLeadHistoryPanel } from './LiveLeadHistoryPanel'
@@ -123,7 +123,8 @@ function LiveStandingsRow({
   onLeaveCar: () => void
 }) {
   const arrow = usePositionArrow(row.position)
-  const tyre = tyreSummary(row)
+  const tyreCompound = tyreCode(row)
+  const tyreAge = tyreAgeDisplay(row)
   return (
     <tr className={row.in_pit ? 'replay-row in-pit clickable' : 'replay-row clickable'} onClick={onClick}>
       <td className="num pos">
@@ -145,8 +146,8 @@ function LiveStandingsRow({
       <td className="al driver">{row.driver_name ?? '—'}</td>
       <td className="al team">{getTeamDisplayName(row.team)}</td>
       <td className="al manufacturer">{row.manufacturer ?? '—'}</td>
-      <td className="al tyre">{tyre.compound ?? '—'}</td>
-      <td className="num tyre-age">{tyre.age ?? '—'}</td>
+      <td className="al tyre">{tyreCompound ?? '—'}</td>
+      <td className="num tyre-age">{tyreAge ?? '—'}</td>
       <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
       <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
       <td className="num">{row.total_laps || ''}</td>
