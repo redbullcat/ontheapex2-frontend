@@ -1,38 +1,10 @@
-// Saira and Saira Condensed, self-hosted via @fontsource rather than a
-// Google Fonts CDN link — works offline and needs no external request at
-// runtime. Each @fontsource package's own index.css only ships the 400
-// (Regular) weight, so every other weight/style needs its own import; the
-// title-recording feature (RecordFinalizeModal) offers the full range each
-// family actually has, so all of them are pulled in here. Saira Condensed
-// has no italic cut on Google Fonts, so only the upright weights exist for
-// it.
-import '@fontsource/saira/100.css'
-import '@fontsource/saira/100-italic.css'
-import '@fontsource/saira/200.css'
-import '@fontsource/saira/200-italic.css'
-import '@fontsource/saira/300.css'
-import '@fontsource/saira/300-italic.css'
-import '@fontsource/saira/400.css'
-import '@fontsource/saira/400-italic.css'
-import '@fontsource/saira/500.css'
-import '@fontsource/saira/500-italic.css'
-import '@fontsource/saira/600.css'
-import '@fontsource/saira/600-italic.css'
-import '@fontsource/saira/700.css'
-import '@fontsource/saira/700-italic.css'
-import '@fontsource/saira/800.css'
-import '@fontsource/saira/800-italic.css'
-import '@fontsource/saira/900.css'
-import '@fontsource/saira/900-italic.css'
-import '@fontsource/saira-condensed/100.css'
-import '@fontsource/saira-condensed/200.css'
-import '@fontsource/saira-condensed/300.css'
-import '@fontsource/saira-condensed/400.css'
-import '@fontsource/saira-condensed/500.css'
-import '@fontsource/saira-condensed/600.css'
-import '@fontsource/saira-condensed/700.css'
-import '@fontsource/saira-condensed/800.css'
-import '@fontsource/saira-condensed/900.css'
+// Saira/Saira Condensed's @font-face CSS (all 27 weight/style files) lives
+// in lib/fontFaces.ts, not here — it's only ever needed by the canvas-only
+// title-recording feature (see ensureTitleFontLoaded below, the only place
+// that actually renders text in these fonts), so it's dynamically imported
+// there instead of being bundled into the app's one global stylesheet that
+// every visitor loads regardless of whether they ever touch that feature.
+//
 // Inter, self-hosted the same way, for chart axis/label text (matches the
 // font used in the manually-themed reference SVG exports embedded on the
 // marketing site — see chartExport.ts, which also references the
@@ -104,9 +76,14 @@ export function titleFontCss(font: TitleFontOptions, size: number = font.size): 
 // Canvas text rendering doesn't trigger @font-face loading the way normal
 // DOM layout does — without this, the very first draw of a given
 // weight/style can silently fall back to the browser default font until
-// the resource happens to finish loading in the background.
+// the resource happens to finish loading in the background. The dynamic
+// import is what actually registers the @font-face rules in the first
+// place (see lib/fontFaces.ts) — deferred to here, the one place this
+// feature is actually exercised, rather than a static import anywhere
+// upstream that every visitor's bundle would carry regardless.
 export async function ensureTitleFontLoaded(font: TitleFontOptions): Promise<void> {
   try {
+    await import('./fontFaces')
     await document.fonts.load(titleFontCss(font, 48))
   } catch {
     // Fall through and let the canvas use whatever's already available —
