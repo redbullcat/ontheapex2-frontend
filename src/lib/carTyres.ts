@@ -64,13 +64,19 @@ export function tyreAgeDisplay(row: TyreFields): string | null {
   return ages.map((a) => (a == null ? '?' : String(a))).join('-')
 }
 
-function hasTyreData(lap: LapRead): boolean {
+export function hasTyreData(lap: LapRead): boolean {
   return (
     lap.tire_fl_compound != null ||
     lap.tire_fr_compound != null ||
     lap.tire_rl_compound != null ||
     lap.tire_rr_compound != null
   )
+}
+
+// "MEDIUM" -> "Medium" — Griiip only ever sends full upper-case compound
+// names; this is purely a display convention, same as compoundLetter above.
+export function compoundDisplayName(compound: string): string {
+  return compound.charAt(0) + compound.slice(1).toLowerCase()
 }
 
 // One row per car: the most recent lap (by lap_number) that actually
