@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { CLASS_VARS, OTHER_VAR, assignClassVars, CLASS_COLOR_CSS_VARS, CLASS_COLOR_CSS_VARS_DARK } from '../lib/classColors'
-import { contrastTextColorForColor } from '../lib/contrastColor'
+import { contrastTextColor } from '../lib/contrastColor'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
@@ -397,28 +397,29 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       .attr('font-size', 8)
       .attr('font-weight', 700)
       .attr('pointer-events', 'none')
-      .attr('fill', (d) => contrastTextColorForColor(strokeColor(d)))
+      .attr('fill', function (_d, i) {
+        const circle = markers.nodes()[i]
+        return circle ? contrastTextColor(circle) : '#000000'
+      })
       .text((d) => d.car_number)
     markerLabelsSelRef.current = markerLabels
 
-    // Direct label: closest car to the reference (smallest gap) per class at
-    // the final lap, plus the reference car itself.
+    // Direct label: every currently-plotted car (respects the car filter,
+    // same as LapPositionChart's own finishing-position labels — a car the
+    // user explicitly selected must get a label even if it isn't its
+    // class's closest-to-reference car) gets its final gap shown here.
     const finalLap = gapByLapAndCar.get(maxLap)
     if (finalLap) {
-      const leaders = [...activeClasses]
-        .map((cls) => {
-          let best: { car: string; gap: number; team: string | null; class: string } | null = null
-          for (const [car, entry] of finalLap) {
-            if (entry.class !== cls) continue
-            if (!best || entry.gap < best.gap) best = { car, gap: entry.gap, team: entry.team, class: entry.class }
-          }
-          return best
+      const finishers = cars
+        .map((car) => {
+          const entry = finalLap.get(car.car_number)
+          return entry ? { car: car.car_number, gap: entry.gap, team: entry.team, class: entry.class } : null
         })
         .filter((e): e is { car: string; gap: number; team: string | null; class: string } => e !== null)
         .sort((a, b) => a.gap - b.gap)
 
       const minGapPx = 14
-      const labelYs = leaders.map((l) => y(l.gap))
+      const labelYs = finishers.map((l) => y(l.gap))
       for (let i = 1; i < labelYs.length; i++) {
         if (labelYs[i] - labelYs[i - 1] < minGapPx) labelYs[i] = labelYs[i - 1] + minGapPx
       }
@@ -430,9 +431,9 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       // hidden mid-playback, shown at the static default/fully-revealed view.
       endLabels.style('display', playback.current < maxLap ? 'none' : 'inline')
 
-      endLabels
-        .selectAll('circle')
-        .data(leaders)
+      const endCircles = endLabels
+        .selectAll<SVGCircleElement, { car: string; gap: number; team: string | null; class: string }>('circle')
+        .data(finishers)
         .join('circle')
         .attr('cx', innerWidth)
         .attr('cy', (_d, i) => labelYs[i])
@@ -444,7 +445,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       // Car number inside the dot, same style as the playback markers.
       endLabels
         .selectAll('.end-label-number')
-        .data(leaders)
+        .data(finishers)
         .join('text')
         .attr('class', 'end-label-number')
         .attr('x', innerWidth)
@@ -454,14 +455,17 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .attr('font-size', 8)
         .attr('font-weight', 700)
         .attr('pointer-events', 'none')
-        .attr('fill', (d) => contrastTextColorForColor(strokeColor(d)))
+        .attr('fill', function (_d, i) {
+          const circle = endCircles.nodes()[i]
+          return circle ? contrastTextColor(circle) : '#000000'
+        })
         .text((d) => d.car)
 
       // Final gap value next to the dot — same spot the lap-position chart
       // puts its "Pn" finishing label.
       endLabels
         .selectAll('.end-label-gap')
-        .data(leaders)
+        .data(finishers)
         .join('text')
         .attr('class', 'end-label-gap')
         .attr('x', innerWidth + 15)
