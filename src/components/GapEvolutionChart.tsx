@@ -64,6 +64,24 @@ function gapAtLap(points: Point[], lap: number): number | null {
   return last.gap
 }
 
+// Pushes/pulls a list of already-sorted-ascending y positions apart just
+// enough to keep minGap between neighbors — a forward (push down) pass
+// then a backward (pull up) pass — so a tight cluster of close finishers
+// ends up centered on its own true positions instead of cascading further
+// and further from them the more items the cluster has (a push-only pass
+// drifts every item after the first collision progressively farther from
+// where its dot actually is).
+function declutter(ys: number[], minGap: number): number[] {
+  const out = [...ys]
+  for (let i = 1; i < out.length; i++) {
+    if (out[i] < out[i - 1] + minGap) out[i] = out[i - 1] + minGap
+  }
+  for (let i = out.length - 2; i >= 0; i--) {
+    if (out[i] > out[i + 1] - minGap) out[i] = out[i + 1] - minGap
+  }
+  return out
+}
+
 export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -364,12 +382,21 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     // the end in favor of the end-labels group below, which nudges
     // overlapping cars apart for legibility — two cars a fraction of a
     // second apart in the standings would otherwise render as one dot.
-    const markers = g
+    // One <g> per car (rather than all circles then all text in two flat
+    // batches) so that when two cars' gaps coincide, the whole later car —
+    // circle and number together — paints on top and fully covers the
+    // earlier one, instead of both numbers rendering interleaved and
+    // unreadable on top of both circles.
+    const markerGroups = g
       .append('g')
       .attr('class', 'playback-markers')
-      .selectAll<SVGCircleElement, CarSeries>('circle')
+      .selectAll<SVGGElement, CarSeries>('g.marker-group')
       .data(cars)
-      .join('circle')
+      .join('g')
+      .attr('class', 'marker-group')
+
+    const markers = markerGroups
+      .append('circle')
       .attr('r', 9)
       .attr('fill', (d) => strokeColor(d))
       .attr('stroke', 'var(--surface-1)')
@@ -382,12 +409,8 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       })
     markersSelRef.current = markers
 
-    const markerLabels = g
-      .append('g')
-      .attr('class', 'playback-marker-labels')
-      .selectAll<SVGTextElement, CarSeries>('text')
-      .data(cars)
-      .join('text')
+    const markerLabels = markerGroups
+      .append('text')
       .style('display', playback.current < maxLap ? 'inline' : 'none')
       .attr('x', x(playback.current))
       .attr('y', (d) => {
@@ -412,24 +435,27 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     // class's closest-to-reference car) gets its final gap shown here.
     const finalLap = gapByLapAndCar.get(maxLap)
     if (finalLap) {
-      const finishers = cars
+      const finishersWithY = cars
         .map((car) => {
           const entry = finalLap.get(car.car_number)
-          return entry ? { car: car.car_number, gap: entry.gap, team: entry.team, class: entry.class } : null
+          return entry
+            ? { car: car.car_number, gap: entry.gap, team: entry.team, class: entry.class, trueY: y(entry.gap) }
+            : null
         })
-        .filter((e): e is { car: string; gap: number; team: string | null; class: string } => e !== null)
-        .sort((a, b) => a.gap - b.gap)
+        .filter((e): e is { car: string; gap: number; team: string | null; class: string; trueY: number } => e !== null)
+        // Ascending trueY (top to bottom) — required for declutter's
+        // forward/backward passes, and also fixes the z-order below: cars
+        // are grouped and appended in this same order, so whichever car
+        // sits lowest on the chart paints last and fully covers any
+        // higher car's dot/number it overlaps, instead of the two dots'
+        // numbers rendering interleaved and unreadable.
+        .sort((a, b) => a.trueY - b.trueY)
 
-      // The dot stays exactly on its trace (trueYs); only the text label
-      // gets nudged apart to stay legible when several cars finish within
-      // a few seconds of each other, connected back to its dot with a
-      // thin leader line whenever the two positions actually differ.
-      const trueYs = finishers.map((l) => y(l.gap))
       const minGapPx = 14
-      const labelYs = [...trueYs]
-      for (let i = 1; i < labelYs.length; i++) {
-        if (labelYs[i] - labelYs[i - 1] < minGapPx) labelYs[i] = labelYs[i - 1] + minGapPx
-      }
+      const labelYs = declutter(
+        finishersWithY.map((f) => f.trueY),
+        minGapPx,
+      )
 
       const endLabels = g.append('g').attr('class', 'end-labels')
       endLabelsGRef.current = endLabels
@@ -438,56 +464,63 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       // hidden mid-playback, shown at the static default/fully-revealed view.
       endLabels.style('display', playback.current < maxLap ? 'none' : 'inline')
 
-      endLabels
-        .selectAll('.end-label-leader')
-        .data(finishers)
-        .join('line')
-        .attr('class', 'end-label-leader')
+      // One group per car — circle, number, leader line, and gap text all
+      // live together so a car's whole label (not just its circle) paints
+      // as one unit in trueY order, and the gap text is grouped with its
+      // own dot rather than laid out as several same-type elements as one
+      // undifferentiated stack.
+      const groups = endLabels
+        .selectAll<SVGGElement, (typeof finishersWithY)[number]>('g.end-label-group')
+        .data(finishersWithY)
+        .join('g')
+        .attr('class', 'end-label-group')
+
+      // The dot stays exactly on its trace (trueY); only the text label
+      // gets nudged apart to stay legible when several cars finish within
+      // a few seconds of each other, connected back to its dot with a
+      // thin leader line whenever the two positions actually differ — and
+      // always drawn above the true position, never below it, so a nudge
+      // reads as "this label belongs to the dot below it" rather than
+      // floating disconnected underneath.
+      groups
+        .append('line')
         .attr('x1', innerWidth + 9)
-        .attr('y1', (_d, i) => trueYs[i])
+        .attr('y1', (d) => d.trueY)
         .attr('x2', innerWidth + 13)
         .attr('y2', (_d, i) => labelYs[i])
         .attr('stroke', 'var(--axis)')
         .attr('stroke-width', 1)
-        .style('display', (_d, i) => (trueYs[i] === labelYs[i] ? 'none' : 'inline'))
+        .style('display', (d, i) => (d.trueY === labelYs[i] ? 'none' : 'inline'))
 
-      const endCircles = endLabels
-        .selectAll<SVGCircleElement, { car: string; gap: number; team: string | null; class: string }>('circle')
-        .data(finishers)
-        .join('circle')
+      const circles = groups
+        .append('circle')
         .attr('cx', innerWidth)
-        .attr('cy', (_d, i) => trueYs[i])
+        .attr('cy', (d) => d.trueY)
         .attr('r', 9)
         .attr('fill', (d) => strokeColor(d))
         .attr('stroke', 'var(--surface-1)')
         .attr('stroke-width', 1.5)
 
       // Car number inside the dot, same style as the playback markers.
-      endLabels
-        .selectAll('.end-label-number')
-        .data(finishers)
-        .join('text')
-        .attr('class', 'end-label-number')
+      groups
+        .append('text')
         .attr('x', innerWidth)
-        .attr('y', (_d, i) => trueYs[i])
+        .attr('y', (d) => d.trueY)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'central')
         .attr('font-size', 8)
         .attr('font-weight', 700)
         .attr('pointer-events', 'none')
         .attr('fill', function (_d, i) {
-          const circle = endCircles.nodes()[i]
+          const circle = circles.nodes()[i]
           return circle ? contrastTextColor(circle) : '#000000'
         })
         .text((d) => d.car)
 
       // Final gap value next to the dot — same spot the lap-position chart
       // puts its "Pn" finishing label.
-      endLabels
-        .selectAll('.end-label-gap')
-        .data(finishers)
-        .join('text')
-        .attr('class', 'end-label-gap')
+      groups
+        .append('text')
         .attr('x', innerWidth + 17)
         .attr('y', (_d, i) => labelYs[i])
         .attr('dominant-baseline', 'central')
