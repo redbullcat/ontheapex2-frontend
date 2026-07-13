@@ -18,7 +18,9 @@ import { useSvgRecorder } from '../hooks/useSvgRecorder'
 import { RecordControls } from './RecordControls'
 import { CollapsibleFilters } from './CollapsibleFilters'
 
-const MARGIN = { top: 16, right: 64, bottom: 32, left: 48 }
+// right is wider than LapPositionChart's — its end labels are just "Pn",
+// this chart's are gap values up to "+123.4s (ref)".
+const MARGIN = { top: 16, right: 100, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 400
 
 interface Point {
@@ -418,8 +420,13 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .filter((e): e is { car: string; gap: number; team: string | null; class: string } => e !== null)
         .sort((a, b) => a.gap - b.gap)
 
+      // The dot stays exactly on its trace (trueYs); only the text label
+      // gets nudged apart to stay legible when several cars finish within
+      // a few seconds of each other, connected back to its dot with a
+      // thin leader line whenever the two positions actually differ.
+      const trueYs = finishers.map((l) => y(l.gap))
       const minGapPx = 14
-      const labelYs = finishers.map((l) => y(l.gap))
+      const labelYs = [...trueYs]
       for (let i = 1; i < labelYs.length; i++) {
         if (labelYs[i] - labelYs[i - 1] < minGapPx) labelYs[i] = labelYs[i - 1] + minGapPx
       }
@@ -431,12 +438,25 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       // hidden mid-playback, shown at the static default/fully-revealed view.
       endLabels.style('display', playback.current < maxLap ? 'none' : 'inline')
 
+      endLabels
+        .selectAll('.end-label-leader')
+        .data(finishers)
+        .join('line')
+        .attr('class', 'end-label-leader')
+        .attr('x1', innerWidth + 9)
+        .attr('y1', (_d, i) => trueYs[i])
+        .attr('x2', innerWidth + 13)
+        .attr('y2', (_d, i) => labelYs[i])
+        .attr('stroke', 'var(--axis)')
+        .attr('stroke-width', 1)
+        .style('display', (_d, i) => (trueYs[i] === labelYs[i] ? 'none' : 'inline'))
+
       const endCircles = endLabels
         .selectAll<SVGCircleElement, { car: string; gap: number; team: string | null; class: string }>('circle')
         .data(finishers)
         .join('circle')
         .attr('cx', innerWidth)
-        .attr('cy', (_d, i) => labelYs[i])
+        .attr('cy', (_d, i) => trueYs[i])
         .attr('r', 9)
         .attr('fill', (d) => strokeColor(d))
         .attr('stroke', 'var(--surface-1)')
@@ -449,7 +469,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .join('text')
         .attr('class', 'end-label-number')
         .attr('x', innerWidth)
-        .attr('y', (_d, i) => labelYs[i])
+        .attr('y', (_d, i) => trueYs[i])
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'central')
         .attr('font-size', 8)
@@ -468,7 +488,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .data(finishers)
         .join('text')
         .attr('class', 'end-label-gap')
-        .attr('x', innerWidth + 15)
+        .attr('x', innerWidth + 17)
         .attr('y', (_d, i) => labelYs[i])
         .attr('dominant-baseline', 'central')
         .attr('fill', 'var(--text-primary)')
