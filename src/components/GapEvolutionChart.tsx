@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { CLASS_VARS, OTHER_VAR, assignClassVars, CLASS_COLOR_CSS_VARS, CLASS_COLOR_CSS_VARS_DARK } from '../lib/classColors'
+import { contrastTextColorForColor } from '../lib/contrastColor'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
@@ -259,6 +260,7 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const yScaleRef = useRef<d3.ScaleLinear<number, number> | null>(null)
   const clipRectRef = useRef<d3.Selection<SVGRectElement, unknown, null, undefined> | null>(null)
   const markersSelRef = useRef<d3.Selection<SVGCircleElement, CarSeries, SVGGElement, unknown> | null>(null)
+  const markerLabelsSelRef = useRef<d3.Selection<SVGTextElement, CarSeries, SVGGElement, unknown> | null>(null)
   const gridlinesGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
   const yAxisGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
   const endLabelsGRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
@@ -355,13 +357,18 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
     pathsSelRef.current = paths
     applyPinnedStyling(pinnedCarsRef.current)
 
+    // Marker dots with the car number inside, same style as
+    // LapPositionChart's playback markers. Hidden once the replay reaches
+    // the end in favor of the end-labels group below, which nudges
+    // overlapping cars apart for legibility — two cars a fraction of a
+    // second apart in the standings would otherwise render as one dot.
     const markers = g
       .append('g')
       .attr('class', 'playback-markers')
       .selectAll<SVGCircleElement, CarSeries>('circle')
       .data(cars)
       .join('circle')
-      .attr('r', 4)
+      .attr('r', 9)
       .attr('fill', (d) => strokeColor(d))
       .attr('stroke', 'var(--surface-1)')
       .attr('stroke-width', 1.5)
@@ -372,6 +379,27 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         return v == null ? -9999 : y(v)
       })
     markersSelRef.current = markers
+
+    const markerLabels = g
+      .append('g')
+      .attr('class', 'playback-marker-labels')
+      .selectAll<SVGTextElement, CarSeries>('text')
+      .data(cars)
+      .join('text')
+      .style('display', playback.current < maxLap ? 'inline' : 'none')
+      .attr('x', x(playback.current))
+      .attr('y', (d) => {
+        const v = gapAtLap(d.points, playback.current)
+        return v == null ? -9999 : y(v)
+      })
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('font-size', 8)
+      .attr('font-weight', 700)
+      .attr('pointer-events', 'none')
+      .attr('fill', (d) => contrastTextColorForColor(strokeColor(d)))
+      .text((d) => d.car_number)
+    markerLabelsSelRef.current = markerLabels
 
     // Direct label: closest car to the reference (smallest gap) per class at
     // the final lap, plus the reference car itself.
@@ -408,22 +436,41 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
         .join('circle')
         .attr('cx', innerWidth)
         .attr('cy', (_d, i) => labelYs[i])
-        .attr('r', 4)
+        .attr('r', 9)
         .attr('fill', (d) => strokeColor(d))
         .attr('stroke', 'var(--surface-1)')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 1.5)
 
+      // Car number inside the dot, same style as the playback markers.
       endLabels
-        .selectAll('text')
+        .selectAll('.end-label-number')
         .data(leaders)
         .join('text')
-        .attr('x', innerWidth + 10)
+        .attr('class', 'end-label-number')
+        .attr('x', innerWidth)
+        .attr('y', (_d, i) => labelYs[i])
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('font-size', 8)
+        .attr('font-weight', 700)
+        .attr('pointer-events', 'none')
+        .attr('fill', (d) => contrastTextColorForColor(strokeColor(d)))
+        .text((d) => d.car)
+
+      // Final gap value next to the dot — same spot the lap-position chart
+      // puts its "Pn" finishing label.
+      endLabels
+        .selectAll('.end-label-gap')
+        .data(leaders)
+        .join('text')
+        .attr('class', 'end-label-gap')
+        .attr('x', innerWidth + 15)
         .attr('y', (_d, i) => labelYs[i])
         .attr('dominant-baseline', 'central')
         .attr('fill', 'var(--text-primary)')
         .attr('font-size', 12)
         .attr('font-weight', 600)
-        .text((d) => `#${d.car}${d.car === referenceCar ? ' (ref)' : ''}`)
+        .text((d) => `${d.gap > 0 ? '+' : ''}${d.gap.toFixed(1)}s${d.car === referenceCar ? ' (ref)' : ''}`)
     }
 
     const xAxis = d3
@@ -601,6 +648,13 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
       ?.style('display', showMarkers ? 'inline' : 'none')
       .attr('cx', x(current))
       .attr('cy', (d) => {
+        const v = gapAtLap(d.points, current)
+        return v == null ? -9999 : y(v)
+      })
+    markerLabelsSelRef.current
+      ?.style('display', showMarkers ? 'inline' : 'none')
+      .attr('x', x(current))
+      .attr('y', (d) => {
         const v = gapAtLap(d.points, current)
         return v == null ? -9999 : y(v)
       })
