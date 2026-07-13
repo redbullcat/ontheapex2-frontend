@@ -17,13 +17,25 @@ const MARGIN = { top: 8, right: 16, bottom: 28, left: 48 }
 const ROW_HEIGHT = 44
 const WHEEL_LABELS: Record<Wheel, string> = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' }
 
-interface TooltipState {
+interface StintTooltip {
+  kind: 'stint'
   x: number
   y: number
   carNumber: string
   wheel: Wheel
   stint: WheelStint
 }
+
+interface PitTooltip {
+  kind: 'pit'
+  x: number
+  y: number
+  carNumber: string
+  lapNumber: number
+  pitSeconds: number
+}
+
+type TooltipState = StintTooltip | PitTooltip
 
 // One lane per wheel (FL/FR/RL/RR), grouped into a row per car, all sharing
 // the same lap-number x-axis — a pit stop that only swaps 1-3 wheels shows
@@ -94,6 +106,24 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
   }, [filteredLaps, carNumbers])
 
   const carsWithData = useMemo(() => carNumbers.filter((c) => wheelStintsByCar.has(c)), [carNumbers, wheelStintsByCar])
+
+  // Confirmed real pit stops, independent of the per-wheel compound/age
+  // signal above — Griiip's tyre-change reporting is unreliable (its
+  // isChanged flag and age-reset both routinely stay silent through a real
+  // stop), but pit_time_seconds comes from crossing-line timestamps, not
+  // the tyre channel, so it still reliably marks that *something* happened
+  // here even when the wheel lanes show no break.
+  const pitStopsByCar = useMemo(() => {
+    const map = new Map<string, { lapNumber: number; pitSeconds: number }[]>()
+    for (const car of carsWithData) {
+      const stops = filteredLaps
+        .filter((l) => l.car_number === car && l.pit_time_seconds != null)
+        .map((l) => ({ lapNumber: l.lap_number, pitSeconds: l.pit_time_seconds! }))
+        .sort((a, b) => a.lapNumber - b.lapNumber)
+      if (stops.length > 0) map.set(car, stops)
+    }
+    return map
+  }, [filteredLaps, carsWithData])
 
   const lapDomain = useMemo((): [number, number] => {
     let min = Infinity
@@ -177,12 +207,30 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
           .on('mousemove', (event: MouseEvent, d) => {
             const rect = containerRef.current?.getBoundingClientRect()
             if (!rect) return
-            setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, carNumber: car, wheel, stint: d })
+            setTooltip({ kind: 'stint', x: event.clientX - rect.left, y: event.clientY - rect.top, carNumber: car, wheel, stint: d })
           })
           .on('mouseleave', () => setTooltip(null))
       })
+
+      const pitStops = pitStopsByCar.get(car) ?? []
+      row
+        .selectAll('.pit-marker')
+        .data(pitStops)
+        .join('line')
+        .attr('class', 'pit-marker')
+        .attr('x1', (d) => x(d.lapNumber + 0.5))
+        .attr('x2', (d) => x(d.lapNumber + 0.5))
+        .attr('y1', 0)
+        .attr('y2', ROW_HEIGHT)
+        .style('cursor', 'pointer')
+        .on('mousemove', (event: MouseEvent, d) => {
+          const rect = containerRef.current?.getBoundingClientRect()
+          if (!rect) return
+          setTooltip({ kind: 'pit', x: event.clientX - rect.left, y: event.clientY - rect.top, carNumber: car, lapNumber: d.lapNumber, pitSeconds: d.pitSeconds })
+        })
+        .on('mouseleave', () => setTooltip(null))
     })
-  }, [carsWithData, wheelStintsByCar, width, innerWidth, innerHeight, lapDomain, height])
+  }, [carsWithData, wheelStintsByCar, pitStopsByCar, width, innerWidth, innerHeight, lapDomain, height])
 
   return (
     <div className="viz-root tyre-history-chart" ref={containerRef}>
@@ -205,8 +253,13 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
         .tyre-history-chart .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
         .tyre-history-chart .legend-item { display: flex; align-items: center; gap: 6px; }
         .tyre-history-chart .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; border: 1px solid var(--axis); }
+        .tyre-history-chart .pit-swatch {
+          width: 0; height: 12px; border-radius: 0; border: none;
+          border-left: 2px dashed var(--text-secondary);
+        }
         .tyre-history-chart .row-label { font-size: 10.5px; font-weight: 700; fill: var(--text-primary); }
         .tyre-history-chart .stint-segment { stroke: var(--axis); stroke-width: 0.75px; }
+        .tyre-history-chart .pit-marker { stroke: var(--text-secondary); stroke-width: 1.5px; stroke-dasharray: 2 2; }
         .tyre-history-chart svg .domain, .tyre-history-chart svg .tick line { stroke: var(--axis); }
         .tyre-history-chart svg .tick text { fill: var(--text-secondary); font-size: 10px; }
         .tyre-history-chart .tooltip {
@@ -244,15 +297,33 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
             <span>{compoundDisplayName(compound)}</span>
           </div>
         ))}
+        <div className="legend-item">
+          <span className="swatch pit-swatch" />
+          <span>Confirmed pit stop</span>
+        </div>
       </div>
+      <p className="hint">
+        Dashed lines mark every confirmed pit stop. The timing feed doesn't always report which tyres were changed at a
+        stop — a solid, unbroken wheel lane through a marker means no change was reported, not necessarily that none happened.
+      </p>
       {carsWithData.length === 0 ? <p className="hint">No tyre history for this selection.</p> : <svg ref={svgRef} />}
-      {tooltip && (
+      {tooltip && tooltip.kind === 'stint' && (
         <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
           <div>
             <strong>#{tooltip.carNumber} — {WHEEL_LABELS[tooltip.wheel]}</strong> — {tooltip.stint.compound ? compoundDisplayName(tooltip.stint.compound) : 'Unknown'}
           </div>
           <div>
             Laps {tooltip.stint.startLap}–{tooltip.stint.endLap} ({tooltip.stint.lapCount} laps)
+          </div>
+        </div>
+      )}
+      {tooltip && tooltip.kind === 'pit' && (
+        <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+          <div>
+            <strong>#{tooltip.carNumber} — Pit stop</strong>
+          </div>
+          <div>
+            Lap {tooltip.lapNumber} &middot; {tooltip.pitSeconds.toFixed(1)}s in pit
           </div>
         </div>
       )}
