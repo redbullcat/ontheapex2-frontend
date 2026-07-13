@@ -4,6 +4,7 @@ import type { LapRead } from '../api/types'
 import { computeCarStints } from '../lib/stints'
 import { isLapValid } from '../lib/lapValidity'
 import { getManufacturerColor } from '../lib/identityColors'
+import { movingAverage } from '../lib/smoothTrend'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -38,12 +39,8 @@ interface ManufacturerSeries {
 }
 
 function smooth(points: { lapInStint: number; avg: number }[]): TrendPoint[] {
-  const half = Math.floor(SMOOTH_WINDOW / 2)
-  return points.map((p, i) => {
-    const window = points.slice(Math.max(0, i - half), Math.min(points.length, i + half + 1))
-    const avg = d3.mean(window, (w) => w.avg) ?? p.avg
-    return { lapInStint: p.lapInStint, lapTime: avg }
-  })
+  const smoothed = movingAverage(points, SMOOTH_WINDOW, (p) => p.avg)
+  return points.map((p, i) => ({ lapInStint: p.lapInStint, lapTime: smoothed[i] }))
 }
 
 function computeSeries(

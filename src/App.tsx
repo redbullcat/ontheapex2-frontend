@@ -19,7 +19,7 @@ import { SessionTypeTabs } from './components/SessionTypeTabs'
 import { bucketFor, type SessionBucket } from './lib/sessionBucket'
 import { parseCombinedSessionId } from './lib/combinedSession'
 import { computeStartingGrid } from './lib/startingGrid'
-import type { SessionSummary } from './api/types'
+import type { LapRead, SessionSummary } from './api/types'
 import { LeadHistoryPanel } from './components/LeadHistoryPanel'
 import { PositionChart } from './components/PositionChart'
 import { LapPositionChart } from './components/LapPositionChart'
@@ -48,9 +48,9 @@ import { LongRunChart } from './components/LongRunChart'
 import { AverageLongRunChart } from './components/AverageLongRunChart'
 import { StintLengthDistribution } from './components/StintLengthDistribution'
 import { LongRunPaceByManufacturer } from './components/LongRunPaceByManufacturer'
-import { TyresPanel } from './components/TyresPanel'
 import { TyreHistoryChart } from './components/TyreHistoryChart'
-import { latestTyresByCar } from './lib/carTyres'
+import { TyreDegradationChart } from './components/TyreDegradationChart'
+import { hasTyreData, compoundDisplayName, tyreSummary } from './lib/carTyres'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -177,30 +177,31 @@ function App() {
     [sessionId, combinedBucket],
   )
 
-  // "Current" tyres per car for this session — the historical app has no
-  // playback clock to scrub, so this is just each car's most recent lap
-  // that actually carries a tyre snapshot (null for CSV imports and any
-  // live session promoted before tyre capture existed). Sorted by car
-  // number rather than race position, since there's no cheap already-
-  // computed running order available outside ResultsTable's own render.
-  const tyreRows = useMemo(() => {
+  // One section per class (skipping the class heading entirely when there's
+  // only one, matching RaceOverview's own per-class subheading convention)
+  // — each with its own tyre-degradation chart per compound that class
+  // actually ran, plus its own tyre-history chart scoped to just that
+  // class's cars.
+  const tyreClassSections = useMemo(() => {
     if (lapsState.status !== 'success') return []
-    const latest = latestTyresByCar(lapsState.data)
-    return [...latest.entries()]
-      .map(([carNumber, lap]) => ({
-        car_number: carNumber,
-        team: lap.team,
-        position: null,
-        tire_fl_compound: lap.tire_fl_compound ?? null,
-        tire_fl_age_laps: lap.tire_fl_age_laps ?? null,
-        tire_fr_compound: lap.tire_fr_compound ?? null,
-        tire_fr_age_laps: lap.tire_fr_age_laps ?? null,
-        tire_rl_compound: lap.tire_rl_compound ?? null,
-        tire_rl_age_laps: lap.tire_rl_age_laps ?? null,
-        tire_rr_compound: lap.tire_rr_compound ?? null,
-        tire_rr_age_laps: lap.tire_rr_age_laps ?? null,
-      }))
-      .sort((a, b) => (parseInt(a.car_number, 10) || 0) - (parseInt(b.car_number, 10) || 0))
+    const byClass = new Map<string, LapRead[]>()
+    for (const lap of lapsState.data) {
+      if (!hasTyreData(lap)) continue
+      const cls = lap.class ?? 'Unknown'
+      const arr = byClass.get(cls)
+      if (arr) arr.push(lap)
+      else byClass.set(cls, [lap])
+    }
+    return [...byClass.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([cls, classLaps]) => {
+        const compounds = new Set<string>()
+        for (const lap of classLaps) {
+          const { compound } = tyreSummary(lap)
+          if (compound && compound !== 'Mixed') compounds.add(compound)
+        }
+        return { cls, laps: classLaps, compounds: [...compounds].sort() }
+      })
   }, [lapsState])
 
   const knownTeams = useMemo(() => {
@@ -729,12 +730,20 @@ function App() {
                   <h2>Tyres</h2>
                   {lapsState.status === 'loading' && <p className="hint">Loading tyre data…</p>}
                   {lapsState.status === 'success' &&
-                    (tyreRows.length > 0 ? (
-                      <>
-                        <TyresPanel rows={tyreRows} />
-                        <h3>Tyre history</h3>
-                        <TyreHistoryChart laps={lapsState.data} />
-                      </>
+                    (tyreClassSections.length > 0 ? (
+                      tyreClassSections.map(({ cls, laps: classLaps, compounds }) => (
+                        <div key={cls}>
+                          {tyreClassSections.length > 1 && <h3 className="race-overview-subheading">{cls}</h3>}
+                          {compounds.map((compound) => (
+                            <div key={compound}>
+                              <h4>Tyre degradation — {compoundDisplayName(compound)}</h4>
+                              <TyreDegradationChart laps={classLaps} compound={compound} />
+                            </div>
+                          ))}
+                          <h4>Tyre history</h4>
+                          <TyreHistoryChart laps={classLaps} />
+                        </div>
+                      ))
                     ) : (
                       <p className="hint">No tyre data for this session.</p>
                     ))}
