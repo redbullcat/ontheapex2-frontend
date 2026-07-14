@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getTeamColor } from '../lib/identityColors'
 import { clearTeamOverride, getTeamOverrides, setTeamOverride } from '../lib/identityOverrides'
-import { clearLapDeleted, listDeletedLaps } from '../lib/lapOverrides'
+import { clearLapDeleted, listDeletedLaps, loadAllDeletedLaps } from '../lib/lapOverrides'
+import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
+import { addPenalty, listPenalties, loadAllPenalties, removePenalty } from '../lib/penalties'
+import { usePenaltiesVersion } from '../hooks/usePenaltiesVersion'
 
 function formatDeletedAt(iso: string): string {
   try {
@@ -11,12 +14,48 @@ function formatDeletedAt(iso: string): string {
   }
 }
 
-export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: () => void }) {
+export function SettingsPanel({
+  teams,
+  onClose,
+  currentSessionId,
+}: {
+  teams: string[]
+  onClose: () => void
+  // Pre-fills the penalty form's Session ID field with whichever session is
+  // currently open — the common case (recording a penalty just reviewed
+  // for the race in view) shouldn't require looking up its numeric id.
+  currentSessionId?: number
+}) {
   const [overrides, setOverrides] = useState(() => getTeamOverrides())
   const [addTeam, setAddTeam] = useState('')
   const [addColor, setAddColor] = useState('#2a78d6')
   const [addName, setAddName] = useState('')
-  const [deletedLaps, setDeletedLaps] = useState(() => listDeletedLaps())
+  const deletedLapsVersion = useDeletedLapsVersion()
+  const deletedLaps = useMemo(
+    () => listDeletedLaps(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deletedLapsVersion],
+  )
+  const penaltiesVersion = usePenaltiesVersion()
+  const penalties = useMemo(
+    () => listPenalties(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [penaltiesVersion],
+  )
+  const [penaltySession, setPenaltySession] = useState(() => (currentSessionId != null ? String(currentSessionId) : ''))
+  const [penaltyCar, setPenaltyCar] = useState('')
+  const [penaltyText, setPenaltyText] = useState('')
+  const [penaltyReason, setPenaltyReason] = useState('')
+  const [penaltyDocUrl, setPenaltyDocUrl] = useState('')
+
+  useEffect(() => {
+    // Both stores only ever hold whatever's been fetched already (per
+    // session, as each session is viewed) — a full load here is what makes
+    // this review list actually span every session, not just the one open
+    // when Settings happens to be opened.
+    loadAllDeletedLaps()
+    loadAllPenalties()
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -41,7 +80,23 @@ export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: ()
 
   const restoreLap = (sessionId: number, carNumber: string, lapNumber: number) => {
     clearLapDeleted(sessionId, carNumber, lapNumber)
-    setDeletedLaps(listDeletedLaps())
+  }
+
+  const canAddPenalty = penaltySession.trim() !== '' && !Number.isNaN(Number(penaltySession)) && penaltyCar.trim() !== '' && penaltyText.trim() !== '' && penaltyReason.trim() !== ''
+
+  const submitPenalty = () => {
+    if (!canAddPenalty) return
+    addPenalty({
+      session_id: Number(penaltySession),
+      car_number: penaltyCar.trim(),
+      penalty: penaltyText.trim(),
+      reason: penaltyReason.trim(),
+      stewards_doc_url: penaltyDocUrl.trim() || null,
+    })
+    setPenaltyCar('')
+    setPenaltyText('')
+    setPenaltyReason('')
+    setPenaltyDocUrl('')
   }
 
   return (
@@ -158,6 +213,74 @@ export function SettingsPanel({ teams, onClose }: { teams: string[]; onClose: ()
             ))}
           </div>
         )}
+
+        <h3 className="settings-section-head">Penalties</h3>
+        <p className="hint">
+          Post-session steward decisions — time penalties, drive-throughs, disqualification, etc. Recorded here for
+          review/audit; visible wherever the car appears (e.g. the Results table).
+        </p>
+        {penalties.length === 0 ? (
+          <p className="hint">No penalties recorded yet.</p>
+        ) : (
+          <div className="settings-list">
+            {penalties.map((p) => (
+              <div className="settings-row settings-row-deleted-lap" key={p.id}>
+                <div className="settings-row-team">
+                  <span className="settings-row-original">
+                    Session {p.session_id} — #{p.car_number} — {p.penalty}
+                  </span>
+                  <span className="settings-deleted-lap-reason">
+                    {p.reason} <span className="settings-deleted-lap-date">({formatDeletedAt(p.created_at)})</span>
+                  </span>
+                  {p.stewards_doc_url && (
+                    <a href={p.stewards_doc_url} target="_blank" rel="noopener noreferrer">
+                      Stewards document
+                    </a>
+                  )}
+                </div>
+                <button type="button" className="entity-filter-reset" onClick={() => removePenalty(p.id)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="settings-add">
+          <span className="field-label">Add a penalty</span>
+          <div className="settings-row">
+            <input
+              type="number"
+              placeholder="Session ID"
+              value={penaltySession}
+              onChange={(e) => setPenaltySession(e.target.value)}
+              style={{ width: 90 }}
+            />
+            <input type="text" placeholder="Car #" value={penaltyCar} onChange={(e) => setPenaltyCar(e.target.value)} style={{ width: 70 }} />
+            <input
+              type="text"
+              placeholder="Penalty (e.g. 5 second time penalty)"
+              value={penaltyText}
+              onChange={(e) => setPenaltyText(e.target.value)}
+            />
+          </div>
+          <div className="settings-row">
+            <input
+              type="text"
+              placeholder="Reason"
+              value={penaltyReason}
+              onChange={(e) => setPenaltyReason(e.target.value)}
+            />
+            <input
+              type="url"
+              placeholder="Stewards document URL (optional)"
+              value={penaltyDocUrl}
+              onChange={(e) => setPenaltyDocUrl(e.target.value)}
+            />
+            <button type="button" className="chart-export-trigger" disabled={!canAddPenalty} onClick={submitPenalty}>
+              Add
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -12,6 +12,9 @@ import {
 } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { useDeletedLapsVersion } from './hooks/useDeletedLapsVersion'
+import { usePenaltiesVersion } from './hooks/usePenaltiesVersion'
+import { ensureDeletedLapsLoaded } from './lib/lapOverrides'
+import { ensurePenaltiesLoaded, listPenalties } from './lib/penalties'
 import { useDocumentTitle } from './hooks/useDocumentTitle'
 import { Sidebar, type Theme } from './components/Sidebar'
 import { useLiveSessions } from './live/useLiveSessions'
@@ -188,6 +191,31 @@ function App() {
     sessionId && !combinedBucket ? () => getWeather(Number(sessionId)) : null,
     [sessionId, combinedBucket],
   )
+  const penaltiesVersion = usePenaltiesVersion()
+  // Penalties for whichever single session is in view — read from the
+  // in-memory cache (see lib/penalties.ts) rather than a separate fetch,
+  // since ensurePenaltiesLoaded below already keeps it populated.
+  const sessionPenalties = useMemo(
+    () => (sessionId && !combinedBucket ? listPenalties().filter((p) => p.session_id === Number(sessionId)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionId, combinedBucket, penaltiesVersion],
+  )
+
+  // Populate the deleted-laps/penalties in-memory caches for whichever
+  // session(s) are actually in view, so the synchronous per-lap/per-car
+  // lookups those tables and charts make (isLapDeleted, penaltiesFor) have
+  // data — both stores fetch lazily per session id the first time it's seen.
+  useEffect(() => {
+    if (combinedBucket) {
+      for (const s of sessionsByBucket[combinedBucket]) {
+        ensureDeletedLapsLoaded(s.id)
+        ensurePenaltiesLoaded(s.id)
+      }
+    } else if (sessionId) {
+      ensureDeletedLapsLoaded(Number(sessionId))
+      ensurePenaltiesLoaded(Number(sessionId))
+    }
+  }, [sessionId, combinedBucket, sessionsByBucket])
 
   // One section per class (skipping the class heading entirely when there's
   // only one, matching RaceOverview's own per-class subheading convention)
@@ -441,7 +469,7 @@ function App() {
                     {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
-                        <ResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} />
+                        <ResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} penalties={sessionPenalties} />
                       ) : (
                         <p className="hint">No results for this session.</p>
                       ))}
@@ -467,7 +495,7 @@ function App() {
                     {lapsState.status === 'loading' && <p className="hint">Loading results…</p>}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
-                        <SessionResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} />
+                        <SessionResultsTable laps={lapsState.data} onSelectCar={setSelectedCarDetail} penalties={sessionPenalties} />
                       ) : (
                         <p className="hint">No results for this session.</p>
                       ))}
@@ -726,7 +754,11 @@ function App() {
                       {stintsState.status === 'success' &&
                         lapsState.status === 'success' &&
                         (stintsState.data.length > 0 ? (
-                          <DriverHistoryChart stints={stintsState.data} laps={lapsState.data} />
+                          <DriverHistoryChart
+                            stints={stintsState.data}
+                            laps={lapsState.data}
+                            isRaceSession={sessionSection === 'race'}
+                          />
                         ) : (
                           <p className="hint">No stint data for this session.</p>
                         ))}
@@ -831,7 +863,11 @@ function App() {
         </main>
       </div>
       {settingsOpen && (
-        <SettingsPanel teams={knownTeams} onClose={() => setSettingsOpen(false)} />
+        <SettingsPanel
+          teams={knownTeams}
+          onClose={() => setSettingsOpen(false)}
+          currentSessionId={sessionId && !combinedBucket ? Number(sessionId) : undefined}
+        />
       )}
       {selectedCarDetail && lapsState.status === 'success' && (
         <div className="replay-root car-detail-modal-scope">

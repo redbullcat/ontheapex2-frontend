@@ -45,12 +45,22 @@ function SectionLabel({ children, kind, onAdd }: { children: string; kind: strin
 // unmodified; PaceChart/LapPositionChart gained small opt-in props
 // (hideCarFilter / focusCarNumber+rankBy) so this panel can feed them
 // pre-filtered/focused data without duplicating either chart.
+export interface StintContext {
+  drivers: string
+  startLap: number
+  endLap: number
+  fastestSeconds: number | null
+  avgSeconds: number | null
+  placesGainedLost: number | null
+}
+
 export function CarDetailModal({
   carNumber,
   allLaps,
   isRaceSession,
   onClose,
   onAddToDashboard,
+  stintContext,
 }: {
   carNumber: string
   allLaps: LapRead[]
@@ -60,6 +70,11 @@ export function CarDetailModal({
   // dashboard panel for this car — omit to use the modal as a plain
   // quick-glance popup with no dashboard behind it.
   onAddToDashboard?: (panelKind: string) => void
+  // Set when opened from a specific stint (DriverHistoryChart's Gantt
+  // blocks) rather than a car-wide "Results" row — the modal still shows
+  // the whole car's history below (same as Live's car detail), but this
+  // banner calls out which stint was actually clicked.
+  stintContext?: StintContext
 }) {
   const carLaps = useMemo(
     () => allLaps.filter((l) => l.car_number === carNumber).sort((a, b) => a.lap_number - b.lap_number),
@@ -97,6 +112,24 @@ export function CarDetailModal({
             ✕ Close
           </button>
         </div>
+
+        {stintContext && (
+          <p className="stint-context-banner">
+            Stint: <strong>{stintContext.drivers}</strong> — Laps {stintContext.startLap}–{stintContext.endLap} · Fastest{' '}
+            {formatLapTime(stintContext.fastestSeconds)} · Avg {formatLapTime(stintContext.avgSeconds)}
+            {stintContext.placesGainedLost != null && (
+              <>
+                {' '}
+                · Places{' '}
+                {stintContext.placesGainedLost === 0
+                  ? '±0'
+                  : stintContext.placesGainedLost > 0
+                    ? `+${stintContext.placesGainedLost}`
+                    : stintContext.placesGainedLost}
+              </>
+            )}
+          </p>
+        )}
 
         <div className="stat-row">
           <div className="stat-tile">

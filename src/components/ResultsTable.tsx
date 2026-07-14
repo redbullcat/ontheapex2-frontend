@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { LapRead } from '../api/types'
+import type { LapRead, PenaltyRead } from '../api/types'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
@@ -134,7 +134,18 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
   })
 }
 
-export function ResultsTable({ laps, onSelectCar }: { laps: LapRead[]; onSelectCar?: (carNumber: string) => void }) {
+export function ResultsTable({
+  laps,
+  onSelectCar,
+  penalties = [],
+}: {
+  laps: LapRead[]
+  onSelectCar?: (carNumber: string) => void
+  // Post-session steward decisions (see lib/penalties.ts) — shown as a
+  // small badge next to the car's position so a penalised finish doesn't
+  // look unexplained next to its raw lap/time classification.
+  penalties?: PenaltyRead[]
+}) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; carLaps: FlaggableLap[]; initialLapNumber: number } | null>(
     null,
@@ -158,6 +169,16 @@ export function ResultsTable({ laps, onSelectCar }: { laps: LapRead[]; onSelectC
     [laps, activeClasses, deletedLapsVersion],
   )
   const showClassColumn = classSelection === null || classSelection.size > 1
+
+  const penaltiesByCar = useMemo(() => {
+    const m = new Map<string, PenaltyRead[]>()
+    for (const p of penalties) {
+      const arr = m.get(p.car_number)
+      if (arr) arr.push(p)
+      else m.set(p.car_number, [p])
+    }
+    return m
+  }, [penalties])
 
   return (
     <div className="results-table">
@@ -197,6 +218,16 @@ export function ResultsTable({ laps, onSelectCar }: { laps: LapRead[]; onSelectC
                     ) : (
                       `#${row.car_number}`
                     )}
+                    {(penaltiesByCar.get(row.car_number) ?? []).map((p) => (
+                      <span className="penalty-badge" key={p.id} title={`${p.penalty} — ${p.reason}`}>
+                        ⚠ {p.penalty}
+                        {p.stewards_doc_url && (
+                          <a href={p.stewards_doc_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                            doc
+                          </a>
+                        )}
+                      </span>
+                    ))}
                   </td>
                   <td>
                     <span className="team-key" style={{ background: getTeamColor(row.team) }} />

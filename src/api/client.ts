@@ -1,10 +1,12 @@
 import type {
+  DeletedLapRead,
   EventSummary,
   HourlyPositions,
   LapRead,
   LeadStint,
   LiveSessionSummary,
   LiveState,
+  PenaltyRead,
   Series,
   SessionSummary,
   Stint,
@@ -19,6 +21,25 @@ async function get<T>(path: string): Promise<T> {
     throw new Error(`${path} -> ${res.status} ${res.statusText}`)
   }
   return res.json() as Promise<T>
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`${path} -> ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
+async function del(path: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error(`${path} -> ${res.status} ${res.statusText}`)
+  }
 }
 
 export function getSeries(): Promise<Series[]> {
@@ -86,4 +107,43 @@ export function getLiveState(griiipSessionId: number): Promise<LiveState> {
 // sidebar's "Live now" entry point so it doesn't need a hand-typed sid.
 export function getLiveSessions(): Promise<LiveSessionSummary[]> {
   return get<LiveSessionSummary[]>('/api/live/sessions')
+}
+
+// Omitting sessionId lists every penalty across every session — powers the
+// Settings panel's review list.
+export function getPenalties(sessionId?: number): Promise<PenaltyRead[]> {
+  return get<PenaltyRead[]>(sessionId != null ? `/api/penalties?session_id=${sessionId}` : '/api/penalties')
+}
+
+export function createPenalty(payload: {
+  session_id: number
+  car_number: string
+  penalty: string
+  reason: string
+  stewards_doc_url?: string | null
+}): Promise<PenaltyRead> {
+  return post<PenaltyRead>('/api/penalties', payload)
+}
+
+export function deletePenalty(penaltyId: number): Promise<void> {
+  return del(`/api/penalties/${penaltyId}`)
+}
+
+// Omitting sessionId lists every flagged lap across every session — powers
+// the Settings panel's review list.
+export function getDeletedLaps(sessionId?: number): Promise<DeletedLapRead[]> {
+  return get<DeletedLapRead[]>(sessionId != null ? `/api/deleted-laps?session_id=${sessionId}` : '/api/deleted-laps')
+}
+
+export function flagDeletedLap(payload: {
+  session_id: number
+  car_number: string
+  lap_number: number
+  reason: string
+}): Promise<DeletedLapRead> {
+  return post<DeletedLapRead>('/api/deleted-laps', payload)
+}
+
+export function restoreDeletedLap(deletedLapId: number): Promise<void> {
+  return del(`/api/deleted-laps/${deletedLapId}`)
 }

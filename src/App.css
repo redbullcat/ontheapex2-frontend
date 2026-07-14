@@ -480,6 +480,23 @@ header h1 {
   color: #d64545;
 }
 
+.penalty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b5820a;
+  cursor: help;
+  white-space: nowrap;
+}
+.penalty-badge a {
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
 .lap-flag-backdrop {
   position: fixed;
   inset: 0;
@@ -642,6 +659,23 @@ header h1 {
 }
 .chart-title-primary:hover {
   filter: brightness(1.1);
+}
+
+.stint-context-banner {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface-2, #f3f2ee);
+  color: var(--text-secondary, #52514e);
+  font-size: 13px;
+}
+@media (prefers-color-scheme: dark) {
+  .stint-context-banner {
+    background: #23231f;
+  }
+}
+:root[data-theme='dark'] .stint-context-banner {
+  background: #23231f;
 }
 
 .stat-row {
