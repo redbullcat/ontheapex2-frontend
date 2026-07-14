@@ -43,6 +43,7 @@ import { TyreHistoryChart } from '../components/TyreHistoryChart'
 import { LiveLeadHistoryPanel } from './LiveLeadHistoryPanel'
 import { LiveHourlyResultsPanel } from './LiveHourlyResultsPanel'
 import { LivePitHistoryPanel } from './LivePitHistoryPanel'
+import { DRIVER_CATEGORY_COLORS, driverCategoryColor, driverCategoryLabel } from '../lib/driverCategoryColors'
 
 export interface LivePanelContext {
   data: LiveState
@@ -109,23 +110,15 @@ export const LIVE_DEFAULT_PANELS: PanelInstance[] = [
   { id: 'race-log', kind: 'race-log' },
 ]
 
-// Real-world FIA driver-category colors (Platinum/Gold/Silver/Bronze), the
-// same convention broadcast graphics and Griiip's own official WEC live
-// timing use — not an arbitrary categorical palette, so no reason to pick
-// different hues. Label is always in the title tooltip too, not color-alone.
-const DRIVER_CATEGORY_COLORS: Record<string, string> = {
-  platinum: '#e5e4e2',
-  gold: '#d4af37',
-  silver: '#a8a9ad',
-  bronze: '#b08d57',
-}
-
 function DriverCategoryDot({ category }: { category: string | null }) {
-  if (!category) return null
-  const color = DRIVER_CATEGORY_COLORS[category.toLowerCase()]
-  if (!color) return null
-  const label = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase()
-  return <span className="driver-category-dot" title={`FIA driver category: ${label}`} style={{ background: color }} />
+  if (!category || !DRIVER_CATEGORY_COLORS[category.toLowerCase()]) return null
+  return (
+    <span
+      className="driver-category-dot"
+      title={`FIA driver category: ${driverCategoryLabel(category)}`}
+      style={{ background: driverCategoryColor(category) }}
+    />
+  )
 }
 
 // Its own component (not inlined in the .map() below) so usePositionArrow —

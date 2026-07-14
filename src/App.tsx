@@ -8,6 +8,7 @@ import {
   getSeries,
   getSessions,
   getStints,
+  getWeather,
 } from './api/client'
 import { useAsync } from './hooks/useAsync'
 import { useDeletedLapsVersion } from './hooks/useDeletedLapsVersion'
@@ -51,6 +52,8 @@ import { LongRunPaceByManufacturer } from './components/LongRunPaceByManufacture
 import { TyreHistoryChart } from './components/TyreHistoryChart'
 import { TyreDegradationChart } from './components/TyreDegradationChart'
 import { hasTyreData, compoundDisplayName, tyreSummary } from './lib/carTyres'
+import { WeatherChart } from './components/WeatherChart'
+import { DriverRatingPaceChart } from './components/DriverRatingPaceChart'
 import './App.css'
 
 const RACE_TABS: Tab[] = [
@@ -66,6 +69,7 @@ const RACE_TABS: Tab[] = [
   { id: 'headtohead', label: 'Head to Head' },
   { id: 'tyres', label: 'Tyres' },
   { id: 'story', label: 'Story' },
+  { id: 'weather', label: 'Weather' },
 ]
 
 // Practice/Qualifying sessions have no fixed finishing order, so the
@@ -83,6 +87,7 @@ const NON_RACE_TABS: Tab[] = [
   { id: 'pit', label: 'Pit Stops' },
   { id: 'stints', label: 'Stints' },
   { id: 'tyres', label: 'Tyres' },
+  { id: 'weather', label: 'Weather' },
 ]
 
 // Selections round-trip through the URL (mirroring the Streamlit app's
@@ -174,6 +179,13 @@ function App() {
   // fetch is skipped entirely in combined mode.
   const stintsState = useAsync(
     sessionId && !combinedBucket ? () => getStints(Number(sessionId)) : null,
+    [sessionId, combinedBucket],
+  )
+  // Weather is a session-wide time series, not per-lap — same
+  // single-session-only reasoning as stints above (a combined view has no
+  // single coherent elapsed-time axis to plot it against).
+  const weatherState = useAsync(
+    sessionId && !combinedBucket ? () => getWeather(Number(sessionId)) : null,
     [sessionId, combinedBucket],
   )
 
@@ -558,6 +570,29 @@ function App() {
                         <p className="hint">No lap data for this session.</p>
                       ))}
                   </section>
+
+                  <section className="chart-section">
+                    <h2>Driver pace by FIA rating</h2>
+                    {combinedBucket ? (
+                      <p className="hint">
+                        This chart is built from driver stints, which reset each session — pick a single session
+                        above to use this chart.
+                      </p>
+                    ) : (
+                      <>
+                        {(lapsState.status === 'loading' || stintsState.status === 'loading') && (
+                          <p className="hint">Loading pace data…</p>
+                        )}
+                        {lapsState.status === 'success' &&
+                          stintsState.status === 'success' &&
+                          (lapsState.data.length > 0 && stintsState.data.length > 0 ? (
+                            <DriverRatingPaceChart laps={lapsState.data} stints={stintsState.data} />
+                          ) : (
+                            <p className="hint">No lap data for this session.</p>
+                          ))}
+                      </>
+                    )}
+                  </section>
                 </>
               )}
 
@@ -760,6 +795,33 @@ function App() {
                     ) : (
                       <p className="hint">No lap data for this session.</p>
                     ))}
+                </section>
+              )}
+
+              {activeTab === 'weather' && (
+                <section className="chart-section">
+                  <h2>Weather</h2>
+                  {combinedBucket ? (
+                    <p className="hint">
+                      Weather is a single session's own time series — pick a single session above to use this chart.
+                    </p>
+                  ) : (
+                    <>
+                      {weatherState.status === 'loading' && <p className="hint">Loading weather data…</p>}
+                      {weatherState.status === 'error' && (
+                        <p className="error">Failed to load weather data: {weatherState.error}</p>
+                      )}
+                      {weatherState.status === 'success' &&
+                        (weatherState.data.length > 0 ? (
+                          <WeatherChart readings={weatherState.data} />
+                        ) : (
+                          <p className="hint">
+                            No weather data for this session — only available for sessions captured via the live
+                            timing feed.
+                          </p>
+                        ))}
+                    </>
+                  )}
                 </section>
               )}
                 </>

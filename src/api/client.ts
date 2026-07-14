@@ -8,6 +8,7 @@ import type {
   Series,
   SessionSummary,
   Stint,
+  WeatherReading,
 } from './types'
 
 const BASE_URL = 'https://ontheapex-api.fly.dev'
@@ -58,6 +59,10 @@ export async function getLaps(sessionId: number): Promise<LapRead[]> {
 
 export function getStints(sessionId: number): Promise<Stint[]> {
   return get<Stint[]>(`/api/sessions/${sessionId}/stints`)
+}
+
+export function getWeather(sessionId: number): Promise<WeatherReading[]> {
+  return get<WeatherReading[]>(`/api/sessions/${sessionId}/weather`)
 }
 
 // "Combine all Practice sessions" (etc) fetches every session's laps in

@@ -78,6 +78,9 @@ export interface LapRead {
   hour: string | null
   top_speed: number | null
   driver_name: string | null
+  // FIA driver category (Platinum/Gold/Silver/Bronze) — live/promoted
+  // sessions only, null for CSV imports (predate this entirely).
+  driver_category?: string | null
   pit_time: string | null
   pit_time_seconds: number | null
   class: string | null
@@ -304,4 +307,21 @@ export interface Stint {
   lap_count: number
   avg_lap_seconds: number | null
   best_lap_seconds: number | null
+}
+
+// Empty for every CSV-imported historical session (predates this entirely)
+// and for any live-promoted session recorded before weather history was
+// added — a normal "no data" state, not an error (see app/api/v1/endpoints/
+// sessions.py's weather endpoint).
+export interface WeatherReading {
+  elapsed_seconds: number | null
+  air_temperature: number | null
+  track_temperature: number | null
+  humidity: number | null
+  wind_speed_kph: number | null
+  wind_direction_code: string | null
+  // Unconfirmed Griiip field name — see app/live/state.py's
+  // _extract_weather_reading.
+  pressure: number | null
+  sky: string | null
 }
