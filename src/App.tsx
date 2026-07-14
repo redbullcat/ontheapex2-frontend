@@ -40,6 +40,8 @@ import { PaceConsistencyChart } from './components/PaceConsistencyChart'
 import { TopSpeedChart } from './components/TopSpeedChart'
 import { PitTimeChart } from './components/PitTimeChart'
 import { PitStopAverageChart } from './components/PitStopAverageChart'
+import { PitRoundsChart } from './components/PitRoundsChart'
+import { PitCumulativeChart } from './components/PitCumulativeChart'
 import { DriverConsistencyChart } from './components/DriverConsistencyChart'
 import { HeadToHeadChart } from './components/HeadToHeadChart'
 import { DriveTimeChart } from './components/DriveTimeChart'
@@ -730,6 +732,30 @@ function App() {
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
                         <PitStopAverageChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Pit stops by round</h2>
+                    <p className="hint">Each panel is one round of stops (every car's 1st, 2nd, 3rd, ... pit visit), ordered by which car stopped earliest.</p>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PitRoundsChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Cumulative time in the pits</h2>
+                    <p className="hint">Total pit time lost per car, stacked by round — texture identifies which stop, color identifies the team.</p>
+                    {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PitCumulativeChart laps={lapsState.data} />
                       ) : (
                         <p className="hint">No lap data for this session.</p>
                       ))}

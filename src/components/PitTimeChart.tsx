@@ -26,6 +26,10 @@ export interface PitStop {
   manufacturer: string | null
   lap: number
   lossSeconds: number
+  // 1-indexed ordinal of this stop within the car's own sequence of pit
+  // stops (its 1st stop, 2nd stop, ...) — the practical stand-in for
+  // "round of stops" since cars don't all pit on the same lap.
+  round: number
 }
 
 interface CarPitStats {
@@ -60,6 +64,7 @@ export function computePitStops(laps: LapRead[], activeClasses: Set<string>): Pi
     // combined multi-session view must never pair an in-lap from one
     // session with a same-numbered lap from another.
     const byLapNumber = new Map(sorted.map((r) => [`${r.session_id}:${r.lap_number}`, r]))
+    let round = 0
     for (const row of sorted) {
       if (row.crossing_finish_line_in_pit !== 'B') continue
       if (row.lap_time_seconds == null) continue
@@ -75,7 +80,8 @@ export function computePitStops(laps: LapRead[], activeClasses: Set<string>): Pi
       if (!isGreen(row.flag_at_fl) || !isGreen(outLap.flag_at_fl)) continue
       if (row.lap_time_seconds > greenMedian * 3 || outLap.lap_time_seconds > greenMedian * 3) continue
       const lossSeconds = row.lap_time_seconds + outLap.lap_time_seconds - 2 * greenMedian
-      stops.push({ car, team: row.team, manufacturer: row.manufacturer, lap: row.lap_number, lossSeconds })
+      round += 1
+      stops.push({ car, team: row.team, manufacturer: row.manufacturer, lap: row.lap_number, lossSeconds, round })
     }
   }
   return stops
