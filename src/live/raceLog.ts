@@ -12,6 +12,7 @@ export const RACE_LOG_TYPE_LABELS: Record<RaceLogType, string> = {
   PitIn: 'Pit in',
   PitOut: 'Pit out',
   WeatherUpdate: 'Weather',
+  TyreChange: 'Tyre change',
 }
 
 export function formatRaceLogEntry(entry: RaceLogEntry): string {
@@ -30,6 +31,8 @@ export function formatRaceLogEntry(entry: RaceLogEntry): string {
       return `#${entry.carNumber} — pit out${entry.totalTimeInPitMillis != null ? ` (${(entry.totalTimeInPitMillis / 1000).toFixed(1)}s in pit)` : ''}`
     case 'WeatherUpdate':
       return 'Weather update'
+    case 'TyreChange':
+      return `#${entry.carNumber} — tyre change (${entry.text ?? '?'}, lap ${entry.lapNumber})`
     default:
       return entry.type
   }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { RaceLogEntry, RaceLogType } from '../api/types'
 import { RACE_LOG_TYPE_LABELS, formatRaceLogEntry } from './raceLog'
 
-const ALL_LOG_TYPES: RaceLogType[] = ['RCMessage', 'RaceFlag', 'DriverSwap', 'FastestLap', 'PitIn', 'PitOut']
+const ALL_LOG_TYPES: RaceLogType[] = ['RCMessage', 'RaceFlag', 'DriverSwap', 'FastestLap', 'PitIn', 'PitOut', 'TyreChange']
 
 function defaultFormatTimestamp(entry: RaceLogEntry): string {
   return new Date(entry.ts).toLocaleTimeString()

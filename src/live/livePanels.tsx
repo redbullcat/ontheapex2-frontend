@@ -12,6 +12,7 @@ import { LiveFastestLapsPanel } from './LiveFastestLapsPanel'
 import { ReplayTrendChart } from '../replay/ReplayTrendChart'
 import { useLiveTrendData } from './liveTrendData'
 import { liveLapToLapRead } from '../lib/liveLapAdapter'
+import { tyreChangeEvents } from '../lib/tyreChangeEvents'
 import { PaceChart } from '../components/PaceChart'
 import { PitTimeChart } from '../components/PitTimeChart'
 import { StintLengthDistribution } from '../components/StintLengthDistribution'
@@ -108,6 +109,25 @@ export const LIVE_DEFAULT_PANELS: PanelInstance[] = [
   { id: 'race-log', kind: 'race-log' },
 ]
 
+// Real-world FIA driver-category colors (Platinum/Gold/Silver/Bronze), the
+// same convention broadcast graphics and Griiip's own official WEC live
+// timing use — not an arbitrary categorical palette, so no reason to pick
+// different hues. Label is always in the title tooltip too, not color-alone.
+const DRIVER_CATEGORY_COLORS: Record<string, string> = {
+  platinum: '#e5e4e2',
+  gold: '#d4af37',
+  silver: '#a8a9ad',
+  bronze: '#b08d57',
+}
+
+function DriverCategoryDot({ category }: { category: string | null }) {
+  if (!category) return null
+  const color = DRIVER_CATEGORY_COLORS[category.toLowerCase()]
+  if (!color) return null
+  const label = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase()
+  return <span className="driver-category-dot" title={`FIA driver category: ${label}`} style={{ background: color }} />
+}
+
 // Its own component (not inlined in the .map() below) so usePositionArrow —
 // a per-row hook — has a stable identity per car via the key, rather than
 // being called inside a loop callback where hook order isn't guaranteed
@@ -148,7 +168,10 @@ function LiveStandingsRow({
         <span className="car-num">#{row.car_number}</span>
         {row.taken_chequered_flag && <span title="Taken the chequered flag">🏁</span>}
       </td>
-      <td className="al driver">{row.driver_name ?? '—'}</td>
+      <td className="al driver">
+        <DriverCategoryDot category={row.driver_category} />
+        {row.driver_name ?? '—'}
+      </td>
       <td className="al team">{getTeamDisplayName(row.team)}</td>
       <td className="al manufacturer">{row.manufacturer ?? '—'}</td>
       <td className="al tyre">{tyreCompound ?? '—'}</td>
@@ -156,6 +179,8 @@ function LiveStandingsRow({
       <td className="num vft">{row.vft_percent != null ? `${Math.round(row.vft_percent)}%` : '—'}</td>
       <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
       <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
+      <td className="num class-gap">{formatGap(row.class_gap_to_first_seconds, row.class_gap_to_first_laps)}</td>
+      <td className="num class-interval">{formatGap(row.class_gap_to_next_seconds, row.class_gap_to_next_laps)}</td>
       <td className="num">{row.total_laps || ''}</td>
       {row.in_pit ? (
         <td className="num s-merged" colSpan={3}>
@@ -261,6 +286,8 @@ function LeaderboardPanel({
               <th title="Virtual Energy Tank — Hypercar/LMGT3 only">VFT</th>
               <th>Gap</th>
               <th>Int</th>
+              <th title="Gap to class leader">C.Gap</th>
+              <th title="Interval to car ahead in class">C.Int</th>
               <th>Lap</th>
               <th>S1</th>
               <th>S2</th>
@@ -370,8 +397,19 @@ export function renderLivePanel(
   switch (panel.kind) {
     case 'leaderboard':
       return <LeaderboardPanel data={data} onRowClick={onRowClick} compactFilters={compactFilters} />
-    case 'race-log':
-      return <RaceLogPanel entries={data.race_log} />
+    case 'race-log': {
+      // Griiip's own race-log channel has no discrete tyre-change event
+      // (see app/live/state.py's module docstring) — synthesized
+      // client-side from wheel-stint boundaries instead, same idea as
+      // Replay's raceLogSynth.ts. data.race_log already arrives
+      // most-recent-first (see LiveSessionState.race_log_as_list); merge
+      // the synthesized entries into that same order rather than just
+      // appending them, or they'd only ever show up past the panel's
+      // 60-row cutoff.
+      const tyreEntries = tyreChangeEvents(data.laps.map((lap, i) => liveLapToLapRead(lap, i)))
+      const mergedLog = [...data.race_log, ...tyreEntries].sort((a, b) => b.elapsedTimeMillis - a.elapsedTimeMillis)
+      return <RaceLogPanel entries={mergedLog} />
+    }
     case 'fastest-laps':
       return <LiveFastestLapsPanel laps={data.laps} standings={data.standings} />
     case 'pace':
