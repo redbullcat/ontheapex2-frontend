@@ -49,6 +49,15 @@ function fieldFor(groupBy: GroupBy): (lap: LapRead) => string | null {
   return (l) => l.manufacturer
 }
 
+// Team names arrive with inconsistent casing across cars/sessions (e.g.
+// "AF Corse" vs "AF CORSE") — grouping on the raw string splits one team
+// into two rows with different (incomplete) lap subsets. Normalize only for
+// team grouping; car numbers and driver/manufacturer names don't have this
+// problem in practice.
+function groupKey(groupBy: GroupBy, raw: string): string {
+  return groupBy === 'team' ? raw.trim().toLowerCase() : raw
+}
+
 function colorFor(groupBy: GroupBy, key: string, carTeam: Map<string, string | null>): string {
   if (groupBy === 'team') return getTeamColor(key)
   if (groupBy === 'car') return getTeamColor(carTeam.get(key))
@@ -68,6 +77,11 @@ function buildGroups(
   const field = fieldFor(groupBy)
   const carTeam = new Map<string, string | null>()
   const byGroup = new Map<string, number[]>()
+  // First-seen raw (original-cased) value for each normalized group key —
+  // used for the display label and color lookup, so a team override
+  // (keyed by the exact raw string) and the on-screen name still show
+  // sensible casing instead of the lowercased grouping key.
+  const representativeByKey = new Map<string, string>()
   for (const lap of laps) {
     if (lap.lap_time_seconds == null) continue
     if (!isLapValid(lap)) continue
@@ -76,8 +90,10 @@ function buildGroups(
     if (groupBy === 'driver' && driverSelection && lap.driver_name && !driverSelection.has(lap.driver_name)) continue
     if (lap.lap_number < lapRange[0] || lap.lap_number > lapRange[1]) continue
     if (!carTeam.has(lap.car_number)) carTeam.set(lap.car_number, lap.team)
-    const key = field(lap)
-    if (!key) continue
+    const raw = field(lap)
+    if (!raw) continue
+    const key = groupKey(groupBy, raw)
+    if (!representativeByKey.has(key)) representativeByKey.set(key, raw)
     const arr = byGroup.get(key)
     if (arr) arr.push(lap.lap_time_seconds)
     else byGroup.set(key, [lap.lap_time_seconds])
@@ -85,6 +101,7 @@ function buildGroups(
 
   const groups: GroupStats[] = []
   for (const [key, times] of byGroup) {
+    const raw = representativeByKey.get(key)!
     const sortedAll = [...times].sort((a, b) => a - b)
     // Top-N% fastest-laps filter: keep the N% quickest laps in this group,
     // ported from filter_top_percent in the Streamlit reference. 0% is a
@@ -94,8 +111,8 @@ function buildGroups(
     const sorted = sortedAll.slice(0, keepCount)
     groups.push({
       key,
-      label: groupBy === 'team' ? getTeamDisplayName(key) : key,
-      color: colorFor(groupBy, key, carTeam),
+      label: groupBy === 'team' ? getTeamDisplayName(raw) : raw,
+      color: colorFor(groupBy, raw, carTeam),
       laps: sorted,
       mean: d3.mean(sorted) ?? 0,
       min: sorted[0],
