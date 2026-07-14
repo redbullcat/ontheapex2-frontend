@@ -3,6 +3,16 @@
 // — since anywhere this is needed, all we actually have is CSS's own
 // resolved color string, not structured r/g/b values.
 export function contrastTextColorForColor(color: string): string {
+  const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (hexMatch) {
+    const hex = hexMatch[1]
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+    const r = parseInt(full.slice(0, 2), 16)
+    const g = parseInt(full.slice(2, 4), 16)
+    const b = parseInt(full.slice(4, 6), 16)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 150 ? '#000000' : '#ffffff'
+  }
   const channels = color.match(/[\d.]+/g)
   if (!channels || channels.length < 3) return '#000000'
   const [r, g, b] = channels.map(Number)

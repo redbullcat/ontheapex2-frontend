@@ -11,6 +11,7 @@ import { CollapsibleFilters } from './CollapsibleFilters'
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { resolveEntitySelection } from '../lib/entitySelection'
+import { contrastTextColorForColor } from '../lib/contrastColor'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -19,10 +20,11 @@ const ROW_GAP = 8
 
 // Six visually distinct hatch styles, cycled per round so a 7th+ round
 // round-trips back to "+" — round identity stays legible even though the
-// underlying fill (team color) repeats. Each is drawn as thin white
-// strokes with mix-blend-mode: overlay, which darkens light fills and
-// lightens dark ones, so the texture reads on every team color rather
-// than needing a matching stroke color per bar.
+// underlying fill (team color) repeats. Drawn as plain solid strokes (no
+// mix-blend-mode: that renders fine in-app but isn't reliably honored by
+// Figma's SVG importer, which flattened these to solid color blocks) —
+// each round gets both a white- and a black-stroke pattern variant, and
+// the bar picks whichever contrasts with its own team color.
 type TextureKind = 'plus' | 'diag' | 'horiz' | 'diagBack' | 'cross' | 'dot'
 const TEXTURE_CYCLE: TextureKind[] = ['plus', 'diag', 'horiz', 'diagBack', 'cross', 'dot']
 const TEXTURE_GLYPH: Record<TextureKind, string> = {
@@ -39,12 +41,20 @@ function textureForRound(round: number): TextureKind {
   return TEXTURE_CYCLE[(round - 1) % TEXTURE_CYCLE.length]
 }
 
-function renderPatternContent(sel: d3.Selection<SVGPatternElement, unknown, null, undefined>, kind: TextureKind) {
-  const lines = sel.append('g').attr('style', 'mix-blend-mode: overlay')
-  const stroke = '#ffffff'
+function renderPatternContent(
+  sel: d3.Selection<SVGPatternElement, unknown, null, undefined>,
+  kind: TextureKind,
+  stroke: string,
+) {
+  const lines = sel.append('g')
   const half = TILE / 2
   const line = () =>
-    lines.append('line').attr('stroke', stroke).attr('stroke-width', 1.1).attr('stroke-linecap', 'square')
+    lines
+      .append('line')
+      .attr('stroke', stroke)
+      .attr('stroke-width', 1.1)
+      .attr('stroke-linecap', 'square')
+      .attr('stroke-opacity', 0.55)
   switch (kind) {
     case 'plus':
       line().attr('x1', half).attr('y1', 0).attr('x2', half).attr('y2', TILE)
@@ -65,9 +75,19 @@ function renderPatternContent(sel: d3.Selection<SVGPatternElement, unknown, null
       line().attr('x1', 0).attr('y1', TILE).attr('x2', TILE).attr('y2', 0)
       break
     case 'dot':
-      lines.append('circle').attr('cx', half).attr('cy', half).attr('r', 1.3).attr('fill', stroke)
+      lines
+        .append('circle')
+        .attr('cx', half)
+        .attr('cy', half)
+        .attr('r', 1.3)
+        .attr('fill', stroke)
+        .attr('fill-opacity', 0.55)
       break
   }
+}
+
+function patternId(round: number, stroke: '#ffffff' | '#000000'): string {
+  return `pit-cumulative-tex-${round}-${stroke === '#ffffff' ? 'light' : 'dark'}`
 }
 
 function formatSeconds(s: number): string {
@@ -162,13 +182,15 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
 
     const defs = svg.append('defs')
     for (let round = 1; round <= Math.max(1, maxRound); round++) {
-      const pattern = defs
-        .append('pattern')
-        .attr('id', `pit-cumulative-tex-${round}`)
-        .attr('width', TILE)
-        .attr('height', TILE)
-        .attr('patternUnits', 'userSpaceOnUse')
-      renderPatternContent(pattern, textureForRound(round))
+      for (const stroke of ['#ffffff', '#000000'] as const) {
+        const pattern = defs
+          .append('pattern')
+          .attr('id', patternId(round, stroke))
+          .attr('width', TILE)
+          .attr('height', TILE)
+          .attr('patternUnits', 'userSpaceOnUse')
+        renderPatternContent(pattern, textureForRound(round), stroke)
+      }
     }
 
     const x = d3.scaleLinear().domain([0, (d3.max(carTotals, (d) => d.total) ?? 1) * 1.08]).range([0, innerWidth])
@@ -210,25 +232,27 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
       const row = d3.select(this)
       for (const seg of d.segments) {
         const w = Math.max(0, x(cursor + Math.max(0, seg.lossSeconds)) - x(cursor))
+        const teamColor = getTeamColor(seg.team)
         row
           .append('rect')
           .attr('x', x(cursor))
           .attr('y', 0)
           .attr('width', w)
           .attr('height', ROW_HEIGHT)
-          .attr('fill', getTeamColor(seg.team))
+          .attr('fill', teamColor)
           .append('title')
           .text(
             `#${seg.car} — stop ${seg.round} (lap ${seg.lap}): ${formatSeconds(seg.lossSeconds)}${seg.vftAtPit != null ? ` — VFT ${seg.vftAtPit.toFixed(0)}%` : ''}`,
           )
         if (w > 0) {
+          const stroke = contrastTextColorForColor(teamColor) as '#ffffff' | '#000000'
           row
             .append('rect')
             .attr('x', x(cursor))
             .attr('y', 0)
             .attr('width', w)
             .attr('height', ROW_HEIGHT)
-            .attr('fill', `url(#pit-cumulative-tex-${seg.round})`)
+            .attr('fill', `url(#${patternId(seg.round, stroke)})`)
             .attr('pointer-events', 'none')
         }
         cursor += Math.max(0, seg.lossSeconds)
