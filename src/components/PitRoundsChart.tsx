@@ -132,6 +132,7 @@ function RoundPanel({ round, stops }: { round: number; stops: PitStop[] }) {
 
 export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [selectedRound, setSelectedRound] = useState<number | null>(null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -155,6 +156,12 @@ export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
     }
     return [...byRound.entries()].sort(([a], [b]) => a - b)
   }, [stops])
+
+  // Reset to the first round whenever the round list changes shape (e.g. a
+  // class filter removes the currently-selected round entirely).
+  const roundNumbers = useMemo(() => rounds.map(([round]) => round), [rounds])
+  const activeRound = selectedRound != null && roundNumbers.includes(selectedRound) ? selectedRound : (roundNumbers[0] ?? null)
+  const activeRoundStops = rounds.find(([round]) => round === activeRound)?.[1] ?? []
 
   return (
     <div className="viz-root pit-time-chart">
@@ -197,8 +204,8 @@ export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
           position: relative;
           background: var(--surface-1);
         }
-        .pit-round-panel + .pit-round-panel {
-          margin-top: 20px;
+        .pit-round-tabs {
+          margin-bottom: 8px;
         }
       `}</style>
       <CollapsibleFilters>
@@ -209,7 +216,23 @@ export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
       {rounds.length === 0 ? (
         <p className="hint">No pit stop data for this selection.</p>
       ) : (
-        rounds.map(([round, roundStops]) => <RoundPanel key={round} round={round} stops={roundStops} />)
+        <>
+          <div className="color-mode-toggle pit-round-tabs" role="tablist" aria-label="Pit stop round">
+            {roundNumbers.map((round) => (
+              <button
+                key={round}
+                type="button"
+                role="tab"
+                aria-selected={round === activeRound}
+                className={round === activeRound ? 'active' : ''}
+                onClick={() => setSelectedRound(round)}
+              >
+                Stop {round}
+              </button>
+            ))}
+          </div>
+          {activeRound != null && <RoundPanel round={activeRound} stops={activeRoundStops} />}
+        </>
       )}
     </div>
   )
