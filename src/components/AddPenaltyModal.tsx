@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { PenaltyConsequence } from '../api/types'
 import { addPenalty } from '../lib/penalties'
 
 // Records a post-session steward decision against a specific car — same
@@ -6,6 +7,10 @@ import { addPenalty } from '../lib/penalties'
 // Results row instead of requiring the session id/car number to be typed
 // by hand in Settings (which is still where existing penalties are
 // reviewed/removed).
+//
+// `consequence` is what actually feeds ResultsTable/SessionResultsTable's
+// classification math — 'penalty'/'reason' below are just the human-
+// readable label/badge text, which don't by themselves change anything.
 export function AddPenaltyModal({
   sessionId,
   carNumber,
@@ -18,9 +23,15 @@ export function AddPenaltyModal({
   const [penalty, setPenalty] = useState('')
   const [reason, setReason] = useState('')
   const [docUrl, setDocUrl] = useState('')
+  const [consequence, setConsequence] = useState<PenaltyConsequence>('none')
+  const [timePenaltySeconds, setTimePenaltySeconds] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const canSave = penalty.trim() !== '' && reason.trim() !== '' && !saving
+  const canSave =
+    penalty.trim() !== '' &&
+    reason.trim() !== '' &&
+    !saving &&
+    (consequence !== 'time' || (timePenaltySeconds.trim() !== '' && Number(timePenaltySeconds) > 0))
 
   async function handleSave() {
     if (!canSave) return
@@ -31,6 +42,8 @@ export function AddPenaltyModal({
       penalty: penalty.trim(),
       reason: reason.trim(),
       stewards_doc_url: docUrl.trim() || null,
+      consequence,
+      time_penalty_seconds: consequence === 'time' ? Number(timePenaltySeconds) : null,
     })
     onClose()
   }
@@ -67,6 +80,32 @@ export function AddPenaltyModal({
           Stewards document URL (optional)
           <input type="url" value={docUrl} onChange={(e) => setDocUrl(e.target.value)} placeholder="https://…" />
         </label>
+        <label className="lap-flag-field">
+          Consequence
+          <select value={consequence} onChange={(e) => setConsequence(e.target.value as PenaltyConsequence)}>
+            <option value="none">No automatic effect (informational only)</option>
+            <option value="time">Time penalty — add seconds to total race time</option>
+            <option value="dsq">Disqualification — removed from classification</option>
+          </select>
+        </label>
+        {consequence === 'time' && (
+          <label className="lap-flag-field">
+            Seconds to add
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={timePenaltySeconds}
+              onChange={(e) => setTimePenaltySeconds(e.target.value)}
+              placeholder="5"
+            />
+          </label>
+        )}
+        <p className="hint">
+          {consequence === 'none' && 'This penalty is recorded and shown as a badge, but the Results table stays unchanged.'}
+          {consequence === 'time' && 'Added to this car’s classification time — its position and gaps in the Results table will update.'}
+          {consequence === 'dsq' && 'This car will be removed from the Results table’s classification and listed separately as disqualified.'}
+        </p>
         <div className="lap-flag-actions">
           <div className="lap-flag-actions-right">
             <button type="button" onClick={onClose}>
