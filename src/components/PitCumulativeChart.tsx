@@ -23,12 +23,15 @@ const ROW_GAP = 8
 // underlying fill (team color) repeats. Each bar's stroke is whichever of
 // black/white contrasts with its own team color.
 //
-// Drawn as literal repeated <line>/<circle> elements clipped to the
-// segment's rect, not an SVG <pattern> fill — patterns (and, separately,
-// mix-blend-mode) both render fine in-browser but Figma's SVG importer
-// doesn't reliably support either, and flattens them to solid color
-// blocks on import. Plain shapes + a <clipPath> are the safe subset any
-// SVG-import tool actually handles.
+// Drawn as a single tiled <path> (one moveto/lineto pair per tile,
+// concatenated) clipped to the segment's rect, not an SVG <pattern> fill —
+// patterns (and, separately, mix-blend-mode) both render fine in-browser
+// but Figma's SVG importer doesn't reliably support either, and flattens
+// them to solid color blocks on import. A plain path + <clipPath> is the
+// safe subset any SVG-import tool actually handles. Earlier this was one
+// <line> element per tile-stroke, which produced megabyte-plus exports for
+// a handful of cars — collapsing every stroke into one path's `d` string
+// keeps the same visual density at a fraction of the DOM/file size.
 type TextureKind = 'plus' | 'diag' | 'horiz' | 'diagBack' | 'cross' | 'dot'
 const TEXTURE_CYCLE: TextureKind[] = ['plus', 'diag', 'horiz', 'diagBack', 'cross', 'dot']
 const TEXTURE_GLYPH: Record<TextureKind, string> = {
@@ -45,48 +48,47 @@ function textureForRound(round: number): TextureKind {
   return TEXTURE_CYCLE[(round - 1) % TEXTURE_CYCLE.length]
 }
 
-function drawTile(g: d3.Selection<SVGGElement, unknown, null, undefined>, tx: number, ty: number, kind: TextureKind, stroke: string) {
+// Builds the tiled texture as path segments (moveto/lineto pairs, one tile's
+// worth of strokes appended per iteration) plus a separate list of dot
+// centers for the one pattern kind that isn't stroke-based.
+function buildTexture(x0: number, w: number, h: number, kind: TextureKind): { path: string; dots: [number, number][] } {
   const half = TILE / 2
-  const line = (x1: number, y1: number, x2: number, y2: number) =>
-    g
-      .append('line')
-      .attr('x1', tx + x1)
-      .attr('y1', ty + y1)
-      .attr('x2', tx + x2)
-      .attr('y2', ty + y2)
-      .attr('stroke', stroke)
-      .attr('stroke-width', 1.1)
-      .attr('stroke-linecap', 'square')
-      .attr('stroke-opacity', 0.55)
-  switch (kind) {
-    case 'plus':
-      line(half, 0, half, TILE)
-      line(0, half, TILE, half)
-      break
-    case 'diag':
-      line(0, TILE, TILE, 0)
-      break
-    case 'horiz':
-      line(0, TILE * 0.3, TILE, TILE * 0.3)
-      line(0, TILE * 0.75, TILE, TILE * 0.75)
-      break
-    case 'diagBack':
-      line(0, 0, TILE, TILE)
-      break
-    case 'cross':
-      line(0, 0, TILE, TILE)
-      line(0, TILE, TILE, 0)
-      break
-    case 'dot':
-      g
-        .append('circle')
-        .attr('cx', tx + half)
-        .attr('cy', ty + half)
-        .attr('r', 1.3)
-        .attr('fill', stroke)
-        .attr('fill-opacity', 0.55)
-      break
+  const cols = Math.ceil(w / TILE) + 1
+  const rows = Math.ceil(h / TILE) + 1
+  const segments: string[] = []
+  const dots: [number, number][] = []
+  for (let cx = 0; cx < cols; cx++) {
+    for (let cy = 0; cy < rows; cy++) {
+      const tx = x0 + cx * TILE
+      const ty = cy * TILE
+      const seg = (x1: number, y1: number, x2: number, y2: number) =>
+        segments.push(`M${tx + x1},${ty + y1}L${tx + x2},${ty + y2}`)
+      switch (kind) {
+        case 'plus':
+          seg(half, 0, half, TILE)
+          seg(0, half, TILE, half)
+          break
+        case 'diag':
+          seg(0, TILE, TILE, 0)
+          break
+        case 'horiz':
+          seg(0, TILE * 0.3, TILE, TILE * 0.3)
+          seg(0, TILE * 0.75, TILE, TILE * 0.75)
+          break
+        case 'diagBack':
+          seg(0, 0, TILE, TILE)
+          break
+        case 'cross':
+          seg(0, 0, TILE, TILE)
+          seg(0, TILE, TILE, 0)
+          break
+        case 'dot':
+          dots.push([tx + half, ty + half])
+          break
+      }
+    }
   }
+  return { path: segments.join(''), dots }
 }
 
 // Tiles `kind` across [x0, x0+w) x [0, h), clipped to that exact rect so
@@ -103,12 +105,12 @@ function appendTiledTexture(
 ) {
   defs.append('clipPath').attr('id', clipId).append('rect').attr('x', x0).attr('y', 0).attr('width', w).attr('height', h)
   const g = row.append('g').attr('clip-path', `url(#${clipId})`).attr('pointer-events', 'none')
-  const cols = Math.ceil(w / TILE) + 1
-  const rows = Math.ceil(h / TILE) + 1
-  for (let cx = 0; cx < cols; cx++) {
-    for (let cy = 0; cy < rows; cy++) {
-      drawTile(g, x0 + cx * TILE, cy * TILE, kind, stroke)
-    }
+  const { path, dots } = buildTexture(x0, w, h, kind)
+  if (path) {
+    g.append('path').attr('d', path).attr('fill', 'none').attr('stroke', stroke).attr('stroke-width', 1.1).attr('stroke-linecap', 'square').attr('stroke-opacity', 0.55)
+  }
+  for (const [cx, cy] of dots) {
+    g.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 1.3).attr('fill', stroke).attr('fill-opacity', 0.55)
   }
 }
 
