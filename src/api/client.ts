@@ -6,6 +6,7 @@ import type {
   LeadStint,
   LiveSessionSummary,
   LiveState,
+  PenaltyConsequence,
   PenaltyRead,
   Series,
   SessionSummary,
@@ -121,6 +122,8 @@ export function createPenalty(payload: {
   penalty: string
   reason: string
   stewards_doc_url?: string | null
+  consequence?: PenaltyConsequence
+  time_penalty_seconds?: number | null
 }): Promise<PenaltyRead> {
   return post<PenaltyRead>('/api/penalties', payload)
 }

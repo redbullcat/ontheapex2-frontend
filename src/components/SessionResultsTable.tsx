@@ -11,8 +11,9 @@ import { isLapValid } from '../lib/lapValidity'
 import { dedupeNamesCaseInsensitive } from '../lib/dedupeNames'
 
 interface SessionResultRow {
-  position: number
-  classPosition: number
+  position: number | null
+  disqualified: boolean
+  classPosition: number | null
   car_number: string
   class: string
   team: string | null
@@ -44,7 +45,8 @@ function formatLapTime(seconds: number): string {
 // table) doesn't apply — ranking by each car's fastest lap is the
 // meaningful "results" for these session types, mirroring
 // practice_fastest_laps_table.py.
-function buildResults(laps: LapRead[], activeClasses: Set<string>): SessionResultRow[] {
+function buildResults(laps: LapRead[], activeClasses: Set<string>, penalties: PenaltyRead[]): SessionResultRow[] {
+  const dsqCars = new Set(penalties.filter((p) => p.consequence === 'dsq').map((p) => p.car_number))
   const filtered = laps.filter((l) => activeClasses.has(l.class ?? 'Unknown'))
   if (filtered.length === 0) return []
 
@@ -91,24 +93,34 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): SessionResul
     lapsCompletedByCar.set(car, new Set(rows.map((r) => r.lap_number)).size)
   }
 
-  const classPositions = new Map<string, number>()
+  // A dsq-consequence penalty removes the car from classification entirely
+  // — still listed, just unranked, at the bottom of the table.
+  const classified = fastestByCar.filter((f) => !dsqCars.has(f.lap.car_number))
+  const disqualified = fastestByCar.filter((f) => dsqCars.has(f.lap.car_number))
+
   const classCounters = new Map<string, number>()
+  const leaderTime = classified[0]?.lap.lap_time_seconds!
 
-  const leaderTime = fastestByCar[0].lap.lap_time_seconds!
-
-  return fastestByCar.map(({ lap, deletedReasons, timedLaps }, i) => {
+  function buildRow({ lap, deletedReasons, timedLaps }: (typeof fastestByCar)[number], i: number): SessionResultRow {
+    const disqualifiedRow = dsqCars.has(lap.car_number)
     const cls = lap.class ?? 'Unknown'
-    const nextClassPos = (classCounters.get(cls) ?? 0) + 1
-    classCounters.set(cls, nextClassPos)
-    classPositions.set(lap.car_number, nextClassPos)
+    let classPosition: number | null = null
+    if (!disqualifiedRow) {
+      classPosition = (classCounters.get(cls) ?? 0) + 1
+      classCounters.set(cls, classPosition)
+    }
 
-    const gap = i === 0 ? '—' : `+${(lap.lap_time_seconds! - leaderTime).toFixed(3)}s`
-    const interval =
-      i === 0 ? '—' : `+${(lap.lap_time_seconds! - fastestByCar[i - 1].lap.lap_time_seconds!).toFixed(3)}s`
+    let gap = '—'
+    let interval = '—'
+    if (!disqualifiedRow) {
+      gap = i === 0 ? '—' : `+${(lap.lap_time_seconds! - leaderTime).toFixed(3)}s`
+      interval = i === 0 ? '—' : `+${(lap.lap_time_seconds! - classified[i - 1].lap.lap_time_seconds!).toFixed(3)}s`
+    }
 
     return {
-      position: i + 1,
-      classPosition: nextClassPos,
+      position: disqualifiedRow ? null : i + 1,
+      disqualified: disqualifiedRow,
+      classPosition,
       car_number: lap.car_number,
       class: cls,
       team: lap.team,
@@ -122,7 +134,9 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): SessionResul
       deletedReasons,
       timedLaps,
     }
-  })
+  }
+
+  return [...classified.map(buildRow), ...disqualified.map(buildRow)]
 }
 
 export function SessionResultsTable({
@@ -153,9 +167,9 @@ export function SessionResultsTable({
   )
 
   const rows = useMemo(
-    () => buildResults(laps, activeClasses),
+    () => buildResults(laps, activeClasses, penalties),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [laps, activeClasses, deletedLapsVersion],
+    [laps, activeClasses, deletedLapsVersion, penalties],
   )
   const showClassColumn = classSelection === null || classSelection.size > 1
 
@@ -197,9 +211,9 @@ export function SessionResultsTable({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.car_number}>
-                  <td>{row.position}</td>
-                  {showClassColumn && <td>{row.classPosition}</td>}
+                <tr key={row.car_number} className={row.disqualified ? 'results-row-dsq' : undefined}>
+                  <td>{row.disqualified ? 'DSQ' : row.position}</td>
+                  {showClassColumn && <td>{row.disqualified ? '—' : row.classPosition}</td>}
                   <td>
                     {onSelectCar ? (
                       <button type="button" className="car-number-link" onClick={() => onSelectCar(row.car_number)}>

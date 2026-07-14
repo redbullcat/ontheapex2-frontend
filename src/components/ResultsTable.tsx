@@ -11,7 +11,7 @@ import { isLapValid } from '../lib/lapValidity'
 import { dedupeNamesCaseInsensitive } from '../lib/dedupeNames'
 
 interface ResultsRow {
-  position: number
+  position: number | null
   car_number: string
   class: string
   team: string | null
@@ -25,6 +25,7 @@ interface ResultsRow {
   pits: number
   sessionId: number | null
   timedLaps: FlaggableLap[]
+  disqualified: boolean
 }
 
 function formatLapTime(seconds: number): string {
@@ -33,7 +34,7 @@ function formatLapTime(seconds: number): string {
   return `${m}:${s.toFixed(3).padStart(6, '0')}`
 }
 
-function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[] {
+function buildResults(laps: LapRead[], activeClasses: Set<string>, penalties: PenaltyRead[]): ResultsRow[] {
   const filtered = laps.filter(
     (l) => l.elapsed_seconds != null && l.lap_number != null && activeClasses.has(l.class ?? 'Unknown'),
   )
@@ -46,17 +47,39 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
     else byCar.set(lap.car_number, [lap])
   }
 
-  // Final classification: most laps completed, ties broken by earliest elapsed time.
-  const lastLaps: LapRead[] = []
+  // A time-consequence penalty adds seconds to the car's classification
+  // time (affecting its sort position and every gap/interval computed off
+  // it); a dsq-consequence penalty removes it from classification
+  // entirely — it's still listed, just unranked, at the bottom of the table.
+  const timePenaltySecondsByCar = new Map<string, number>()
+  const dsqCars = new Set<string>()
+  for (const p of penalties) {
+    if (p.consequence === 'time' && p.time_penalty_seconds) {
+      timePenaltySecondsByCar.set(p.car_number, (timePenaltySecondsByCar.get(p.car_number) ?? 0) + p.time_penalty_seconds)
+    } else if (p.consequence === 'dsq') {
+      dsqCars.add(p.car_number)
+    }
+  }
+  function effectiveElapsed(lap: LapRead): number {
+    return lap.elapsed_seconds! + (timePenaltySecondsByCar.get(lap.car_number) ?? 0)
+  }
+
+  // Final classification: most laps completed, ties broken by earliest
+  // (penalty-adjusted) elapsed time. Disqualified cars are excluded from
+  // this ranking and appended, unranked, afterwards.
+  const lastLapsAll: LapRead[] = []
   for (const rows of byCar.values()) {
     let best = rows[0]
     for (const r of rows) if (r.lap_number > best.lap_number) best = r
-    lastLaps.push(best)
+    lastLapsAll.push(best)
   }
-  lastLaps.sort((a, b) => b.lap_number - a.lap_number || a.elapsed_seconds! - b.elapsed_seconds!)
+  const classifiedLastLaps = lastLapsAll.filter((l) => !dsqCars.has(l.car_number))
+  const disqualifiedLastLaps = lastLapsAll.filter((l) => dsqCars.has(l.car_number))
+  classifiedLastLaps.sort((a, b) => b.lap_number - a.lap_number || effectiveElapsed(a) - effectiveElapsed(b))
+  const lastLaps = [...classifiedLastLaps, ...disqualifiedLastLaps]
 
-  const leaderLap = lastLaps[0].lap_number
-  const leaderTime = lastLaps[0].elapsed_seconds!
+  const leaderLap = classifiedLastLaps[0]?.lap_number ?? 0
+  const leaderTime = classifiedLastLaps[0] ? effectiveElapsed(classifiedLastLaps[0]) : 0
 
   const driversByCar = new Map<string, string>()
   const fastestByCar = new Map<string, LapRead>()
@@ -99,26 +122,33 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
 
   return lastLaps.map((lastLap, i) => {
     const car = lastLap.car_number
-    const lapsDown = leaderLap - lastLap.lap_number
-    const gap =
-      i === 0
-        ? '—'
-        : lapsDown >= 1
-          ? `${lapsDown} lap${lapsDown > 1 ? 's' : ''}`
-          : `${(lastLap.elapsed_seconds! - leaderTime).toFixed(3)}s`
+    const disqualified = dsqCars.has(car)
+    const classifiedIndex = disqualified ? -1 : i
 
+    let gap = '—'
     let interval = '—'
-    if (i > 0) {
-      const prev = lastLaps[i - 1]
-      const prevLapsDown = prev.lap_number - lastLap.lap_number
-      interval =
-        prevLapsDown >= 1
-          ? `${prevLapsDown} lap${prevLapsDown > 1 ? 's' : ''}`
-          : `${(lastLap.elapsed_seconds! - prev.elapsed_seconds!).toFixed(3)}s`
+    if (!disqualified) {
+      const lapsDown = leaderLap - lastLap.lap_number
+      gap =
+        classifiedIndex === 0
+          ? '—'
+          : lapsDown >= 1
+            ? `${lapsDown} lap${lapsDown > 1 ? 's' : ''}`
+            : `${(effectiveElapsed(lastLap) - leaderTime).toFixed(3)}s`
+
+      if (classifiedIndex > 0) {
+        const prev = classifiedLastLaps[classifiedIndex - 1]
+        const prevLapsDown = prev.lap_number - lastLap.lap_number
+        interval =
+          prevLapsDown >= 1
+            ? `${prevLapsDown} lap${prevLapsDown > 1 ? 's' : ''}`
+            : `${(effectiveElapsed(lastLap) - effectiveElapsed(prev)).toFixed(3)}s`
+      }
     }
 
     return {
-      position: i + 1,
+      position: disqualified ? null : classifiedIndex + 1,
+      disqualified,
       car_number: car,
       class: lastLap.class ?? 'Unknown',
       team: lastLap.team,
@@ -167,9 +197,9 @@ export function ResultsTable({
   )
 
   const rows = useMemo(
-    () => buildResults(laps, activeClasses),
+    () => buildResults(laps, activeClasses, penalties),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [laps, activeClasses, deletedLapsVersion],
+    [laps, activeClasses, deletedLapsVersion, penalties],
   )
   const showClassColumn = classSelection === null || classSelection.size > 1
 
@@ -211,8 +241,8 @@ export function ResultsTable({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.car_number}>
-                  <td>{row.position}</td>
+                <tr key={row.car_number} className={row.disqualified ? 'results-row-dsq' : undefined}>
+                  <td>{row.disqualified ? 'DSQ' : row.position}</td>
                   <td>
                     {onSelectCar ? (
                       <button type="button" className="car-number-link" onClick={() => onSelectCar(row.car_number)}>

@@ -328,7 +328,11 @@ export interface WeatherReading {
 
 // A post-session steward decision (a time penalty, drive-through, DSQ, etc)
 // recorded by hand — free-type since stewards' decisions cover far more
-// ground than any fixed set of penalty types would capture.
+// ground than any fixed set of penalty types would capture. `consequence`
+// is what actually feeds classification math (ResultsTable/
+// SessionResultsTable) — 'none' leaves the badge purely informational.
+export type PenaltyConsequence = 'none' | 'time' | 'dsq'
+
 export interface PenaltyRead {
   id: number
   session_id: number
@@ -336,6 +340,8 @@ export interface PenaltyRead {
   penalty: string
   reason: string
   stewards_doc_url: string | null
+  consequence: PenaltyConsequence
+  time_penalty_seconds: number | null
   created_at: string
 }
 

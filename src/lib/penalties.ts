@@ -6,7 +6,7 @@
 // keeps an in-memory read-through cache, same pattern as lapOverrides.ts,
 // so the Results table's synchronous per-car lookups don't need to be async.
 import { createPenalty as createPenaltyApi, deletePenalty as deletePenaltyApi, getPenalties } from '../api/client'
-import type { PenaltyRead } from '../api/types'
+import type { PenaltyConsequence, PenaltyRead } from '../api/types'
 
 const CHANGE_EVENT = 'ota:penalties-changed'
 
@@ -61,6 +61,8 @@ export async function addPenalty(payload: {
   penalty: string
   reason: string
   stewards_doc_url?: string | null
+  consequence?: PenaltyConsequence
+  time_penalty_seconds?: number | null
 }): Promise<void> {
   const record = await createPenaltyApi(payload)
   cache = [record, ...cache]

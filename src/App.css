@@ -425,6 +425,14 @@ header h1 {
   background: color-mix(in srgb, var(--text, #52514e) 6%, transparent);
 }
 
+.results-row-dsq {
+  opacity: 0.6;
+}
+.results-row-dsq td:first-child {
+  color: #d64545;
+  font-weight: 600;
+}
+
 /* CarDetailModal (and everything it composes) is styled against
    replay.css's --replay-* custom properties, which are only ever defined
    on .replay-root — the top-level wrapper of the Live/Replay apps this
@@ -538,6 +546,7 @@ header h1 {
   color: var(--text-secondary, #52514e);
   margin-bottom: 16px;
 }
+.lap-flag-field input,
 .lap-flag-field textarea,
 .lap-flag-field select {
   border: 1px solid var(--border, #e1e0d9);
