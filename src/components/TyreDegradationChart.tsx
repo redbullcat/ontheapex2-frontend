@@ -180,7 +180,7 @@ export function TyreDegradationChart({ laps, compound }: { laps: LapRead[]; comp
       .line<TrendPoint>()
       .x((d) => x(d.age))
       .y((d) => y(d.lapTime))
-      .curve(d3.curveLinear)
+      .curve(d3.curveBasis)
 
     // faint raw scatter behind the trend lines
     g.append('g')
