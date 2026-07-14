@@ -3,7 +3,7 @@ import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { getEntityColor, getManufacturerColor, getTeamColor, getTeamDisplayName } from '../lib/identityColors'
 import { tyreSummary } from '../lib/carTyres'
-import { movingAverage } from '../lib/smoothTrend'
+import { adaptiveSmoothWindow, movingAverage } from '../lib/smoothTrend'
 import { isLapValid } from '../lib/lapValidity'
 import { classifyFlag } from '../lib/flags'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -13,7 +13,6 @@ import { CollapsibleFilters } from './CollapsibleFilters'
 
 const MARGIN = { top: 16, right: 16, bottom: 32, left: 60 }
 const PLOT_HEIGHT = 420
-const SMOOTH_WINDOW = 3
 
 type ColorBy = 'team' | 'manufacturer' | 'car'
 
@@ -91,7 +90,7 @@ function computeSeries(laps: LapRead[], compound: string, activeCars: Set<string
     const averaged = [...byAge.entries()]
       .map(([age, times]) => ({ age, avg: d3.mean(times) ?? 0 }))
       .sort((a, b) => a.age - b.age)
-    const smoothed = movingAverage(averaged, SMOOTH_WINDOW, (p) => p.avg)
+    const smoothed = movingAverage(averaged, adaptiveSmoothWindow(averaged.length), (p) => p.avg)
     const trend = averaged.map((p, i) => ({ age: p.age, lapTime: smoothed[i] }))
     out.push({ car_number, team: entry.team, manufacturer: entry.manufacturer, points: entry.points, trend })
   }
