@@ -4,6 +4,7 @@ import type { LapRead, Stint } from '../api/types'
 import { getEntityColor, getTeamDisplayName } from '../lib/identityColors'
 import { computeFieldStateAtMoment } from '../lib/fieldStateAtMoment'
 import { CarPicker, type CarOption } from './CarPicker'
+import { CarDetailModal } from './CarDetailModal'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
 
@@ -163,12 +164,21 @@ function driverPieArcs(rows: DriverSummaryRow[]) {
   return pie(rows).map((slice) => ({ ...slice, path: arc(slice) ?? '' }))
 }
 
-export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: LapRead[] }) {
+export function DriverHistoryChart({
+  stints,
+  laps,
+  isRaceSession = false,
+}: {
+  stints: Stint[]
+  laps: LapRead[]
+  isRaceSession?: boolean
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [selectedCars, setSelectedCars] = useState<string[]>([])
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [selectedStint, setSelectedStint] = useState<{ carNumber: string; segment: StintSegment } | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -289,6 +299,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, segment: d })
         })
         .on('mouseleave', () => setTooltip(null))
+        .on('click', (_event, d) => setSelectedStint({ carNumber: row.carNumber, segment: d }))
 
       segGroup
         .selectAll('text')
@@ -552,6 +563,24 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           </div>
         </div>
       ))}
+      {selectedStint && (
+        <div className="replay-root car-detail-modal-scope">
+          <CarDetailModal
+            carNumber={selectedStint.carNumber}
+            allLaps={laps}
+            isRaceSession={isRaceSession}
+            onClose={() => setSelectedStint(null)}
+            stintContext={{
+              drivers: selectedStint.segment.drivers,
+              startLap: selectedStint.segment.start_lap,
+              endLap: selectedStint.segment.end_lap,
+              fastestSeconds: selectedStint.segment.best_lap_seconds,
+              avgSeconds: selectedStint.segment.avg_lap_seconds,
+              placesGainedLost: selectedStint.segment.placesGainedLost,
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

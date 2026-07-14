@@ -52,15 +52,15 @@ export function FlagLapDeletedModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.lapNumber])
 
-  function handleFlag() {
+  async function handleFlag() {
     const trimmed = reason.trim()
     if (!trimmed) return
-    setLapDeleted(sessionId, carNumber, selected.lapNumber, trimmed)
+    await setLapDeleted(sessionId, carNumber, selected.lapNumber, trimmed)
     onClose()
   }
 
-  function handleRestore() {
-    clearLapDeleted(sessionId, carNumber, selected.lapNumber)
+  async function handleRestore() {
+    await clearLapDeleted(sessionId, carNumber, selected.lapNumber)
     onClose()
   }
 

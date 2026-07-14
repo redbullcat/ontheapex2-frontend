@@ -325,3 +325,28 @@ export interface WeatherReading {
   pressure: number | null
   sky: string | null
 }
+
+// A post-session steward decision (a time penalty, drive-through, DSQ, etc)
+// recorded by hand — free-type since stewards' decisions cover far more
+// ground than any fixed set of penalty types would capture.
+export interface PenaltyRead {
+  id: number
+  session_id: number
+  car_number: string
+  penalty: string
+  reason: string
+  stewards_doc_url: string | null
+  created_at: string
+}
+
+// A lap manually flagged as excluded from fastest-lap classification (e.g.
+// a pole lap struck down for a sporting infringement) — the raw lap is
+// never touched, only skipped wherever "fastest lap" is computed.
+export interface DeletedLapRead {
+  id: number
+  session_id: number
+  car_number: string
+  lap_number: number
+  reason: string
+  deleted_at: string
+}
