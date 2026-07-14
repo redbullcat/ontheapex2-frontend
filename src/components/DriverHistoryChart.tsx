@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import type { LapRead, Stint } from '../api/types'
 import { getEntityColor, getTeamDisplayName } from '../lib/identityColors'
+import { computeFieldStateAtMoment } from '../lib/fieldStateAtMoment'
 import { CarPicker, type CarOption } from './CarPicker'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
@@ -15,6 +16,9 @@ const SEGMENT_GAP = 2
 interface StintSegment extends Stint {
   fastestLapNumber: number | null
   avg20Seconds: number | null
+  startPosition: number | null
+  endPosition: number | null
+  placesGainedLost: number | null
 }
 
 interface DriverSummaryRow {
@@ -28,6 +32,7 @@ interface DriverSummaryRow {
   stints: number
   totalLaps: number
   firstStintLap: number
+  totalPlacesGainedLost: number | null
 }
 
 interface TooltipState {
@@ -51,6 +56,13 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+function formatPlacesGainedLost(delta: number | null, startPosition: number | null, endPosition: number | null): string {
+  if (delta == null || startPosition == null || endPosition == null) return 'Places gained/lost —'
+  if (delta === 0) return `Places gained/lost: none (P${startPosition} → P${endPosition})`
+  const verb = delta > 0 ? 'gained' : 'lost'
+  return `Places ${verb}: ${Math.abs(delta)} (P${startPosition} → P${endPosition})`
+}
+
 // Top-20% fastest laps, same convention as the pace chart's top-N% filter.
 function fastestPercentMean(sortedSeconds: number[], percent: number): number | null {
   if (sortedSeconds.length === 0) return null
@@ -58,14 +70,46 @@ function fastestPercentMean(sortedSeconds: number[], percent: number): number | 
   return d3.mean(sortedSeconds.slice(0, keep)) ?? null
 }
 
-function computeDriverSummary(carStints: Stint[], carLaps: LapRead[]): DriverSummaryRow[] {
+// Car's overall running-order position at the moment a given lap's driver
+// crossed the line, derived from the full field (all cars), not just this
+// car's own laps — position is meaningless without the rest of the field.
+function positionAtLap(lap: LapRead | null, allLaps: LapRead[], carNumber: string): number | null {
+  if (lap?.elapsed_seconds == null) return null
+  const state = computeFieldStateAtMoment(allLaps, lap.elapsed_seconds)
+  return state.find((r) => r.car_number === carNumber)?.position ?? null
+}
+
+// Places gained/lost across a stint: car's field position on the driver's
+// first lap of the stint vs. their last lap of it. Positive = gained places
+// (moved to a lower/better position number), negative = lost places.
+function stintPositions(stint: Stint, carLaps: LapRead[], allLaps: LapRead[]) {
+  let firstLap: LapRead | null = null
+  let lastLap: LapRead | null = null
+  for (const lap of carLaps) {
+    if (lap.lap_number < stint.start_lap || lap.lap_number > stint.end_lap) continue
+    if (firstLap === null || lap.lap_number < firstLap.lap_number) firstLap = lap
+    if (lastLap === null || lap.lap_number > lastLap.lap_number) lastLap = lap
+  }
+  const startPosition = positionAtLap(firstLap, allLaps, stint.car_number)
+  const endPosition = positionAtLap(lastLap, allLaps, stint.car_number)
+  const placesGainedLost = startPosition != null && endPosition != null ? startPosition - endPosition : null
+  return { startPosition, endPosition, placesGainedLost }
+}
+
+function computeDriverSummary(carStints: Stint[], carLaps: LapRead[], allLaps: LapRead[]): DriverSummaryRow[] {
   const lapsByDriver = new Map<string, LapRead[]>()
   const stintCountByDriver = new Map<string, number>()
   const firstStintLapByDriver = new Map<string, number>()
+  const firstStintByDriver = new Map<string, Stint>()
+  const lastStintByDriver = new Map<string, Stint>()
   for (const stint of carStints) {
     stintCountByDriver.set(stint.drivers, (stintCountByDriver.get(stint.drivers) ?? 0) + 1)
     const prevFirst = firstStintLapByDriver.get(stint.drivers)
     if (prevFirst === undefined || stint.start_lap < prevFirst) firstStintLapByDriver.set(stint.drivers, stint.start_lap)
+    const prevFirstStint = firstStintByDriver.get(stint.drivers)
+    if (!prevFirstStint || stint.start_lap < prevFirstStint.start_lap) firstStintByDriver.set(stint.drivers, stint)
+    const prevLastStint = lastStintByDriver.get(stint.drivers)
+    if (!prevLastStint || stint.end_lap > prevLastStint.end_lap) lastStintByDriver.set(stint.drivers, stint)
     for (const lap of carLaps) {
       if (lap.lap_number < stint.start_lap || lap.lap_number > stint.end_lap) continue
       const arr = lapsByDriver.get(stint.drivers)
@@ -87,6 +131,12 @@ function computeDriverSummary(carStints: Stint[], carLaps: LapRead[]): DriverSum
         fastestLapNumber = lap.lap_number
       }
     }
+    const firstStint = firstStintByDriver.get(driver)
+    const lastStint = lastStintByDriver.get(driver)
+    const startPosition = firstStint ? stintPositions(firstStint, carLaps, allLaps).startPosition : null
+    const endPosition = lastStint ? stintPositions(lastStint, carLaps, allLaps).endPosition : null
+    const totalPlacesGainedLost = startPosition != null && endPosition != null ? startPosition - endPosition : null
+
     rows.push({
       driver,
       color: getEntityColor(driver),
@@ -98,6 +148,7 @@ function computeDriverSummary(carStints: Stint[], carLaps: LapRead[]): DriverSum
       stints: stintCountByDriver.get(driver) ?? 0,
       totalLaps: driverLaps.length,
       firstStintLap: firstStintLapByDriver.get(driver) ?? 0,
+      totalPlacesGainedLost,
     })
   }
   rows.sort((a, b) => a.firstStintLap - b.firstStintLap)
@@ -172,9 +223,10 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           }
         }
         const avg20Seconds = fastestPercentMean([...stintTimes].sort((a, b) => a - b), 20)
-        return { ...stint, fastestLapNumber, avg20Seconds }
+        const { startPosition, endPosition, placesGainedLost } = stintPositions(stint, carLaps, laps)
+        return { ...stint, fastestLapNumber, avg20Seconds, startPosition, endPosition, placesGainedLost }
       })
-      const driverSummary = computeDriverSummary(carStints, carLaps)
+      const driverSummary = computeDriverSummary(carStints, carLaps, laps)
       return { carNumber, team: carStints[0]?.team ?? null, segments, driverSummary }
     })
   }, [selectedCars, stints, lapsByCar])
@@ -355,6 +407,14 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           font-variant-numeric: tabular-nums;
           color: var(--text-primary);
         }
+        .driver-history-chart td.places-gained {
+          color: #2e7d32;
+          font-weight: 600;
+        }
+        .driver-history-chart td.places-lost {
+          color: #c62828;
+          font-weight: 600;
+        }
         .driver-history-chart .team-key {
           display: inline-block;
           width: 8px;
@@ -415,6 +475,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
           </div>
           <div>Average (100%) {formatLapTime(tooltip.segment.avg_lap_seconds)}</div>
           <div>Average (top 20%) {formatLapTime(tooltip.segment.avg20Seconds)}</div>
+          <div>{formatPlacesGainedLost(tooltip.segment.placesGainedLost, tooltip.segment.startPosition, tooltip.segment.endPosition)}</div>
         </div>
       )}
       {rows.map((row) => (
@@ -456,6 +517,7 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
                   <th>Fastest lap</th>
                   <th>Stints</th>
                   <th>Laps</th>
+                  <th>Places +/-</th>
                 </tr>
               </thead>
               <tbody>
@@ -474,6 +536,15 @@ export function DriverHistoryChart({ stints, laps }: { stints: Stint[]; laps: La
                     </td>
                     <td>{d.stints}</td>
                     <td>{d.totalLaps}</td>
+                    <td className={d.totalPlacesGainedLost != null ? (d.totalPlacesGainedLost > 0 ? 'places-gained' : d.totalPlacesGainedLost < 0 ? 'places-lost' : '') : ''}>
+                      {d.totalPlacesGainedLost == null
+                        ? '—'
+                        : d.totalPlacesGainedLost === 0
+                          ? '±0'
+                          : d.totalPlacesGainedLost > 0
+                            ? `+${d.totalPlacesGainedLost}`
+                            : `${d.totalPlacesGainedLost}`}
+                    </td>
                   </tr>
                 ))}
               </tbody>
