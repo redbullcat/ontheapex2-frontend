@@ -7,6 +7,8 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -57,6 +59,7 @@ export function PitVftUsageChart({ laps }: { laps: LapRead[] }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -80,7 +83,22 @@ export function PitVftUsageChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const usage = useMemo(() => computeVftUsage(laps, activeClasses), [laps, activeClasses])
+  const allUsage = useMemo(() => computeVftUsage(laps, activeClasses), [laps, activeClasses])
+
+  const carOptions: EntityOption[] = useMemo(
+    () =>
+      [...allUsage]
+        .sort((a, b) => a.car.localeCompare(b.car, undefined, { numeric: true }))
+        .map((d) => ({ id: d.car, label: `#${d.car} — ${getTeamDisplayName(d.team)}` })),
+    [allUsage],
+  )
+
+  const activeCars = useMemo(
+    () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
+    [carSelection, carOptions],
+  )
+
+  const usage = useMemo(() => allUsage.filter((d) => activeCars.has(d.car)), [allUsage, activeCars])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -138,7 +156,7 @@ export function PitVftUsageChart({ laps }: { laps: LapRead[] }) {
       .attr('dominant-baseline', 'central')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 11)
-      .text((d) => `${d.avgUsage.toFixed(1)}%/lap (${d.laps} laps)`)
+      .text((d) => `${d.avgUsage.toFixed(3)}%/lap (${d.laps} laps)`)
 
     const xAxis = d3.axisBottom(x).ticks(6).tickFormat((d) => `${d}%`).tickSizeOuter(0)
     g.append('g')
@@ -194,6 +212,15 @@ export function PitVftUsageChart({ laps }: { laps: LapRead[] }) {
       <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="vft_usage_avg" />}>
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
         </div>
       </CollapsibleFilters>
       {usage.length === 0 ? <p className="hint">No VFT data for this selection.</p> : <svg ref={svgRef} />}
