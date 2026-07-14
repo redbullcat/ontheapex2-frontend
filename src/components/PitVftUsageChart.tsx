@@ -6,26 +6,57 @@ import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
-import { computePitStops, type PitStop } from './PitTimeChart'
 import { CollapsibleFilters } from './CollapsibleFilters'
 
-const MARGIN = { top: 8, right: 56, bottom: 24, left: 160 }
+const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
 const ROW_HEIGHT = 22
 const ROW_GAP = 6
 
-function formatSeconds(s: number): string {
-  const sign = s < 0 ? '-' : ''
-  return `${sign}${Math.abs(s).toFixed(1)}s`
+interface CarVftUsage {
+  car: string
+  team: string | null
+  avgUsage: number
+  laps: number
 }
 
-// One faceted bar panel for a single pit-stop round — bars ordered by lap
-// (earliest stopper at top, latest at bottom), same visual language as
-// PitTimeChart's average-loss bars just scoped to this round's stops.
-function RoundPanel({ round, stops }: { round: number; stops: PitStop[] }) {
+// Per-lap VFT consumption: how much of the % reading dropped from one lap
+// to the next within the same stint. A pit stop recharges the tank, so the
+// out-lap's reading is *higher* than the in-lap's — that's not usage, so
+// only strictly-decreasing consecutive-lap deltas count.
+function computeVftUsage(laps: LapRead[], activeClasses: Set<string>): CarVftUsage[] {
+  const byCar = new Map<string, LapRead[]>()
+  for (const lap of laps) {
+    if (!activeClasses.has(lap.class ?? 'Unknown')) continue
+    if (lap.vft_percent == null) continue
+    const arr = byCar.get(lap.car_number)
+    if (arr) arr.push(lap)
+    else byCar.set(lap.car_number, [lap])
+  }
+
+  const result: CarVftUsage[] = []
+  for (const [car, rows] of byCar) {
+    const sorted = [...rows].sort((a, b) => a.lap_number - b.lap_number)
+    const deltas: number[] = []
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]
+      const curr = sorted[i]
+      if (curr.session_id !== prev.session_id) continue
+      if (curr.lap_number !== prev.lap_number + 1) continue
+      const delta = (prev.vft_percent ?? 0) - (curr.vft_percent ?? 0)
+      if (delta > 0) deltas.push(delta)
+    }
+    if (deltas.length === 0) continue
+    result.push({ car, team: sorted[0].team, avgUsage: d3.mean(deltas) ?? 0, laps: deltas.length })
+  }
+  return result.sort((a, b) => b.avgUsage - a.avgUsage)
+}
+
+export function PitVftUsageChart({ laps }: { laps: LapRead[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -38,101 +69,6 @@ function RoundPanel({ round, stops }: { round: number; stops: PitStop[] }) {
     return () => ro.disconnect()
   }, [])
 
-  // Ordered by lap ascending — the car that stopped earliest in this round
-  // at top, working down to the latest stopper.
-  const ordered = useMemo(() => [...stops].sort((a, b) => a.lap - b.lap), [stops])
-
-  useEffect(() => {
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
-    if (ordered.length === 0 || width === 0) return
-
-    const marginLeft = Math.max(MARGIN_LEFT_MIN, Math.min(MARGIN.left, width * 0.38))
-    const innerWidth = width - marginLeft - MARGIN.right
-    const plotHeight = ordered.length * (ROW_HEIGHT + ROW_GAP)
-    const height = plotHeight + MARGIN.top + MARGIN.bottom
-    svg.attr('width', width).attr('height', height)
-
-    const x = d3
-      .scaleLinear()
-      .domain([0, Math.max(1, (d3.max(ordered, (d) => d.lossSeconds) ?? 1) * 1.1)])
-      .range([0, innerWidth])
-    const y = d3
-      .scaleBand()
-      .domain(ordered.map((d) => `${d.car}-${d.lap}`))
-      .range([0, plotHeight])
-      .paddingInner(ROW_GAP / (ROW_HEIGHT + ROW_GAP))
-
-    const g = svg.append('g').attr('transform', `translate(${marginLeft},${MARGIN.top})`)
-
-    g.append('g')
-      .selectAll('text')
-      .data(ordered)
-      .join('text')
-      .attr('x', -10)
-      .attr('y', (d) => (y(`${d.car}-${d.lap}`) ?? 0) + ROW_HEIGHT / 2)
-      .attr('dominant-baseline', 'central')
-      .attr('text-anchor', 'end')
-      .attr('fill', 'var(--text-secondary)')
-      .attr('font-size', 12)
-      .text((d) => {
-        const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
-        return marginLeft < MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
-      })
-
-    g.append('g')
-      .selectAll('rect')
-      .data(ordered)
-      .join('rect')
-      .attr('x', 0)
-      .attr('y', (d) => y(`${d.car}-${d.lap}`) ?? 0)
-      .attr('width', (d) => Math.max(0, x(Math.max(0, d.lossSeconds))))
-      .attr('height', ROW_HEIGHT)
-      .attr('rx', 4)
-      .attr('fill', (d) => getTeamColor(d.team))
-      .append('title')
-      .text(
-        (d) =>
-          `#${d.car} — ${getTeamDisplayName(d.team)} — lap ${d.lap} — ${formatSeconds(d.lossSeconds)}${d.vftAtPit != null ? ` — VFT ${d.vftAtPit.toFixed(0)}%` : ''}`,
-      )
-
-    g.append('g')
-      .selectAll('text.value')
-      .data(ordered)
-      .join('text')
-      .attr('class', 'value')
-      .attr('x', (d) => x(Math.max(0, d.lossSeconds)) + 6)
-      .attr('y', (d) => (y(`${d.car}-${d.lap}`) ?? 0) + ROW_HEIGHT / 2)
-      .attr('dominant-baseline', 'central')
-      .attr('fill', 'var(--text-secondary)')
-      .attr('font-size', 11)
-      .text((d) => `${formatSeconds(d.lossSeconds)}, lap ${d.lap}`)
-
-    const xAxis = d3.axisBottom(x).ticks(5).tickFormat((d) => `${d}s`).tickSizeOuter(0)
-    g.append('g')
-      .attr('transform', `translate(0,${plotHeight})`)
-      .call(xAxis)
-      .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
-      .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
-      .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 10))
-  }, [ordered, width])
-
-  return (
-    <div className="pit-round-panel">
-      <div className="chart-controls">
-        <h3 className="pit-time-subheading">Stop {round}</h3>
-        <ChartExportButtons svgRef={svgRef} filename={`pit_round_${round}`} />
-      </div>
-      <div ref={containerRef}>
-        <svg ref={svgRef} />
-      </div>
-    </div>
-  )
-}
-
-export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-
   const allClasses = useMemo(() => {
     const s = new Set<string>()
     for (const lap of laps) s.add(lap.class ?? 'Unknown')
@@ -144,20 +80,77 @@ export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
     [classSelection, allClasses],
   )
 
-  const stops = useMemo(() => computePitStops(laps, activeClasses), [laps, activeClasses])
+  const usage = useMemo(() => computeVftUsage(laps, activeClasses), [laps, activeClasses])
 
-  const rounds = useMemo(() => {
-    const byRound = new Map<number, PitStop[]>()
-    for (const s of stops) {
-      const arr = byRound.get(s.round)
-      if (arr) arr.push(s)
-      else byRound.set(s.round, [s])
-    }
-    return [...byRound.entries()].sort(([a], [b]) => a - b)
-  }, [stops])
+  useEffect(() => {
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
+    if (usage.length === 0 || width === 0) return
+
+    const marginLeft = Math.max(MARGIN_LEFT_MIN, Math.min(MARGIN.left, width * 0.42))
+    const innerWidth = width - marginLeft - MARGIN.right
+    const plotHeight = usage.length * (ROW_HEIGHT + ROW_GAP)
+    const height = plotHeight + MARGIN.top + MARGIN.bottom
+    svg.attr('width', width).attr('height', height)
+
+    const x = d3.scaleLinear().domain([0, (d3.max(usage, (d) => d.avgUsage) ?? 1) * 1.1]).range([0, innerWidth])
+    const y = d3
+      .scaleBand()
+      .domain(usage.map((d) => d.car))
+      .range([0, plotHeight])
+      .paddingInner(ROW_GAP / (ROW_HEIGHT + ROW_GAP))
+
+    const g = svg.append('g').attr('transform', `translate(${marginLeft},${MARGIN.top})`)
+
+    g.append('g')
+      .selectAll('text')
+      .data(usage)
+      .join('text')
+      .attr('x', -10)
+      .attr('y', (d) => (y(d.car) ?? 0) + ROW_HEIGHT / 2)
+      .attr('dominant-baseline', 'central')
+      .attr('text-anchor', 'end')
+      .attr('fill', 'var(--text-secondary)')
+      .attr('font-size', 12)
+      .text((d) => {
+        const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
+        return marginLeft < MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
+      })
+
+    g.append('g')
+      .selectAll('rect')
+      .data(usage)
+      .join('rect')
+      .attr('x', 0)
+      .attr('y', (d) => y(d.car) ?? 0)
+      .attr('width', (d) => Math.max(0, x(d.avgUsage)))
+      .attr('height', ROW_HEIGHT)
+      .attr('rx', 4)
+      .attr('fill', (d) => getTeamColor(d.team))
+
+    g.append('g')
+      .selectAll('text.value')
+      .data(usage)
+      .join('text')
+      .attr('class', 'value')
+      .attr('x', (d) => x(d.avgUsage) + 6)
+      .attr('y', (d) => (y(d.car) ?? 0) + ROW_HEIGHT / 2)
+      .attr('dominant-baseline', 'central')
+      .attr('fill', 'var(--text-secondary)')
+      .attr('font-size', 11)
+      .text((d) => `${d.avgUsage.toFixed(1)}%/lap (${d.laps} laps)`)
+
+    const xAxis = d3.axisBottom(x).ticks(6).tickFormat((d) => `${d}%`).tickSizeOuter(0)
+    g.append('g')
+      .attr('transform', `translate(0,${plotHeight})`)
+      .call(xAxis)
+      .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
+      .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
+      .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
+  }, [usage, width])
 
   return (
-    <div className="viz-root pit-time-chart">
+    <div className="viz-root pit-time-chart" ref={containerRef}>
       <style>{`
         .pit-time-chart {
           --surface-1: #fcfcfb;
@@ -197,20 +190,13 @@ export function PitRoundsChart({ laps }: { laps: LapRead[] }) {
           position: relative;
           background: var(--surface-1);
         }
-        .pit-round-panel + .pit-round-panel {
-          margin-top: 20px;
-        }
       `}</style>
-      <CollapsibleFilters>
+      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="vft_usage_avg" />}>
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         </div>
       </CollapsibleFilters>
-      {rounds.length === 0 ? (
-        <p className="hint">No pit stop data for this selection.</p>
-      ) : (
-        rounds.map(([round, roundStops]) => <RoundPanel key={round} round={round} stops={roundStops} />)
-      )}
+      {usage.length === 0 ? <p className="hint">No VFT data for this selection.</p> : <svg ref={svgRef} />}
     </div>
   )
 }

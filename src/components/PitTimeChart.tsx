@@ -30,6 +30,10 @@ export interface PitStop {
   // stops (its 1st stop, 2nd stop, ...) — the practical stand-in for
   // "round of stops" since cars don't all pit on the same lap.
   round: number
+  // Virtual Fuel Tank reading (see LapRead.vft_percent) at the moment this
+  // car pitted — the in-lap's own reading, null wherever VFT hasn't been
+  // backfilled for this session.
+  vftAtPit: number | null
 }
 
 interface CarPitStats {
@@ -81,7 +85,15 @@ export function computePitStops(laps: LapRead[], activeClasses: Set<string>): Pi
       if (row.lap_time_seconds > greenMedian * 3 || outLap.lap_time_seconds > greenMedian * 3) continue
       const lossSeconds = row.lap_time_seconds + outLap.lap_time_seconds - 2 * greenMedian
       round += 1
-      stops.push({ car, team: row.team, manufacturer: row.manufacturer, lap: row.lap_number, lossSeconds, round })
+      stops.push({
+        car,
+        team: row.team,
+        manufacturer: row.manufacturer,
+        lap: row.lap_number,
+        lossSeconds,
+        round,
+        vftAtPit: row.vft_percent ?? null,
+      })
     }
   }
   return stops
@@ -260,7 +272,7 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .attr('stroke', 'var(--surface-1)')
       .attr('stroke-width', 1.5)
       .append('title')
-      .text((d) => `#${d.car} — lap ${d.lap} — ${formatSeconds(d.lossSeconds)}`)
+      .text((d) => `#${d.car} — lap ${d.lap} — ${formatSeconds(d.lossSeconds)}${d.vftAtPit != null ? ` — VFT ${d.vftAtPit.toFixed(0)}%` : ''}`)
 
     const xAxis = d3.axisBottom(x).ticks(8).tickFormat((d) => `L${d}`).tickSizeOuter(0)
     g.append('g')

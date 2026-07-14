@@ -42,6 +42,7 @@ import { PitTimeChart } from './components/PitTimeChart'
 import { PitStopAverageChart } from './components/PitStopAverageChart'
 import { PitRoundsChart } from './components/PitRoundsChart'
 import { PitCumulativeChart } from './components/PitCumulativeChart'
+import { PitVftUsageChart } from './components/PitVftUsageChart'
 import { DriverConsistencyChart } from './components/DriverConsistencyChart'
 import { HeadToHeadChart } from './components/HeadToHeadChart'
 import { DriveTimeChart } from './components/DriveTimeChart'
@@ -751,11 +752,23 @@ function App() {
 
                   <section className="chart-section">
                     <h2>Cumulative time in the pits</h2>
-                    <p className="hint">Total pit time lost per car, stacked by round — texture identifies which stop, color identifies the team.</p>
+                    <p className="hint">Total pit time lost per car, stacked by round — texture identifies which stop, color identifies the team. Hover a segment for its VFT reading, where available.</p>
                     {lapsState.status === 'loading' && <p className="hint">Loading pit stop data…</p>}
                     {lapsState.status === 'success' &&
                       (lapsState.data.length > 0 ? (
                         <PitCumulativeChart laps={lapsState.data} />
+                      ) : (
+                        <p className="hint">No lap data for this session.</p>
+                      ))}
+                  </section>
+
+                  <section className="chart-section">
+                    <h2>Average VFT use per lap</h2>
+                    <p className="hint">Virtual Fuel Tank % consumed per lap on average, within a stint (excludes the recharge jump after a pit stop). Only populated for sessions with VFT data backfilled.</p>
+                    {lapsState.status === 'loading' && <p className="hint">Loading VFT data…</p>}
+                    {lapsState.status === 'success' &&
+                      (lapsState.data.length > 0 ? (
+                        <PitVftUsageChart laps={lapsState.data} />
                       ) : (
                         <p className="hint">No lap data for this session.</p>
                       ))}
