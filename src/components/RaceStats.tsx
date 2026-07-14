@@ -106,15 +106,22 @@ function computeStats(laps: LapRead[], activeClasses: Set<string>) {
     }))
     .sort((a, b) => b.laps - a.laps)
 
+  // Driver names arrive with inconsistent casing across cars/sessions (e.g.
+  // "Charles Milesi" vs "Charles MILESI") — key the tally by a normalized
+  // name so the same driver's laps-led count doesn't split across two rows,
+  // same fix as PaceChart's team-name grouping.
   const lapsLedByDriver = new Map<string, number>()
+  const driverLabelByKey = new Map<string, string>()
   for (const l of leaders) {
     const driver = filtered.find((r) => r.car_number === l.car && r.lap_number === l.lap)?.driver_name ?? 'Unknown'
-    lapsLedByDriver.set(driver, (lapsLedByDriver.get(driver) ?? 0) + 1)
+    const key = driver.trim().toLowerCase()
+    if (!driverLabelByKey.has(key)) driverLabelByKey.set(key, driver)
+    lapsLedByDriver.set(key, (lapsLedByDriver.get(key) ?? 0) + 1)
   }
   const ledByDriver: LedRow[] = [...lapsLedByDriver.entries()]
-    .map(([driver, count]) => ({
-      key: driver,
-      label: driver,
+    .map(([key, count]) => ({
+      key,
+      label: driverLabelByKey.get(key) ?? key,
       laps: count,
       pct: totalLeaderLaps > 0 ? (count / totalLeaderLaps) * 100 : 0,
     }))

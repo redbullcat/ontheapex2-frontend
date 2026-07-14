@@ -3,6 +3,14 @@ import type { LapRead } from '../api/types'
 import { getTeamDisplayName } from '../lib/identityColors'
 import { computeCarSummary, computeCurrentBestLapRank } from '../lib/carDetail'
 import { formatLapTime } from '../replay/format'
+// This modal's own styling (.car-detail-modal, .replay-backdrop, .class-chip,
+// .car-detail-section-label, etc) lives in replay.css — Live/Replay/Staging
+// pull it in themselves, but nothing else in the main app's module graph
+// does, so without this import the modal rendered completely unstyled
+// (position: static instead of a fixed overlay) everywhere else it's used
+// (ResultsTable/SessionResultsTable's car-number click, DriverHistoryChart's
+// stint click).
+import '../replay/replay.css'
 import { PaceChart } from './PaceChart'
 import { LapPositionChart } from './LapPositionChart'
 import { PitTimeChart } from './PitTimeChart'
