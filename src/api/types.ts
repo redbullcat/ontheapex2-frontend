@@ -103,6 +103,13 @@ export interface LapRead {
   tire_rr_compound?: string | null
   tire_rr_age_laps?: number | null
   tire_rr_changed?: boolean | null
+
+  // Virtual Fuel Tank: % of a car's regulated stint energy allocation
+  // remaining at the end of this lap. Not part of Griiip's live feed or the
+  // official FIA CSVs — backfilled separately from Timing71 recordings
+  // (see backend scripts/backfill_vft_from_t71.py), so only populated for
+  // sessions that backfill has been run against.
+  vft_percent?: number | null
 }
 
 // Griiip's own per-crossing classification: Green = personal best, Purple =

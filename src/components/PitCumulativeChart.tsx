@@ -8,6 +8,9 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { computePitStops, type PitStop } from './PitTimeChart'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { EntityFilter, type EntityOption } from './EntityFilter'
+import type { EntitySelection } from '../lib/entitySelection'
+import { resolveEntitySelection } from '../lib/entitySelection'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -84,6 +87,7 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(800)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -111,9 +115,23 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
 
   const maxRound = useMemo(() => stops.reduce((m, s) => Math.max(m, s.round), 0), [stops])
 
+  const carOptions: EntityOption[] = useMemo(() => {
+    const byCar = new Map<string, string | null>()
+    for (const s of stops) if (!byCar.has(s.car)) byCar.set(s.car, s.team)
+    return [...byCar.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(([car, team]) => ({ id: car, label: `#${car} — ${getTeamDisplayName(team)}` }))
+  }, [stops])
+
+  const activeCars = useMemo(
+    () => resolveEntitySelection(carSelection, carOptions.map((c) => c.id)),
+    [carSelection, carOptions],
+  )
+
   const carTotals = useMemo(() => {
     const byCar = new Map<string, PitStop[]>()
     for (const s of stops) {
+      if (!activeCars.has(s.car)) continue
       const arr = byCar.get(s.car)
       if (arr) arr.push(s)
       else byCar.set(s.car, [s])
@@ -129,7 +147,7 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
       })
     }
     return result.sort((a, b) => a.total - b.total)
-  }, [stops])
+  }, [stops, activeCars])
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
@@ -200,7 +218,9 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
           .attr('height', ROW_HEIGHT)
           .attr('fill', getTeamColor(seg.team))
           .append('title')
-          .text(`#${seg.car} — stop ${seg.round} (lap ${seg.lap}): ${formatSeconds(seg.lossSeconds)}`)
+          .text(
+            `#${seg.car} — stop ${seg.round} (lap ${seg.lap}): ${formatSeconds(seg.lossSeconds)}${seg.vftAtPit != null ? ` — VFT ${seg.vftAtPit.toFixed(0)}%` : ''}`,
+          )
         if (w > 0) {
           row
             .append('rect')
@@ -318,6 +338,15 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
       <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pit_cumulative" />}>
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
+        </div>
+        <div className="chart-controls">
+          <EntityFilter
+            items={carOptions}
+            selection={carSelection}
+            onChange={setCarSelection}
+            addLabel="Add car"
+            resetLabel="Show all cars"
+          />
         </div>
       </CollapsibleFilters>
       {legendRounds.length > 0 && (
