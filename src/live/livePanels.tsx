@@ -153,6 +153,7 @@ function LiveStandingsRow({
       <td className="al manufacturer">{row.manufacturer ?? '—'}</td>
       <td className="al tyre">{tyreCompound ?? '—'}</td>
       <td className="num tyre-age">{tyreAge ?? '—'}</td>
+      <td className="num vft">{row.vft_percent != null ? `${Math.round(row.vft_percent)}%` : '—'}</td>
       <td className="num gap">{formatGap(row.gap_to_first_seconds, row.gap_to_first_laps)}</td>
       <td className="num interval">{formatGap(row.gap_to_next_seconds, row.gap_to_next_laps)}</td>
       <td className="num">{row.total_laps || ''}</td>
@@ -257,6 +258,7 @@ function LeaderboardPanel({
               <th className="al">Manufacturer</th>
               <th className="al">Tyre</th>
               <th>Age</th>
+              <th title="Virtual Energy Tank — Hypercar/LMGT3 only">VFT</th>
               <th>Gap</th>
               <th>Int</th>
               <th>Lap</th>

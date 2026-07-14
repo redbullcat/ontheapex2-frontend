@@ -149,6 +149,12 @@ export interface LiveStanding {
   tire_rr_compound: string | null
   tire_rr_age_laps: number | null
   tire_rr_changed: boolean | null
+  // "Virtual Energy Tank" — Griiip's `cars-energy-tanks` channel, the same
+  // data source powering WEC's official broadcast graphic. Hypercar/LMGT3
+  // only; null for every other class (no energy allocation system) and
+  // null until the backend's field-shape guess for this channel has been
+  // confirmed against a real push (see app/live/state.py).
+  vft_percent: number | null
 }
 
 export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
