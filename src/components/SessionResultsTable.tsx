@@ -215,6 +215,20 @@ export function SessionResultsTable({
                   <td>{row.disqualified ? 'DSQ' : row.position}</td>
                   {showClassColumn && <td>{row.disqualified ? '—' : row.classPosition}</td>}
                   <td>
+                    {(penaltiesByCar.get(row.car_number) ?? []).map((p) => (
+                      <span className="penalty-icon" key={p.id} tabIndex={0}>
+                        ⚠
+                        <span className="penalty-tooltip">
+                          <strong>{p.penalty}</strong>
+                          {p.reason}
+                          {p.stewards_doc_url && (
+                            <a href={p.stewards_doc_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                              Stewards decision ↗
+                            </a>
+                          )}
+                        </span>
+                      </span>
+                    ))}
                     {onSelectCar ? (
                       <button type="button" className="car-number-link" onClick={() => onSelectCar(row.car_number)}>
                         #{row.car_number}
@@ -222,16 +236,6 @@ export function SessionResultsTable({
                     ) : (
                       `#${row.car_number}`
                     )}
-                    {(penaltiesByCar.get(row.car_number) ?? []).map((p) => (
-                      <span className="penalty-badge" key={p.id} title={`${p.penalty} — ${p.reason}`}>
-                        ⚠ {p.penalty}
-                        {p.stewards_doc_url && (
-                          <a href={p.stewards_doc_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                            doc
-                          </a>
-                        )}
-                      </span>
-                    ))}
                   </td>
                   <td>
                     <span className="team-key" style={{ background: getTeamColor(row.team) }} />
