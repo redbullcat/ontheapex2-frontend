@@ -6,7 +6,9 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { getDeletedLapOverride } from '../lib/lapOverrides'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 import { FlagLapDeletedModal, type FlaggableLap } from './FlagLapDeletedModal'
+import { AddPenaltyModal } from './AddPenaltyModal'
 import { isLapValid } from '../lib/lapValidity'
+import { dedupeNamesCaseInsensitive } from '../lib/dedupeNames'
 
 interface ResultsRow {
   position: number
@@ -63,7 +65,7 @@ function buildResults(laps: LapRead[], activeClasses: Set<string>): ResultsRow[]
   const sessionIdByCar = new Map<string, number>()
   const timedLapsByCar = new Map<string, FlaggableLap[]>()
   for (const [car, rows] of byCar) {
-    const names = [...new Set(rows.map((r) => r.driver_name).filter((n): n is string => !!n))].sort()
+    const names = dedupeNamesCaseInsensitive(rows.map((r) => r.driver_name).filter((n): n is string => !!n)).sort()
     driversByCar.set(car, names.join(' / '))
 
     let fastest: LapRead | null = null
@@ -150,6 +152,7 @@ export function ResultsTable({
   const [flagging, setFlagging] = useState<{ sessionId: number; carNumber: string; carLaps: FlaggableLap[]; initialLapNumber: number } | null>(
     null,
   )
+  const [addingPenalty, setAddingPenalty] = useState<{ sessionId: number; carNumber: string } | null>(null)
   const deletedLapsVersion = useDeletedLapsVersion()
 
   const allClasses = useMemo(() => {
@@ -266,12 +269,29 @@ export function ResultsTable({
                         Flag lap
                       </button>
                     )}
+                    {row.sessionId != null && (
+                      <button
+                        type="button"
+                        className="deleted-lap-flag-btn"
+                        title="Add a post-session steward penalty for this car"
+                        onClick={() => setAddingPenalty({ sessionId: row.sessionId!, carNumber: row.car_number })}
+                      >
+                        Penalty
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {addingPenalty && (
+        <AddPenaltyModal
+          sessionId={addingPenalty.sessionId}
+          carNumber={addingPenalty.carNumber}
+          onClose={() => setAddingPenalty(null)}
+        />
       )}
       {flagging && (
         <FlagLapDeletedModal

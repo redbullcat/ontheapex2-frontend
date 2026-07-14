@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { LapRead, LeadStint } from '../api/types'
 import { LeadHistoryPanel } from './LeadHistoryPanel'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
+import { dedupeNamesCaseInsensitive } from '../lib/dedupeNames'
 
 interface PodiumRow {
   position: number
@@ -37,12 +38,12 @@ function computeOverview(laps: LapRead[]) {
     if (!prev || lap.lap_number > prev.lap_number) lastLapByCar.set(lap.car_number, lap)
   }
 
-  const driversByCar = new Map<string, Set<string>>()
+  const driversByCar = new Map<string, string[]>()
   for (const lap of filtered) {
     if (!lap.driver_name) continue
-    const set = driversByCar.get(lap.car_number)
-    if (set) set.add(lap.driver_name)
-    else driversByCar.set(lap.car_number, new Set([lap.driver_name]))
+    const arr = driversByCar.get(lap.car_number)
+    if (arr) arr.push(lap.driver_name)
+    else driversByCar.set(lap.car_number, [lap.driver_name])
   }
 
   function classify(rows: LapRead[]): LapRead[] {
@@ -54,7 +55,7 @@ function computeOverview(laps: LapRead[]) {
       position: i + 1,
       car: lap.car_number,
       team: lap.team,
-      drivers: [...(driversByCar.get(lap.car_number) ?? [])].sort().join(' / '),
+      drivers: dedupeNamesCaseInsensitive(driversByCar.get(lap.car_number) ?? []).sort().join(' / '),
       laps: lap.lap_number,
     }))
   }
