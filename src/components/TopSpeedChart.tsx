@@ -137,7 +137,7 @@ export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compa
       .attr('font-size', 12)
       .text((d) => {
         const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
-        return marginLeft < MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
+        return truncateLabel(label, marginLeft - 14)
       })
 
     g.append('g')

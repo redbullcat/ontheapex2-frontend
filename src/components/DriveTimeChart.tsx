@@ -165,7 +165,7 @@ export function DriveTimeChart({ laps }: { laps: LapRead[] }) {
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => (marginLeft < MARGIN.left ? truncateLabel(d.driver, marginLeft - 14) : d.driver))
+      .text((d) => (truncateLabel(d.driver, marginLeft - 14)))
 
     g.append('g')
       .selectAll('rect')

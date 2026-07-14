@@ -275,7 +275,7 @@ export function PaceChart({
       .attr('text-anchor', 'end')
       .attr('fill', 'var(--text-secondary)')
       .attr('font-size', 12)
-      .text((d) => (marginLeft < MARGIN.left ? truncateLabel(d.label, marginLeft - 14) : d.label))
+      .text((d) => (truncateLabel(d.label, marginLeft - 14)))
 
     if (chartType === 'bar') {
       g.append('g')

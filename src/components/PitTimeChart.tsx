@@ -208,7 +208,7 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .attr('font-size', 12)
       .text((d) => {
         const label = `#${d.car} — ${getTeamDisplayName(d.team)}`
-        return marginLeft < BAR_MARGIN.left ? truncateLabel(label, marginLeft - 14) : label
+        return truncateLabel(label, marginLeft - 14)
       })
 
     g.append('g')
