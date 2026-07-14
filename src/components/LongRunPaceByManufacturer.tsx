@@ -4,7 +4,7 @@ import type { LapRead } from '../api/types'
 import { computeCarStints } from '../lib/stints'
 import { isLapValid } from '../lib/lapValidity'
 import { getManufacturerColor } from '../lib/identityColors'
-import { movingAverage } from '../lib/smoothTrend'
+import { adaptiveSmoothWindow, movingAverage } from '../lib/smoothTrend'
 import { ClassFilter } from './ClassFilter'
 import { resolveClassSelection, type ClassSelection } from '../lib/classSelection'
 import { EntityFilter, type EntityOption } from './EntityFilter'
@@ -15,10 +15,6 @@ import { CollapsibleFilters } from './CollapsibleFilters'
 const MARGIN = { top: 16, right: 140, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 460
 const MIN_STINT_LENGTH = 3
-// Odd-sized centered moving average across lap-in-stint position, softening
-// the per-position mean into a LOESS-like trend without pulling in a stats
-// dependency for a true regression.
-const SMOOTH_WINDOW = 3
 
 interface RawPoint {
   manufacturer: string
@@ -39,7 +35,7 @@ interface ManufacturerSeries {
 }
 
 function smooth(points: { lapInStint: number; avg: number }[]): TrendPoint[] {
-  const smoothed = movingAverage(points, SMOOTH_WINDOW, (p) => p.avg)
+  const smoothed = movingAverage(points, adaptiveSmoothWindow(points.length), (p) => p.avg)
   return points.map((p, i) => ({ lapInStint: p.lapInStint, lapTime: smoothed[i] }))
 }
 
