@@ -1,6 +1,7 @@
 import type { LapRead, RaceLogEntry } from '../api/types'
 import type { PitWindow } from './replayData'
 import { FLAG_CODES, computeFlagPeriods } from '../lib/flags'
+import { tyreChangeEvents } from '../lib/tyreChangeEvents'
 
 // Historical CSV data has no discrete event stream the way the live feed's
 // race-log channel does (see app/live/state.py) — this derives an
@@ -12,8 +13,10 @@ import { FLAG_CODES, computeFlagPeriods } from '../lib/flags'
 // Two of the live channel's types have no historical equivalent and are
 // deliberately never emitted here: RCMessage (free-text commentary,
 // nothing in the CSV maps to it) and WeatherUpdate (not tracked per-lap
-// in this schema).
-export const REPLAY_RACE_LOG_TYPES = ['PitIn', 'PitOut', 'DriverSwap', 'FastestLap', 'RaceFlag'] as const
+// in this schema). TyreChange also has no live-channel equivalent (Griiip
+// sends none), but is synthesized the same way on both sides — see
+// lib/tyreChangeEvents.ts.
+export const REPLAY_RACE_LOG_TYPES = ['PitIn', 'PitOut', 'DriverSwap', 'FastestLap', 'RaceFlag', 'TyreChange'] as const
 
 function pitEvents(pitWindowsByCar: Map<string, PitWindow[]>): RaceLogEntry[] {
   const entries: RaceLogEntry[] = []
@@ -129,7 +132,11 @@ function flagEvents(laps: LapRead[]): RaceLogEntry[] {
 }
 
 export function buildReplayRaceLog(laps: LapRead[], pitWindowsByCar: Map<string, PitWindow[]>): RaceLogEntry[] {
-  return [...pitEvents(pitWindowsByCar), ...driverSwapEvents(laps), ...fastestLapEvents(laps), ...flagEvents(laps)].sort(
-    (a, b) => a.elapsedTimeMillis - b.elapsedTimeMillis,
-  )
+  return [
+    ...pitEvents(pitWindowsByCar),
+    ...driverSwapEvents(laps),
+    ...fastestLapEvents(laps),
+    ...flagEvents(laps),
+    ...tyreChangeEvents(laps),
+  ].sort((a, b) => a.elapsedTimeMillis - b.elapsedTimeMillis)
 }

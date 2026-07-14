@@ -114,6 +114,10 @@ export interface LiveStanding {
   team: string | null
   manufacturer: string | null
   driver_name: string | null
+  // FIA driver category (Platinum/Gold/Silver/Bronze), lowercase — null
+  // for any class/series without it, or until Griiip's participants push
+  // for this driver has been seen (see app/live/participants.py).
+  driver_category: string | null
   gap_to_first_seconds: number
   gap_to_next_seconds: number | null
   // Lap-deficit form of the two gaps above, e.g. "+1 Lap" instead of a
@@ -123,6 +127,17 @@ export interface LiveStanding {
   // apply; see app/live/state.py's standings_as_list).
   gap_to_first_laps: number | null
   gap_to_next_laps: number | null
+  // Same gap/interval concept, but relative to the class field instead of
+  // the overall one (Griiip's own frontend's "C.Gap"/"C.Int" columns) —
+  // derived server-side from the same gap_to_first/total_laps data above,
+  // not a distinct field Griiip sends. Null for a class leader's
+  // class_gap_to_next_* (no car ahead in class) and for
+  // class_gap_to_first_seconds only on the class leader itself, which is
+  // always exactly 0.
+  class_gap_to_first_seconds: number | null
+  class_gap_to_next_seconds: number | null
+  class_gap_to_first_laps: number | null
+  class_gap_to_next_laps: number | null
   best_lap_seconds: number | null
   last_lap_seconds: number | null
   last_lap_color: LiveTimeColor
@@ -157,7 +172,11 @@ export interface LiveStanding {
   vft_percent: number | null
 }
 
-export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate'
+// 'TyreChange' is never sent by Griiip itself — synthesized client-side
+// from wheel-stint boundaries (see lib/tyreChangeEvents.ts) since the raw
+// feed has no discrete event for it, the same way Replay already
+// synthesizes PitIn/PitOut/DriverSwap/RaceFlag from lap data.
+export type RaceLogType = 'PitIn' | 'PitOut' | 'RCMessage' | 'RaceFlag' | 'DriverSwap' | 'FastestLap' | 'WeatherUpdate' | 'TyreChange'
 
 export interface RaceLogEntry {
   type: RaceLogType

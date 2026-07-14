@@ -125,6 +125,36 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
     return map
   }, [filteredLaps, carsWithData])
 
+  // How many of those confirmed real stops actually got a wheel-stint
+  // break somewhere in the feed — the real-world completeness rate,
+  // verified against a direct comparison with Timing71's independent
+  // capture of the same WEC Sao Paulo race: both sides land on the same
+  // ~16%, confirming this is a genuine gap in Griiip's own data for that
+  // event rather than something either side's code is losing. Surfaced so
+  // that number is never a surprise buried in a silently-unbroken lane.
+  const tyreDataCompleteness = useMemo(() => {
+    let confirmedStops = 0
+    let totalStops = 0
+    for (const [car, stops] of pitStopsByCar) {
+      const wheels = wheelStintsByCar.get(car)
+      if (!wheels) continue
+      const changeLaps = new Set<number>()
+      for (const wheel of WHEELS) {
+        const stints = wheels[wheel]
+        for (let i = 1; i < stints.length; i++) changeLaps.add(stints[i].startLap)
+      }
+      for (const stop of stops) {
+        totalStops++
+        // A wheel stint's new startLap can land on the pit-in lap itself
+        // or the very next (out) lap, depending on exactly when the
+        // tires channel's snapshot was last taken relative to the lap
+        // boundary — see app/live/state.py's module docstring.
+        if (changeLaps.has(stop.lapNumber) || changeLaps.has(stop.lapNumber + 1)) confirmedStops++
+      }
+    }
+    return { confirmedStops, totalStops }
+  }, [pitStopsByCar, wheelStintsByCar])
+
   const lapDomain = useMemo((): [number, number] => {
     let min = Infinity
     let max = -Infinity
@@ -305,6 +335,8 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
       <p className="hint">
         Dashed lines mark every confirmed pit stop. The timing feed doesn't always report which tyres were changed at a
         stop — a solid, unbroken wheel lane through a marker means no change was reported, not necessarily that none happened.
+        {tyreDataCompleteness.totalStops > 0 &&
+          ` Tyre changes confirmed for ${tyreDataCompleteness.confirmedStops} of ${tyreDataCompleteness.totalStops} pit stops this session (${Math.round((100 * tyreDataCompleteness.confirmedStops) / tyreDataCompleteness.totalStops)}%).`}
       </p>
       {carsWithData.length === 0 ? <p className="hint">No tyre history for this selection.</p> : <svg ref={svgRef} />}
       {tooltip && tooltip.kind === 'stint' && (
