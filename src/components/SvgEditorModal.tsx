@@ -3,6 +3,7 @@ import {
   buildEditableSvg,
   discoverLabelSizeGroups,
   discoverToggleGroups,
+  estimateExportSizeBytes,
   fitOverflow,
   GHOST_STYLE_CSS,
   serializeForExport,
@@ -100,6 +101,7 @@ export function SvgEditorModal({
   const [selectionVersion, setSelectionVersion] = useState(0)
   const [overwriteConfirm, setOverwriteConfirm] = useState(false)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle')
+  const [sizeEstimateBytes, setSizeEstimateBytes] = useState<number | null>(null)
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const baseSizeRef = useRef({ width: chartWidth, height: 400 })
@@ -129,6 +131,7 @@ export function SvgEditorModal({
     // returns real numbers once the element has actual layout — i.e.
     // after it's attached to the visible DOM above, not before.
     applySettings(svg, width, height, groups, labelGroups, settingsRef.current)
+    setSizeEstimateBytes(estimateExportSizeBytes(svg))
     setSelectedId(null)
   }, [])
 
@@ -145,12 +148,17 @@ export function SvgEditorModal({
     if (!svg) return
     const { width, height } = baseSizeRef.current
     applySettings(svg, width, height, availableGroups, labelSizeGroups, settings)
+    setSizeEstimateBytes(estimateExportSizeBytes(svg))
   }, [settings, availableGroups, labelSizeGroups])
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const target = (e.target as Element)?.closest?.('[data-gse-id]')
-      if (target && target.tagName.toLowerCase() === 'text') {
+      // The title has its own dedicated multi-line-aware editor above (see
+      // the Title section) — routing a click on it through this generic
+      // single-line panel would flatten its per-line <tspan>s the moment
+      // anyone typed into that input.
+      if (target && target.tagName.toLowerCase() === 'text' && !target.classList.contains('gse-title')) {
         setSelectedId(target.getAttribute('data-gse-id'))
       } else {
         setSelectedId(null)
@@ -181,20 +189,31 @@ export function SvgEditorModal({
   const bumpSelection = () => setSelectionVersion((v) => v + 1)
   void selectionVersion // read for its re-render side-effect only
 
-  const handleDownload = () => {
+  const [downloading, setDownloading] = useState(false)
+  const [copying, setCopying] = useState(false)
+
+  const handleDownload = async () => {
     if (!svgRef.current) return
-    downloadSvgString(serializeForExport(svgRef.current), filename)
+    setDownloading(true)
+    try {
+      downloadSvgString(await serializeForExport(svgRef.current), filename)
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const handleCopy = async () => {
     if (!svgRef.current) return
+    setCopying(true)
     try {
-      await navigator.clipboard.writeText(serializeForExport(svgRef.current))
+      await navigator.clipboard.writeText(await serializeForExport(svgRef.current))
       setCopyStatus('copied')
       setTimeout(() => setCopyStatus('idle'), 1800)
     } catch {
       // Clipboard permission denied or unavailable — the download button
       // still works, so this is a silent no-op rather than an error state.
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -209,6 +228,12 @@ export function SvgEditorModal({
   const handleSaveDefaults = () => {
     if (hasSvgEditorDefaults()) setOverwriteConfirm(true)
     else doSaveDefaults()
+  }
+
+  const handleApplyDefaults = () => {
+    const d = getSvgEditorDefaults()
+    if (!d) return
+    setSettings((s) => ({ ...s, ...d }))
   }
 
   const titleStyleOptions = stylesForSvgEditorFamily(settings.titleFontFamily)
@@ -260,9 +285,9 @@ export function SvgEditorModal({
 
             <section>
               <h3>Title</h3>
-              <input
-                type="text"
-                placeholder="Chart title (optional)"
+              <textarea
+                rows={2}
+                placeholder="Chart title (optional) — press Enter for a second line"
                 value={settings.titleText}
                 onChange={(e) => setSettings((s) => ({ ...s, titleText: e.target.value }))}
               />
@@ -447,14 +472,22 @@ export function SvgEditorModal({
             )}
 
             <section className="svg-editor-actions">
-              <button type="button" onClick={handleDownload}>
-                Download SVG
+              {sizeEstimateBytes != null && (
+                <p className="svg-editor-hint">
+                  Estimated size: ~{Math.max(1, Math.round(sizeEstimateBytes / 1024))} KB
+                </p>
+              )}
+              <button type="button" onClick={handleDownload} disabled={downloading}>
+                {downloading ? 'Preparing…' : 'Download SVG'}
               </button>
-              <button type="button" onClick={handleCopy}>
-                {copyStatus === 'copied' ? 'Copied!' : 'Copy SVG code'}
+              <button type="button" onClick={handleCopy} disabled={copying}>
+                {copyStatus === 'copied' ? 'Copied!' : copying ? 'Preparing…' : 'Copy SVG code'}
               </button>
               <button type="button" onClick={handleSaveDefaults}>
                 Save as default
+              </button>
+              <button type="button" onClick={handleApplyDefaults} disabled={!hasSvgEditorDefaults()}>
+                Apply defaults
               </button>
             </section>
           </div>
