@@ -2,12 +2,14 @@
 // overrides are (see identityOverrides.ts), so choosing a font/size/element
 // setup once can be re-applied to any other chart's editor session.
 import type { SvgEditorFontFamily } from './svgEditorFonts'
+import type { TitleAlign } from './ghostSvgTheme'
 
 export interface SvgEditorDefaults {
   titleFontFamily: SvgEditorFontFamily
   titleFontWeight: number
   titleItalic: boolean
   titleFontSize: number
+  titleAlign: TitleAlign
   bodyFontFamily: SvgEditorFontFamily | null
   hiddenGroups: string[]
   backgroundVisible: boolean
@@ -20,6 +22,7 @@ export const FALLBACK_DEFAULTS: SvgEditorDefaults = {
   titleFontWeight: 700,
   titleItalic: false,
   titleFontSize: 28,
+  titleAlign: 'left',
   bodyFontFamily: 'Inter',
   hiddenGroups: [],
   backgroundVisible: false,

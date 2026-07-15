@@ -45,23 +45,34 @@ interface HoverState {
   lap: number
 }
 
+// `initial*` props are editor-only: they seed the off-screen instance
+// ChartExportButtons' `renderChart` mounts (see below) from the live
+// chart's current filters, so "Edit as SVG" doesn't silently reset them.
 export function PositionChart({
   data,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialColorMode,
+  initialCarSelection,
+  initialLapRange,
 }: {
   data: HourlyPositions[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialColorMode?: ColorMode
+  initialCarSelection?: EntitySelection
+  initialLapRange?: [number, number] | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [colorMode, setColorMode] = useState<ColorMode>('team')
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [colorMode, setColorMode] = useState<ColorMode>(initialColorMode ?? 'team')
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
+  const [lapRange, setLapRange] = useState<[number, number] | null>(initialLapRange ?? null)
 
   // Classes ordered by their best (lowest) overall position at the first
   // hour, so the fastest class takes color slot 1 — deterministic without
@@ -470,7 +481,17 @@ export function PositionChart({
         <ChartExportButtons
           svgRef={svgRef}
           filename="position_by_hour"
-          renderChart={(w, onReady) => <PositionChart data={data} forcedWidth={w} onRendered={onReady} />}
+          renderChart={(w, onReady) => (
+            <PositionChart
+              data={data}
+              forcedWidth={w}
+              onRendered={onReady}
+              initialClassSelection={classSelection}
+              initialColorMode={colorMode}
+              initialCarSelection={carSelection}
+              initialLapRange={lapRange}
+            />
+          )}
         />
       </div>
       <div className="chart-controls">

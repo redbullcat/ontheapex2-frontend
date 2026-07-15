@@ -103,18 +103,22 @@ export function TyreDegradationChart({
   compound,
   forcedWidth,
   onRendered,
+  initialColorBy,
+  initialCarSelection,
 }: {
   laps: LapRead[]
   compound: string
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialColorBy?: ColorBy
+  initialCarSelection?: EntitySelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
-  const [colorBy, setColorBy] = useState<ColorBy>('team')
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
+  const [colorBy, setColorBy] = useState<ColorBy>(initialColorBy ?? 'team')
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
 
   const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
@@ -344,7 +348,14 @@ export function TyreDegradationChart({
             svgRef={svgRef}
             filename={`tyre_degradation_${compound.toLowerCase()}`}
             renderChart={(w, onReady) => (
-              <TyreDegradationChart laps={laps} compound={compound} forcedWidth={w} onRendered={onReady} />
+              <TyreDegradationChart
+                laps={laps}
+                compound={compound}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialColorBy={colorBy}
+                initialCarSelection={carSelection}
+              />
             )}
           />
         }

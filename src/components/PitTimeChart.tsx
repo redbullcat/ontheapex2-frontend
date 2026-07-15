@@ -113,6 +113,8 @@ export function PitTimeChart({
   onBarRendered,
   forcedScatterWidth,
   onScatterRendered,
+  initialClassSelection,
+  initialGapMode,
 }: {
   laps: LapRead[]
   compactFilters?: boolean
@@ -120,6 +122,8 @@ export function PitTimeChart({
   onBarRendered?: (svg: SVGSVGElement) => void
   forcedScatterWidth?: number
   onScatterRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialGapMode?: GapMode
 }) {
   const barContainerRef = useRef<HTMLDivElement>(null)
   const barSvgRef = useRef<SVGSVGElement>(null)
@@ -127,8 +131,8 @@ export function PitTimeChart({
   const scatterSvgRef = useRef<SVGSVGElement>(null)
   const barWidth = useResponsiveWidth(barContainerRef, forcedBarWidth)
   const scatterWidth = useResponsiveWidth(scatterContainerRef, forcedScatterWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [gapMode, setGapMode] = useState<GapMode>('ahead')
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [gapMode, setGapMode] = useState<GapMode>(initialGapMode ?? 'ahead')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -359,6 +363,8 @@ export function PitTimeChart({
                   compactFilters={compactFilters}
                   forcedBarWidth={w}
                   onBarRendered={onReady}
+                  initialClassSelection={classSelection}
+                  initialGapMode={gapMode}
                 />
               )}
             />
@@ -377,6 +383,8 @@ export function PitTimeChart({
                   compactFilters={compactFilters}
                   forcedScatterWidth={w}
                   onScatterRendered={onReady}
+                  initialClassSelection={classSelection}
+                  initialGapMode={gapMode}
                 />
               )}
             />

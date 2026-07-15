@@ -56,12 +56,22 @@ export function SectorAnalysisChart({
   eventName,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialCarSelection,
+  initialLapRange,
+  initialUseRefCar,
+  initialRefCar,
 }: {
   laps: LapRead[]
   seriesSlug?: string
   eventName?: string
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialCarSelection?: EntitySelection
+  initialLapRange?: [number, number] | null
+  initialUseRefCar?: boolean
+  initialRefCar?: string
 }) {
   const trackMapUrl =
     seriesSlug?.toLowerCase() === 'wec' && eventName ? findTrackMapUrl(eventName) : null
@@ -69,11 +79,11 @@ export function SectorAnalysisChart({
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
-  const [useRefCar, setUseRefCar] = useState(false)
-  const [refCar, setRefCar] = useState('')
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
+  const [lapRange, setLapRange] = useState<[number, number] | null>(initialLapRange ?? null)
+  const [useRefCar, setUseRefCar] = useState(initialUseRefCar ?? false)
+  const [refCar, setRefCar] = useState(initialRefCar ?? '')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -414,6 +424,11 @@ export function SectorAnalysisChart({
                 eventName={eventName}
                 forcedWidth={w}
                 onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialCarSelection={carSelection}
+                initialLapRange={lapRange}
+                initialUseRefCar={useRefCar}
+                initialRefCar={refCar}
               />
             )}
           />

@@ -5,7 +5,24 @@
 // already defines site-wide), chart chrome becomes toggle-able, and a title
 // can be inserted. All of this operates on a detached clone — the live
 // chart mounted in the app is never touched.
-import { SVG_EDITOR_GOOGLE_FONTS_IMPORT, svgEditorFontFamilyCss, type SvgEditorFontFamily } from './svgEditorFonts'
+import { SVG_EDITOR_GOOGLE_FONTS_IMPORT, svgEditorFontStack, type SvgEditorFontFamily } from './svgEditorFonts'
+
+// A plain `font-family` attribute loses to ANY external CSS rule that also
+// targets this element (even a generic inherited `body { font-family }`)
+// — presentation attributes count as the lowest-priority origin in the
+// cascade, weaker than a real author stylesheet rule. Both this app's own
+// global font rule and a typical Ghost theme's body font rule are exactly
+// that kind of rule, so the attribute alone silently loses in both places.
+// An inline `style` declaration outranks any external stylesheet short of
+// `!important`, so every font-family write in this module goes through
+// this helper instead of `setAttribute('font-family', ...)`.
+export function setFontFamilyStyle(el: Element, family: SvgEditorFontFamily | null) {
+  if (family) {
+    el.setAttribute('style', `font-family: ${svgEditorFontStack(family)} !important;`)
+  } else {
+    el.removeAttribute('style')
+  }
+}
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -76,6 +93,13 @@ function applyThemeClasses(liveRoot: SVGSVGElement, cloneRoot: SVGSVGElement) {
     if (fillRole === 'text') {
       cloneEl.setAttribute('fill', '#111111')
       classes.push(ROLE_CLASSES.text)
+      // var(--text-muted) is what every chart's D3 axis-tick text uses
+      // (see e.g. PaceChart's `.tick text`); var(--text-primary/secondary)
+      // is everything else text-role — row/category labels, value labels.
+      // Kept as a separate marker class (not a style difference) purely so
+      // the editor can offer "resize axis labels" and "resize chart
+      // labels" as two independent batch controls.
+      classes.push(rawFill?.trim() === 'var(--text-muted)' ? 'gse-axis-label' : 'gse-body-label')
     }
     if (strokeRole && (strokeRole === 'axis' || strokeRole === 'grid') && !hasMeaningfulFill(rawFill)) {
       cloneEl.setAttribute('stroke', '#cccccc')
@@ -121,6 +145,30 @@ export function setGroupVisible(svgEl: SVGSVGElement, selector: string, visible:
   })
 }
 
+export interface LabelSizeGroup {
+  key: string
+  label: string
+  selector: string
+}
+
+const KNOWN_LABEL_SIZE_GROUPS: LabelSizeGroup[] = [
+  { key: 'axis-labels', label: 'Axis tick labels', selector: '.gse-axis-label' },
+  { key: 'body-labels', label: 'Chart labels', selector: '.gse-body-label' },
+]
+
+export function discoverLabelSizeGroups(svgEl: SVGSVGElement): LabelSizeGroup[] {
+  return KNOWN_LABEL_SIZE_GROUPS.filter((g) => svgEl.querySelector(g.selector) != null)
+}
+
+// `size == null` leaves each element's own original font-size alone —
+// this is a one-shot "set them all to X", not a persistent scale factor,
+// so there's nothing to "reset" back to; the caller just stops calling it
+// with a value once the user clears the input.
+export function setLabelGroupFontSize(svgEl: SVGSVGElement, selector: string, size: number | null) {
+  if (size == null) return
+  svgEl.querySelectorAll(selector).forEach((el) => el.setAttribute('font-size', String(size)))
+}
+
 const BG_SELECTOR = '.gse-bg'
 
 export function setBackgroundVisible(svgEl: SVGSVGElement, visible: boolean) {
@@ -141,12 +189,15 @@ export function setBackgroundVisible(svgEl: SVGSVGElement, visible: boolean) {
   }
 }
 
+export type TitleAlign = 'left' | 'center' | 'right'
+
 export interface TitleOptions {
   text: string
   fontFamily: SvgEditorFontFamily
   fontWeight: number
   italic: boolean
   fontSize: number
+  align: TitleAlign
 }
 
 const TITLE_SELECTOR = '.gse-title'
@@ -164,6 +215,7 @@ export function setTitle(svgEl: SVGSVGElement, baseHeight: number, baseWidth: nu
   }
 
   if (!opts || !opts.text.trim()) {
+    svgEl.setAttribute('width', String(baseWidth))
     svgEl.setAttribute('height', String(baseHeight))
     svgEl.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`)
     return
@@ -177,15 +229,29 @@ export function setTitle(svgEl: SVGSVGElement, baseHeight: number, baseWidth: nu
   svgEl.appendChild(wrapper)
 
   const totalHeight = baseHeight + titleHeight
+  // Reset width alongside height/viewBox even though this branch never
+  // changes it — fitOverflow (which runs later in the same applySettings
+  // pass) only re-expands when the width attribute differs from what it
+  // computes, so leaving a stale, previously-expanded width attribute here
+  // would make it skip re-syncing viewBox to match on the next call.
+  svgEl.setAttribute('width', String(baseWidth))
   svgEl.setAttribute('height', String(totalHeight))
   svgEl.setAttribute('viewBox', `0 0 ${baseWidth} ${totalHeight}`)
 
   const titleEl = document.createElementNS(SVG_NS, 'text')
   titleEl.setAttribute('class', 'theme-text gse-title')
   titleEl.setAttribute('data-gse-id', nextId())
-  titleEl.setAttribute('x', '4')
+  const { x, anchor } =
+    opts.align === 'center'
+      ? { x: baseWidth / 2, anchor: 'middle' }
+      : opts.align === 'right'
+        ? { x: baseWidth - 4, anchor: 'end' }
+        : { x: 4, anchor: 'start' }
+  titleEl.setAttribute('x', String(x))
+  titleEl.setAttribute('text-anchor', anchor)
   titleEl.setAttribute('y', String(Math.round(titleHeight / 2 + opts.fontSize * 0.36)))
-  titleEl.setAttribute('font-family', svgEditorFontFamilyCss(opts.fontFamily))
+  setFontFamilyStyle(titleEl, opts.fontFamily)
+  titleEl.setAttribute('font-family', svgEditorFontStack(opts.fontFamily))
   titleEl.setAttribute('font-weight', String(opts.fontWeight))
   if (opts.italic) titleEl.setAttribute('font-style', 'italic')
   titleEl.setAttribute('font-size', String(opts.fontSize))
@@ -219,9 +285,36 @@ export function buildEditableSvg(liveSvgEl: SVGSVGElement): { svg: SVGSVGElement
 export function setBodyFont(svgEl: SVGSVGElement, family: SvgEditorFontFamily | null) {
   svgEl.querySelectorAll('text').forEach((el) => {
     if (el.classList.contains('gse-title')) return
-    if (family) el.setAttribute('font-family', svgEditorFontFamilyCss(family))
+    setFontFamilyStyle(el, family)
+    if (family) el.setAttribute('font-family', svgEditorFontStack(family))
     else el.removeAttribute('font-family')
   })
+}
+
+// Grows (never shrinks) the SVG's own width/height + viewBox to cover
+// whatever actually got drawn — a narrow chosen width can leave a bar's
+// trailing value label past the right edge, and since the SVG's own
+// viewport clips anything outside it, that label would otherwise be
+// permanently cut off in the downloaded file, not just visually
+// overflowing in the editor's scrollable preview pane.
+export function fitOverflow(svgEl: SVGSVGElement) {
+  let bbox: DOMRect
+  try {
+    bbox = svgEl.getBBox()
+  } catch {
+    return // not attached/rendered yet — nothing to measure
+  }
+  const currentWidth = Number(svgEl.getAttribute('width')) || 0
+  const currentHeight = Number(svgEl.getAttribute('height')) || 0
+  const neededWidth = Math.ceil(bbox.x + bbox.width) + 4
+  const neededHeight = Math.ceil(bbox.y + bbox.height) + 4
+  const w = Math.max(currentWidth, neededWidth)
+  const h = Math.max(currentHeight, neededHeight)
+  if (w !== currentWidth || h !== currentHeight) {
+    svgEl.setAttribute('width', String(w))
+    svgEl.setAttribute('height', String(h))
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`)
+  }
 }
 
 // Final output: clones once more (so repeated calls never mutate the
@@ -232,6 +325,7 @@ export function setBodyFont(svgEl: SVGSVGElement, family: SvgEditorFontFamily | 
 export function serializeForExport(svgEl: SVGSVGElement): string {
   const clone = svgEl.cloneNode(true) as SVGSVGElement
   clone.querySelectorAll('[data-gse-id]').forEach((el) => el.removeAttribute('data-gse-id'))
+  clone.querySelectorAll('[data-gse-font]').forEach((el) => el.removeAttribute('data-gse-font'))
 
   const style = document.createElementNS(SVG_NS, 'style')
   style.textContent = GHOST_STYLE_CSS.replace(/&/g, '&amp;')

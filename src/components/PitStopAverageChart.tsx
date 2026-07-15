@@ -79,19 +79,29 @@ export function PitStopAverageChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialGroupBy,
+  initialEntitySelection,
+  initialTopPercent,
+  initialGapMode,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialGroupBy?: GroupBy
+  initialEntitySelection?: EntitySelection
+  initialTopPercent?: string
+  initialGapMode?: GapMode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [groupBy, setGroupBy] = useState<GroupBy>('team')
-  const [entitySelection, setEntitySelection] = useState<EntitySelection>(null)
-  const [topPercentInput, setTopPercentInput] = useState('100')
-  const [gapMode, setGapMode] = useState<GapMode>('ahead')
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [groupBy, setGroupBy] = useState<GroupBy>(initialGroupBy ?? 'team')
+  const [entitySelection, setEntitySelection] = useState<EntitySelection>(initialEntitySelection ?? null)
+  const [topPercentInput, setTopPercentInput] = useState(initialTopPercent ?? '100')
+  const [gapMode, setGapMode] = useState<GapMode>(initialGapMode ?? 'ahead')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -251,7 +261,18 @@ export function PitStopAverageChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="pit_stop_average"
-            renderChart={(w, onReady) => <PitStopAverageChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <PitStopAverageChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialGroupBy={groupBy}
+                initialEntitySelection={entitySelection}
+                initialTopPercent={topPercentInput}
+                initialGapMode={gapMode}
+              />
+            )}
           />
         }
       >

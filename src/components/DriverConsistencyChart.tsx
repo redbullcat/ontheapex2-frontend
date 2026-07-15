@@ -78,18 +78,26 @@ export function DriverConsistencyChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialDriverSelection,
+  initialTopPercent,
+  initialGapMode,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialDriverSelection?: EntitySelection
+  initialTopPercent?: string
+  initialGapMode?: GapMode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
-  const [topPercentInput, setTopPercentInput] = useState('100')
-  const [gapMode, setGapMode] = useState<GapMode>('ahead')
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [driverSelection, setDriverSelection] = useState<EntitySelection>(initialDriverSelection ?? null)
+  const [topPercentInput, setTopPercentInput] = useState(initialTopPercent ?? '100')
+  const [gapMode, setGapMode] = useState<GapMode>(initialGapMode ?? 'ahead')
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -237,7 +245,17 @@ export function DriverConsistencyChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="driver_consistency"
-            renderChart={(w, onReady) => <DriverConsistencyChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <DriverConsistencyChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialDriverSelection={driverSelection}
+                initialTopPercent={topPercentInput}
+                initialGapMode={gapMode}
+              />
+            )}
           />
         }
       >

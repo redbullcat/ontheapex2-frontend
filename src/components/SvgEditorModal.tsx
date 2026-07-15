@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   buildEditableSvg,
+  discoverLabelSizeGroups,
   discoverToggleGroups,
+  fitOverflow,
   GHOST_STYLE_CSS,
   serializeForExport,
   setBackgroundVisible,
   setBodyFont,
+  setFontFamilyStyle,
   setGroupVisible,
+  setLabelGroupFontSize,
   setTitle,
   downloadSvgString,
+  type LabelSizeGroup,
+  type TitleAlign,
   type ToggleGroup,
 } from '../lib/ghostSvgTheme'
 import {
@@ -30,26 +36,40 @@ interface Settings {
   titleFontWeight: number
   titleItalic: boolean
   titleFontSize: number
+  titleAlign: TitleAlign
   bodyFontFamily: SvgEditorFontFamily | null
   hiddenGroups: string[]
   backgroundVisible: boolean
+  // Ephemeral, not persisted as a "default" — a one-shot "set them all to
+  // X" per editor session, keyed by LabelSizeGroup.key.
+  labelSizes: Record<string, number | null>
 }
 
 function defaultsToSettings(d: SvgEditorDefaults, titleText: string): Settings {
-  return { titleText, ...d }
+  return { titleText, labelSizes: {}, ...d }
 }
 
-function applySettings(svg: SVGSVGElement, baseWidth: number, baseHeight: number, groups: ToggleGroup[], s: Settings) {
+function applySettings(
+  svg: SVGSVGElement,
+  baseWidth: number,
+  baseHeight: number,
+  groups: ToggleGroup[],
+  labelSizeGroups: LabelSizeGroup[],
+  s: Settings,
+) {
   setTitle(svg, baseHeight, baseWidth, s.titleText.trim() ? {
     text: s.titleText,
     fontFamily: s.titleFontFamily,
     fontWeight: s.titleFontWeight,
     italic: s.titleItalic,
     fontSize: s.titleFontSize,
+    align: s.titleAlign,
   } : null)
   setBodyFont(svg, s.bodyFontFamily)
   for (const g of groups) setGroupVisible(svg, g.selector, !s.hiddenGroups.includes(g.key))
+  for (const g of labelSizeGroups) setLabelGroupFontSize(svg, g.selector, s.labelSizes[g.key] ?? null)
   setBackgroundVisible(svg, s.backgroundVisible)
+  fitOverflow(svg)
 }
 
 export function SvgEditorModal({
@@ -74,6 +94,7 @@ export function SvgEditorModal({
   }, [settings])
 
   const [availableGroups, setAvailableGroups] = useState<ToggleGroup[]>([])
+  const [labelSizeGroups, setLabelSizeGroups] = useState<LabelSizeGroup[]>([])
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectionVersion, setSelectionVersion] = useState(0)
@@ -95,14 +116,19 @@ export function SvgEditorModal({
     svgRef.current = svg
     baseSizeRef.current = { width, height }
     const groups = discoverToggleGroups(svg)
+    const labelGroups = discoverLabelSizeGroups(svg)
     setAvailableGroups(groups)
-    applySettings(svg, width, height, groups, settingsRef.current)
+    setLabelSizeGroups(labelGroups)
 
     const host = previewHostRef.current
     if (host) {
       host.innerHTML = ''
       host.appendChild(svg)
     }
+    // fitOverflow (inside applySettings) needs getBBox(), which only
+    // returns real numbers once the element has actual layout — i.e.
+    // after it's attached to the visible DOM above, not before.
+    applySettings(svg, width, height, groups, labelGroups, settingsRef.current)
     setSelectedId(null)
   }, [])
 
@@ -118,8 +144,8 @@ export function SvgEditorModal({
     const svg = svgRef.current
     if (!svg) return
     const { width, height } = baseSizeRef.current
-    applySettings(svg, width, height, availableGroups, settings)
-  }, [settings, availableGroups])
+    applySettings(svg, width, height, availableGroups, labelSizeGroups, settings)
+  }, [settings, availableGroups, labelSizeGroups])
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -173,8 +199,9 @@ export function SvgEditorModal({
   }
 
   const doSaveDefaults = () => {
-    const { titleText: _titleText, ...persisted } = settings
+    const { titleText: _titleText, labelSizes: _labelSizes, ...persisted } = settings
     void _titleText
+    void _labelSizes
     saveSvgEditorDefaults(persisted)
     setOverwriteConfirm(false)
   }
@@ -272,6 +299,18 @@ export function SvgEditorModal({
                   onChange={(e) => setSettings((s) => ({ ...s, titleFontSize: Number(e.target.value) || s.titleFontSize }))}
                 />
               </div>
+              <div className="color-mode-toggle" role="radiogroup" aria-label="Title alignment">
+                {(['left', 'center', 'right'] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    className={settings.titleAlign === a ? 'active' : ''}
+                    onClick={() => setSettings((s) => ({ ...s, titleAlign: a }))}
+                  >
+                    {a[0].toUpperCase() + a.slice(1)}
+                  </button>
+                ))}
+              </div>
             </section>
 
             <section>
@@ -293,6 +332,30 @@ export function SvgEditorModal({
                 To resize an individual label, click it in the preview.
               </p>
             </section>
+
+            {labelSizeGroups.length > 0 && (
+              <section>
+                <h3>Label sizes</h3>
+                {labelSizeGroups.map((g) => (
+                  <label key={g.key} className="svg-editor-row">
+                    <span className="field-label">{g.label}</span>
+                    <input
+                      type="number"
+                      min={6}
+                      max={96}
+                      placeholder="Original"
+                      value={settings.labelSizes[g.key] ?? ''}
+                      onChange={(e) =>
+                        setSettings((s) => ({
+                          ...s,
+                          labelSizes: { ...s.labelSizes, [g.key]: e.target.value ? Number(e.target.value) : null },
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </section>
+            )}
 
             {(availableGroups.length > 0 || true) && (
               <section>
@@ -353,9 +416,12 @@ export function SvgEditorModal({
                 />
                 <div className="svg-editor-row">
                   <select
-                    value={selectedNode.getAttribute('font-family') ?? ''}
+                    value={selectedNode.getAttribute('data-gse-font') ?? ''}
                     onChange={(e) => {
-                      selectedNode.setAttribute('font-family', e.target.value)
+                      const family = (e.target.value || null) as SvgEditorFontFamily | null
+                      setFontFamilyStyle(selectedNode, family)
+                      if (family) selectedNode.setAttribute('data-gse-font', family)
+                      else selectedNode.removeAttribute('data-gse-font')
                       bumpSelection()
                     }}
                   >

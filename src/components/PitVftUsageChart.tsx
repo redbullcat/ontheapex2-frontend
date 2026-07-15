@@ -59,16 +59,20 @@ export function PitVftUsageChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialCarSelection,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialCarSelection?: EntitySelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -214,7 +218,15 @@ export function PitVftUsageChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="vft_usage_avg"
-            renderChart={(w, onReady) => <PitVftUsageChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <PitVftUsageChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialCarSelection={carSelection}
+              />
+            )}
           />
         }
       >

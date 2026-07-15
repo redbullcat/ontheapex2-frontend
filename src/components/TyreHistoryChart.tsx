@@ -48,18 +48,22 @@ export function TyreHistoryChart({
   compactFilters,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialCarSelection,
 }: {
   laps: LapRead[]
   compactFilters?: boolean
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialCarSelection?: EntitySelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -321,7 +325,14 @@ export function TyreHistoryChart({
               svgRef={svgRef}
               filename="tyre_history"
               renderChart={(w, onReady) => (
-                <TyreHistoryChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+                <TyreHistoryChart
+                  laps={laps}
+                  compactFilters={compactFilters}
+                  forcedWidth={w}
+                  onRendered={onReady}
+                  initialClassSelection={classSelection}
+                  initialCarSelection={carSelection}
+                />
               )}
             />
           }

@@ -28,16 +28,18 @@ export function TopSpeedChart({
   compactFilters,
   forcedWidth,
   onRendered,
+  initialClassSelection,
 }: {
   laps: LapRead[]
   compactFilters?: boolean
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -224,7 +226,13 @@ export function TopSpeedChart({
               svgRef={svgRef}
               filename="top_speed"
               renderChart={(w, onReady) => (
-                <TopSpeedChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+                <TopSpeedChart
+                  laps={laps}
+                  compactFilters={compactFilters}
+                  forcedWidth={w}
+                  onRendered={onReady}
+                  initialClassSelection={classSelection}
+                />
               )}
             />
           </div>
@@ -236,7 +244,13 @@ export function TopSpeedChart({
               svgRef={svgRef}
               filename="top_speed"
               renderChart={(w, onReady) => (
-                <TopSpeedChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+                <TopSpeedChart
+                  laps={laps}
+                  compactFilters={compactFilters}
+                  forcedWidth={w}
+                  onRendered={onReady}
+                  initialClassSelection={classSelection}
+                />
               )}
             />
           }

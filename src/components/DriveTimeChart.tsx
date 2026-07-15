@@ -77,18 +77,26 @@ export function DriveTimeChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialTeamSelection,
+  initialManufacturerSelection,
+  initialDriverSelection,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialTeamSelection?: EntitySelection
+  initialManufacturerSelection?: EntitySelection
+  initialDriverSelection?: EntitySelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [teamSelection, setTeamSelection] = useState<EntitySelection>(null)
-  const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(null)
-  const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [teamSelection, setTeamSelection] = useState<EntitySelection>(initialTeamSelection ?? null)
+  const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(initialManufacturerSelection ?? null)
+  const [driverSelection, setDriverSelection] = useState<EntitySelection>(initialDriverSelection ?? null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -246,7 +254,17 @@ export function DriveTimeChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="drive_time"
-            renderChart={(w, onReady) => <DriveTimeChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <DriveTimeChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialTeamSelection={teamSelection}
+                initialManufacturerSelection={manufacturerSelection}
+                initialDriverSelection={driverSelection}
+              />
+            )}
           />
         }
       >

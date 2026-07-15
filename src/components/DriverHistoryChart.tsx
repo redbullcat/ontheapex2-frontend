@@ -171,17 +171,19 @@ export function DriverHistoryChart({
   isRaceSession = false,
   forcedWidth,
   onRendered,
+  initialSelectedCars,
 }: {
   stints: Stint[]
   laps: LapRead[]
   isRaceSession?: boolean
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialSelectedCars?: string[]
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [selectedCars, setSelectedCars] = useState<string[]>([])
+  const [selectedCars, setSelectedCars] = useState<string[]>(initialSelectedCars ?? [])
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [selectedStint, setSelectedStint] = useState<{ carNumber: string; segment: StintSegment } | null>(null)
 
@@ -470,6 +472,7 @@ export function DriverHistoryChart({
                 isRaceSession={isRaceSession}
                 forcedWidth={w}
                 onRendered={onReady}
+                initialSelectedCars={selectedCars}
               />
             )}
           />

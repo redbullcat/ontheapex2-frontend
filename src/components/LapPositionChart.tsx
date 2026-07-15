@@ -99,6 +99,11 @@ export function LapPositionChart({
   startingGrid,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialColorMode,
+  initialCarSelection,
+  initialLapRange,
+  initialShowFlags,
 }: {
   laps: LapRead[]
   focusCarNumber?: string
@@ -126,6 +131,11 @@ export function LapPositionChart({
   startingGrid?: Map<string, number> | null
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialColorMode?: ColorMode
+  initialCarSelection?: EntitySelection
+  initialLapRange?: [number, number] | null
+  initialShowFlags?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -159,18 +169,19 @@ export function LapPositionChart({
     pathsSelRef.current?.filter((d) => pinned.has(d.car_number)).raise()
   }, [])
   const [classSelection, setClassSelection] = useState<ClassSelection>(() => {
+    if (initialClassSelection !== undefined) return initialClassSelection
     if (!focusCarNumber) return null
     const cls = laps.find((l) => l.car_number === focusCarNumber)?.class
     return cls ? new Set([cls]) : null
   })
-  const [colorMode, setColorMode] = useState<ColorMode>('team')
+  const [colorMode, setColorMode] = useState<ColorMode>(initialColorMode ?? 'team')
   // Deliberately NOT seeded to just focusCarNumber — ranking needs every
   // car in the class to be in the pool, or every lap trivially ranks 1st
   // again (the exact bug this prop exists to fix). "Add car" is hidden
   // below instead of narrowed, so this stays "the whole class" for good.
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
-  const [showFlags, setShowFlags] = useState(false)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
+  const [lapRange, setLapRange] = useState<[number, number] | null>(initialLapRange ?? null)
+  const [showFlags, setShowFlags] = useState(initialShowFlags ?? false)
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
   const deletedLapsVersion = useDeletedLapsVersion()
@@ -879,6 +890,11 @@ export function LapPositionChart({
                     startingGrid={startingGrid}
                     forcedWidth={w}
                     onRendered={onReady}
+                    initialClassSelection={classSelection}
+                    initialColorMode={colorMode}
+                    initialCarSelection={carSelection}
+                    initialLapRange={lapRange}
+                    initialShowFlags={showFlags}
                   />
                 )}
               />

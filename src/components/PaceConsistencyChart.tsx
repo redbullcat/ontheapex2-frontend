@@ -41,19 +41,24 @@ function sampleStd(values: number[]): number {
   return Math.sqrt(variance)
 }
 
+// `initialClassSelection` is editor-only: it seeds the off-screen instance
+// ChartExportButtons' `renderChart` mounts (see below) from the live
+// chart's current filter, so "Edit as SVG" doesn't silently reset it.
 export function PaceConsistencyChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
   const [hover, setHover] = useState<HoverState | null>(null)
 
   const allClasses = useMemo(() => {
@@ -263,7 +268,14 @@ export function PaceConsistencyChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="pace_consistency"
-            renderChart={(w, onReady) => <PaceConsistencyChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <PaceConsistencyChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+              />
+            )}
           />
         }
       >
