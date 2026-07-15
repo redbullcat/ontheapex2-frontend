@@ -12,6 +12,7 @@ import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelec
 import { getTeamDisplayName } from '../lib/identityColors'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 16, bottom: 28, left: 48 }
 const ROW_HEIGHT = 44
@@ -42,24 +43,23 @@ type TooltipState = StintTooltip | PitTooltip
 // up as exactly those wheels' lanes breaking, rather than collapsing every
 // wheel into one "the car's tyres" bar the way a single-row-per-car view
 // would have to.
-export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
+export function TyreHistoryChart({
+  laps,
+  compactFilters,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  compactFilters?: boolean
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -260,7 +260,9 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
         })
         .on('mouseleave', () => setTooltip(null))
     })
-  }, [carsWithData, wheelStintsByCar, pitStopsByCar, width, innerWidth, innerHeight, lapDomain, height])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [carsWithData, wheelStintsByCar, pitStopsByCar, width, innerWidth, innerHeight, lapDomain, height, onRendered])
 
   return (
     <div className="viz-root tyre-history-chart" ref={containerRef}>
@@ -313,7 +315,17 @@ export function TyreHistoryChart({ laps, compactFilters }: { laps: LapRead[]; co
           </div>
         </PanelSettingsPopover>
       ) : (
-        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="tyre_history" />}>
+        <CollapsibleFilters
+          actions={
+            <ChartExportButtons
+              svgRef={svgRef}
+              filename="tyre_history"
+              renderChart={(w, onReady) => (
+                <TyreHistoryChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+              )}
+            />
+          }
+        >
           <div className="chart-controls">
             <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
             <EntityFilter items={carOptions} selection={carSelection} onChange={setCarSelection} addLabel="Add car" resetLabel="Show all cars" />

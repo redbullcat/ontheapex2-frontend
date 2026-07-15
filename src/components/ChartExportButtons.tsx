@@ -1,20 +1,27 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { exportEmbedJs, exportPng, exportSvg } from '../lib/chartExport'
 import { ChartTitleModal } from './ChartTitleModal'
+import { SvgEditorModal } from './SvgEditorModal'
 
 export function ChartExportButtons({
   svgRef,
   filename,
   defaultTitle,
+  renderChart,
 }: {
   svgRef: RefObject<SVGSVGElement | null>
   filename: string
   // Pre-fills the title prompt shown before an SVG download; falls back to
   // a humanized version of `filename` (e.g. "pace_chart" -> "Pace chart").
   defaultTitle?: string
+  // Lets the "Edit as SVG" modal re-render this exact chart off-screen at
+  // an arbitrary width (true reflow via the chart's own D3 code) instead
+  // of scaling a static snapshot. See SvgEditorModal for how it's driven.
+  renderChart: (forcedWidth: number, onRendered: (svg: SVGSVGElement) => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [titlePromptOpen, setTitlePromptOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,6 +68,15 @@ export function ChartExportButtons({
           <button type="button" onClick={() => run(exportEmbedJs)}>
             Embeddable JS
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              setEditorOpen(true)
+            }}
+          >
+            Edit as SVG
+          </button>
         </div>
       )}
       {titlePromptOpen && (
@@ -68,6 +84,14 @@ export function ChartExportButtons({
           defaultTitle={defaultTitle ?? humanizedDefault}
           onSubmit={handleTitleSubmit}
           onCancel={() => setTitlePromptOpen(false)}
+        />
+      )}
+      {editorOpen && (
+        <SvgEditorModal
+          filename={filename}
+          initialWidth={svgRef.current?.getBoundingClientRect().width || 800}
+          renderChart={renderChart}
+          onClose={() => setEditorOpen(false)}
         />
       )}
     </div>

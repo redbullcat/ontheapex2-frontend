@@ -10,6 +10,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { LapRangeInputs } from './LapRangeInputs'
 import { ChartExportButtons } from './ChartExportButtons'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -44,26 +45,23 @@ interface HoverState {
   lap: number
 }
 
-export function PositionChart({ data }: { data: HourlyPositions[] }) {
+export function PositionChart({
+  data,
+  forcedWidth,
+  onRendered,
+}: {
+  data: HourlyPositions[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('team')
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   // Classes ordered by their best (lowest) overall position at the first
   // hour, so the fastest class takes color slot 1 — deterministic without
@@ -376,7 +374,9 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         pathsSelRef.current?.attr('opacity', 0.65).attr('stroke-width', 2)
         setHover(null)
       })
-  }, [cars, width, activeClasses, strokeColor, maxHour, maxPosition, positionsByHourAndCar])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [cars, width, activeClasses, strokeColor, maxHour, maxPosition, positionsByHourAndCar, onRendered])
 
   const legendClasses = useMemo(
     () => [...activeClasses].filter((c) => allClasses.indexOf(c) < CLASS_VARS.length),
@@ -467,7 +467,11 @@ export function PositionChart({ data }: { data: HourlyPositions[] }) {
         <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
         <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />
-        <ChartExportButtons svgRef={svgRef} filename="position_by_hour" />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename="position_by_hour"
+          renderChart={(w, onReady) => <PositionChart data={data} forcedWidth={w} onRendered={onReady} />}
+        />
       </div>
       <div className="chart-controls">
         <EntityFilter

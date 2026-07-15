@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import type { LeadStint } from '../api/types'
 import { ChartExportButtons } from './ChartExportButtons'
 import { getTeamColor, getTeamDisplayName } from '../lib/identityColors'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 16 }
 const BAR_HEIGHT = 48
@@ -14,22 +15,19 @@ interface TooltipState {
   stint: LeadStint
 }
 
-export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
+export function LeadHistoryChart({
+  stints,
+  forcedWidth,
+  onRendered,
+}: {
+  stints: LeadStint[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   // Team livery colors, same convention as every other chart's colorMode
   // 'team' (see lib/identityColors — a real per-team lookup table plus a
@@ -140,7 +138,9 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
           .attr('fill', '#898781')
           .attr('font-size', 11),
       )
-  }, [stints, width, carColor])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [stints, width, carColor, onRendered])
 
   return (
     <div className="viz-root lead-history" ref={containerRef}>
@@ -218,7 +218,11 @@ export function LeadHistoryChart({ stints }: { stints: LeadStint[] }) {
             </div>
           ))}
         </div>
-        <ChartExportButtons svgRef={svgRef} filename="lead_history" />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename="lead_history"
+          renderChart={(w, onReady) => <LeadHistoryChart stints={stints} forcedWidth={w} onRendered={onReady} />}
+        />
       </div>
       <svg ref={svgRef} />
       {tooltip && (

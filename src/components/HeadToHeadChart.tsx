@@ -9,6 +9,7 @@ import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 import { isLapValid } from '../lib/lapValidity'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -93,6 +94,8 @@ function BarRow({
   filename,
   sortAsc,
   gapMode,
+  forcedWidth,
+  onRendered,
 }: {
   title: string
   data: { key: string; color: string; value: number; detail: string }[]
@@ -100,21 +103,12 @@ function BarRow({
   filename: string
   sortAsc: boolean
   gapMode: GapMode
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(600)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+  const width = useResponsiveWidth(containerRef, forcedWidth, 600)
 
   const sorted = useMemo(
     () => [...data].sort((a, b) => (sortAsc ? a.value - b.value : b.value - a.value)),
@@ -198,13 +192,30 @@ function BarRow({
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [sorted, width, format, gaps])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [sorted, width, format, gaps, onRendered])
 
   return (
     <div>
       <div className="chart-controls">
         <h3 className="pit-time-subheading">{title}</h3>
-        <ChartExportButtons svgRef={svgRef} filename={filename} />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename={filename}
+          renderChart={(w, onReady) => (
+            <BarRow
+              title={title}
+              data={data}
+              format={format}
+              filename={filename}
+              sortAsc={sortAsc}
+              gapMode={gapMode}
+              forcedWidth={w}
+              onRendered={onReady}
+            />
+          )}
+        />
       </div>
       <div ref={containerRef}>
         {sorted.length === 0 ? <p className="hint">No data.</p> : <svg ref={svgRef} />}

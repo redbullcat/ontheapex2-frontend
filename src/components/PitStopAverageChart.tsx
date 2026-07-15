@@ -12,6 +12,7 @@ import { computePitStops, type PitStop } from './PitTimeChart'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -74,26 +75,23 @@ function buildGroups(
   return groups
 }
 
-export function PitStopAverageChart({ laps }: { laps: LapRead[] }) {
+export function PitStopAverageChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('team')
   const [entitySelection, setEntitySelection] = useState<EntitySelection>(null)
   const [topPercentInput, setTopPercentInput] = useState('100')
   const [gapMode, setGapMode] = useState<GapMode>('ahead')
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -202,7 +200,9 @@ export function PitStopAverageChart({ laps }: { laps: LapRead[] }) {
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [groups, width, gaps])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [groups, width, gaps, onRendered])
 
   return (
     <div className="viz-root pit-time-chart" ref={containerRef}>
@@ -246,7 +246,15 @@ export function PitStopAverageChart({ laps }: { laps: LapRead[] }) {
           background: var(--surface-1);
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pit_stop_average" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="pit_stop_average"
+            renderChart={(w, onReady) => <PitStopAverageChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
           <div className="color-mode-toggle" role="radiogroup" aria-label="Group by">

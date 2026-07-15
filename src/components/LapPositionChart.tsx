@@ -20,6 +20,7 @@ import { contrastTextColor } from '../lib/contrastColor'
 import { isLapDeleted } from '../lib/lapOverrides'
 import { useDeletedLapsVersion } from '../hooks/useDeletedLapsVersion'
 import { isLapValid } from '../lib/lapValidity'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 40 }
 const PLOT_HEIGHT = 440
@@ -96,6 +97,8 @@ export function LapPositionChart({
   compactFilters,
   onRequestNoteLink,
   startingGrid,
+  forcedWidth,
+  onRendered,
 }: {
   laps: LapRead[]
   focusCarNumber?: string
@@ -121,11 +124,13 @@ export function LapPositionChart({
   // 1 is recorded — shows up as a visible first move instead of the line
   // just starting wherever lap 1 happened to land it.
   startingGrid?: Map<string, number> | null
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const recorder = useSvgRecorder(svgRef, focusCarNumber ? `lap_position_${focusCarNumber}` : 'lap_position')
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   // Synchronous mirror of `hover` for the overlay's click handler below —
   // that handler is registered once per chart rebuild (see the effect's
@@ -169,17 +174,6 @@ export function LapPositionChart({
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
   const deletedLapsVersion = useDeletedLapsVersion()
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const lapsByNumber = useMemo(() => {
     const m = new Map<number, LapRead[]>()
@@ -712,7 +706,9 @@ export function LapPositionChart({
         })
         if (onRequestNoteLink) onRequestNoteLink(h.car, h.lap)
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink, showGridStart, applyPinnedStyling])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, maxPosition, rankedByLap, showFlags, flagPeriods, focusCarNumber, onRequestNoteLink, showGridStart, applyPinnedStyling, onRendered])
 
   // Toggling a pin (or clearing all) restyles the existing paths in place —
   // no need for the expensive rebuild above, which is why pinnedCars isn't
@@ -870,7 +866,22 @@ export function LapPositionChart({
                 <input type="checkbox" checked={showFlags} onChange={(e) => setShowFlags(e.target.checked)} />
                 Show flag periods
               </label>
-              <ChartExportButtons svgRef={svgRef} filename="lap_position" />
+              <ChartExportButtons
+                svgRef={svgRef}
+                filename="lap_position"
+                renderChart={(w, onReady) => (
+                  <LapPositionChart
+                    laps={laps}
+                    focusCarNumber={focusCarNumber}
+                    rankBy={rankBy}
+                    compactFilters={compactFilters}
+                    onRequestNoteLink={onRequestNoteLink}
+                    startingGrid={startingGrid}
+                    forcedWidth={w}
+                    onRendered={onReady}
+                  />
+                )}
+              />
               <RecordControls recorder={recorder} />
             </div>
             {!focusCarNumber && (

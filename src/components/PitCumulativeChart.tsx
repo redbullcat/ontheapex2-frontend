@@ -12,6 +12,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import type { EntitySelection } from '../lib/entitySelection'
 import { resolveEntitySelection } from '../lib/entitySelection'
 import { contrastTextColorForColor } from '../lib/contrastColor'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -126,23 +127,20 @@ interface CarTotal {
   total: number
 }
 
-export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
+export function PitCumulativeChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -303,7 +301,9 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [carTotals, width, maxRound])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [carTotals, width, maxRound, onRendered])
 
   const legendRounds = useMemo(() => Array.from({ length: Math.max(0, maxRound) }, (_, i) => i + 1), [maxRound])
 
@@ -374,7 +374,15 @@ export function PitCumulativeChart({ laps }: { laps: LapRead[] }) {
           font-weight: 700;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pit_cumulative" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="pit_cumulative"
+            renderChart={(w, onReady) => <PitCumulativeChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         </div>

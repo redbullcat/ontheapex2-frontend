@@ -10,6 +10,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 64, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 420
@@ -63,24 +64,21 @@ function formatSeconds(s: number): string {
   return `${m}:${sec.toFixed(3).padStart(6, '0')}`
 }
 
-export function LongRunChart({ laps }: { laps: LapRead[] }) {
+export function LongRunChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -242,7 +240,9 @@ export function LongRunChart({ laps }: { laps: LapRead[] }) {
         pathsSelRef.current?.attr('opacity', 0.75).attr('stroke-width', 2)
         setHover(null)
       })
-  }, [runs, width, strokeColor])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [runs, width, strokeColor, onRendered])
 
   return (
     <div className="viz-root long-run-chart" ref={containerRef}>
@@ -299,7 +299,15 @@ export function LongRunChart({ laps }: { laps: LapRead[] }) {
           font-size: 13px;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="longest_run_pace" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="longest_run_pace"
+            renderChart={(w, onReady) => <LongRunChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         </div>

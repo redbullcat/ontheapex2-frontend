@@ -11,6 +11,7 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { findTrackMapUrl } from '../lib/trackMaps'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { isLapValid } from '../lib/lapValidity'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 24, right: 64, bottom: 32, left: 48 }
 const PLOT_HEIGHT = 420
@@ -53,33 +54,26 @@ export function SectorAnalysisChart({
   laps,
   seriesSlug,
   eventName,
+  forcedWidth,
+  onRendered,
 }: {
   laps: LapRead[]
   seriesSlug?: string
   eventName?: string
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const trackMapUrl =
     seriesSlug?.toLowerCase() === 'wec' && eventName ? findTrackMapUrl(eventName) : null
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [lapRange, setLapRange] = useState<[number, number] | null>(null)
   const [useRefCar, setUseRefCar] = useState(false)
   const [refCar, setRefCar] = useState('')
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -336,7 +330,9 @@ export function SectorAnalysisChart({
         pathsSelRef.current?.attr('opacity', 0.8).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
         setHover(null)
       })
-  }, [series, refSplits, width, strokeColor])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [series, refSplits, width, strokeColor, onRendered])
 
   return (
     <div className="viz-root sector-analysis-chart" ref={containerRef}>
@@ -406,7 +402,23 @@ export function SectorAnalysisChart({
           <img src={trackMapUrl} alt={`${eventName} track map`} />
         </div>
       )}
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="sector_analysis" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="sector_analysis"
+            renderChart={(w, onReady) => (
+              <SectorAnalysisChart
+                laps={laps}
+                seriesSlug={seriesSlug}
+                eventName={eventName}
+                forcedWidth={w}
+                onRendered={onReady}
+              />
+            )}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
           <LapRangeInputs min={lapBounds[0]} max={lapBounds[1]} value={effectiveLapRange} onChange={setLapRange} />

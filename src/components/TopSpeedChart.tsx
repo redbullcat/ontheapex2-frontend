@@ -8,6 +8,7 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -22,22 +23,21 @@ interface CarTopSpeed {
   lap: number | null
 }
 
-export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
+export function TopSpeedChart({
+  laps,
+  compactFilters,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  compactFilters?: boolean
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -170,7 +170,9 @@ export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compa
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [cars, width])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [cars, width, onRendered])
 
   return (
     <div className="viz-root top-speed-chart" ref={containerRef}>
@@ -218,11 +220,27 @@ export function TopSpeedChart({ laps, compactFilters }: { laps: LapRead[]; compa
         <PanelSettingsPopover>
           <div className="chart-controls">
             <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
-            <ChartExportButtons svgRef={svgRef} filename="top_speed" />
+            <ChartExportButtons
+              svgRef={svgRef}
+              filename="top_speed"
+              renderChart={(w, onReady) => (
+                <TopSpeedChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+              )}
+            />
           </div>
         </PanelSettingsPopover>
       ) : (
-        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="top_speed" />}>
+        <CollapsibleFilters
+          actions={
+            <ChartExportButtons
+              svgRef={svgRef}
+              filename="top_speed"
+              renderChart={(w, onReady) => (
+                <TopSpeedChart laps={laps} compactFilters={compactFilters} forcedWidth={w} onRendered={onReady} />
+              )}
+            />
+          }
+        >
           <div className="chart-controls">
             <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
           </div>
