@@ -1,6 +1,7 @@
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import { AuthGate } from './components/AuthGate.tsx'
 
 // The Live Timing Replay/Live views intentionally live outside the main app
 // shell (their own tab, full browser width — see the wireframe discussion),
@@ -30,7 +31,13 @@ function render() {
   if (isReplay) return <ReplayApp />
   if (isLiveNow) return <LiveNowApp />
   if (isLiveStaging) return <LiveStagingPage />
-  return <App />
+  // Only the main dashboard requires a Ghost staff login — replay/live
+  // links above stay shareable with anyone who has the URL, unauthenticated.
+  return (
+    <AuthGate>
+      <App />
+    </AuthGate>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(

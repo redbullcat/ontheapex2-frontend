@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { exportEmbedJs, exportPng, exportSvg } from '../lib/chartExport'
+import { canExport, hasAnyExportCapability } from '../lib/permissions'
+import { getSession } from '../lib/session'
 import { ChartTitleModal } from './ChartTitleModal'
 import { SvgEditorModal } from './SvgEditorModal'
 
@@ -52,6 +54,15 @@ export function ChartExportButtons({
 
   const humanizedDefault = filename.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
+  // No session at all means this is a public, unauthenticated context
+  // (a shared Live Timing Replay/live-now link, which never goes through
+  // the login gate — see main.tsx) — those keep exporting exactly as
+  // before. Restrictions only apply once someone actually has a Ghost
+  // staff role attached, i.e. inside the gated main dashboard.
+  const role = getSession()?.role ?? null
+  const allow = (capability: Parameters<typeof canExport>[1]) => role == null || canExport(role, capability)
+  if (role != null && !hasAnyExportCapability(role)) return null
+
   return (
     <div className="chart-export" ref={rootRef}>
       <button type="button" className="chart-export-trigger" onClick={() => setOpen((o) => !o)}>
@@ -59,24 +70,32 @@ export function ChartExportButtons({
       </button>
       {open && (
         <div className="chart-export-menu">
-          <button type="button" onClick={handleSvgClick}>
-            SVG
-          </button>
-          <button type="button" onClick={() => run((svg, name) => exportPng(svg, name, 3))}>
-            High-res PNG
-          </button>
-          <button type="button" onClick={() => run(exportEmbedJs)}>
-            Embeddable JS
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false)
-              setEditorOpen(true)
-            }}
-          >
-            Edit as SVG
-          </button>
+          {allow('svg') && (
+            <button type="button" onClick={handleSvgClick}>
+              SVG
+            </button>
+          )}
+          {allow('png') && (
+            <button type="button" onClick={() => run((svg, name) => exportPng(svg, name, 3))}>
+              High-res PNG
+            </button>
+          )}
+          {allow('embed') && (
+            <button type="button" onClick={() => run(exportEmbedJs)}>
+              Embeddable JS
+            </button>
+          )}
+          {allow('editSvg') && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setEditorOpen(true)
+              }}
+            >
+              Edit as SVG
+            </button>
+          )}
         </div>
       )}
       {titlePromptOpen && (

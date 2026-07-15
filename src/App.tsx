@@ -10,6 +10,7 @@ import {
   getStints,
   getWeather,
 } from './api/client'
+import { AccountBadge } from './components/AccountBadge'
 import { useAsync } from './hooks/useAsync'
 import { useDeletedLapsVersion } from './hooks/useDeletedLapsVersion'
 import { usePenaltiesVersion } from './hooks/usePenaltiesVersion'
@@ -345,6 +346,7 @@ function App() {
       <header>
         <h1>On The Apex</h1>
         <p className="subtitle">Endurance racing data</p>
+        <AccountBadge />
       </header>
 
       <div className="app-shell">
