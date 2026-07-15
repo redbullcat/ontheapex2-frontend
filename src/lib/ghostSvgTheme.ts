@@ -202,31 +202,37 @@ export interface TitleOptions {
 
 const TITLE_SELECTOR = '.gse-title'
 
+// Reserved vertical space pushes the chart content down rather than
+// wrapping/unwrapping the DOM each time — content lives in the permanent
+// `.gse-content-root` group (see buildEditableSvg), which just gets a
+// y-offset. fitOverflow reads this same offset back (via
+// data-gse-title-offset) so it can compose its own left/top overflow
+// shift on top without the two stepping on each other's transform.
+function setContentYOffset(contentRoot: SVGGElement, offset: number) {
+  contentRoot.setAttribute('data-gse-title-offset', String(offset))
+  contentRoot.setAttribute('transform', `translate(0, ${offset})`)
+}
+
 // Idempotent — safe to call on every edit (font/size/text change), removes
 // and re-inserts so the reserved header space always matches the current
 // size instead of drifting after repeated edits.
 export function setTitle(svgEl: SVGSVGElement, baseHeight: number, baseWidth: number, opts: TitleOptions | null) {
-  const existingTitle = svgEl.querySelector(TITLE_SELECTOR)
-  const existingWrapper = svgEl.querySelector('.gse-title-wrapper')
-  if (existingTitle) existingTitle.remove()
-  if (existingWrapper) {
-    while (existingWrapper.firstChild) svgEl.insertBefore(existingWrapper.firstChild, existingWrapper)
-    existingWrapper.remove()
-  }
+  svgEl.querySelectorAll(TITLE_SELECTOR).forEach((el) => el.remove())
+  const contentRoot = svgEl.querySelector<SVGGElement>('.gse-content-root')
 
   if (!opts || !opts.text.trim()) {
+    if (contentRoot) setContentYOffset(contentRoot, 0)
     svgEl.setAttribute('width', String(baseWidth))
     svgEl.setAttribute('height', String(baseHeight))
     svgEl.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`)
     return
   }
 
-  const titleHeight = Math.ceil(opts.fontSize * 1.8)
-  const wrapper = document.createElementNS(SVG_NS, 'g')
-  wrapper.setAttribute('class', 'gse-title-wrapper')
-  wrapper.setAttribute('transform', `translate(0, ${titleHeight})`)
-  while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild)
-  svgEl.appendChild(wrapper)
+  const lines = opts.text.split('\n')
+  const lineHeight = Math.ceil(opts.fontSize * 1.2)
+  const titleHeight = Math.ceil(opts.fontSize * 0.6) + lines.length * lineHeight
+
+  if (contentRoot) setContentYOffset(contentRoot, titleHeight)
 
   const totalHeight = baseHeight + titleHeight
   // Reset width alongside height/viewBox even though this branch never
@@ -249,14 +255,20 @@ export function setTitle(svgEl: SVGSVGElement, baseHeight: number, baseWidth: nu
         : { x: 4, anchor: 'start' }
   titleEl.setAttribute('x', String(x))
   titleEl.setAttribute('text-anchor', anchor)
-  titleEl.setAttribute('y', String(Math.round(titleHeight / 2 + opts.fontSize * 0.36)))
   setFontFamilyStyle(titleEl, opts.fontFamily)
   titleEl.setAttribute('font-family', svgEditorFontStack(opts.fontFamily))
   titleEl.setAttribute('font-weight', String(opts.fontWeight))
   if (opts.italic) titleEl.setAttribute('font-style', 'italic')
   titleEl.setAttribute('font-size', String(opts.fontSize))
   titleEl.setAttribute('fill', '#111111')
-  titleEl.textContent = opts.text
+  const firstLineY = Math.round(opts.fontSize * 0.6 + opts.fontSize * 0.36)
+  lines.forEach((line, i) => {
+    const tspan = document.createElementNS(SVG_NS, 'tspan')
+    tspan.setAttribute('x', String(x))
+    tspan.setAttribute('y', String(firstLineY + i * lineHeight))
+    tspan.textContent = line
+    titleEl.appendChild(tspan)
+  })
   svgEl.insertBefore(titleEl, svgEl.firstChild)
 }
 
@@ -270,6 +282,19 @@ export function buildEditableSvg(liveSvgEl: SVGSVGElement): { svg: SVGSVGElement
 
   const clone = liveSvgEl.cloneNode(true) as SVGSVGElement
   applyThemeClasses(liveSvgEl, clone)
+
+  // Some charts position content (e.g. a row label right-aligned to
+  // x="-10" relative to a shifted plot origin) that legitimately extends
+  // left of x=0 or above y=0 — invisible in the app only because the live
+  // chart happens to have enough margin there, but not guaranteed at
+  // every width the editor can choose. Wrapping the actual chart content
+  // in its own permanent group gives fitOverflow something it can shift
+  // right/down without disturbing title positioning (which is anchored to
+  // baseWidth/baseHeight, not to this content).
+  const contentRoot = document.createElementNS(SVG_NS, 'g')
+  contentRoot.setAttribute('class', 'gse-content-root')
+  while (clone.firstChild) contentRoot.appendChild(clone.firstChild)
+  clone.appendChild(contentRoot)
 
   clone.setAttribute('xmlns', SVG_NS)
   clone.setAttribute('width', String(width))
@@ -298,6 +323,32 @@ export function setBodyFont(svgEl: SVGSVGElement, family: SvgEditorFontFamily | 
 // permanently cut off in the downloaded file, not just visually
 // overflowing in the editor's scrollable preview pane.
 export function fitOverflow(svgEl: SVGSVGElement) {
+  // The content root (see buildEditableSvg) is the only thing that can
+  // legitimately extend left of x=0/above y=0 — title text is always
+  // positioned relative to baseWidth/baseHeight and never goes negative on
+  // its own, so shifting is scoped to just that group rather than the
+  // whole SVG (which would also drag the title off its intended position).
+  const contentRoot = svgEl.querySelector<SVGGElement>('.gse-content-root')
+  if (contentRoot) {
+    const titleOffset = Number(contentRoot.getAttribute('data-gse-title-offset')) || 0
+    // Reset to the known baseline (just the title's reserved space, no
+    // extra shift) before re-measuring — otherwise a shift applied by a
+    // previous call would already be baked into the geometry getBBox()
+    // reports, compounding further on every subsequent call.
+    contentRoot.setAttribute('transform', `translate(0, ${titleOffset})`)
+    let contentBBox: DOMRect
+    try {
+      contentBBox = contentRoot.getBBox()
+    } catch {
+      return // not attached/rendered yet — nothing to measure
+    }
+    const shiftX = contentBBox.x < 0 ? Math.ceil(-contentBBox.x) + 4 : 0
+    const extraShiftY = contentBBox.y < 0 ? Math.ceil(-contentBBox.y) + 4 : 0
+    if (shiftX > 0 || extraShiftY > 0) {
+      contentRoot.setAttribute('transform', `translate(${shiftX}, ${titleOffset + extraShiftY})`)
+    }
+  }
+
   let bbox: DOMRect
   try {
     bbox = svgEl.getBBox()
@@ -317,18 +368,138 @@ export function fitOverflow(svgEl: SVGSVGElement) {
   }
 }
 
+// The Ghost site's color theming (the .theme-text/.theme-line/.theme-line-bg
+// rules) is confirmed to survive being pasted into a Ghost post — so the
+// <style> tag itself isn't getting stripped there. What doesn't survive is
+// specifically the Google Fonts @import inside it: an @import is a second
+// network fetch triggered from within a dynamically-inserted stylesheet,
+// which is exactly the kind of thing a CMS's iframe/CSP sandboxing or a
+// same-origin-only font policy blocks even when the <style> tag itself is
+// left alone. Embedding the actual font bytes as base64 data URIs removes
+// that fetch entirely — nothing left to block. Bytes come from our own
+// already-loaded self-hosted @fontsource files (see svgEditorFonts.ts),
+// via the @font-face rules those imports already injected into
+// document.styleSheets, so this never has its own network dependency.
+function findSelfHostedFontUrl(family: string, weight: number, italic: boolean): string | null {
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList
+    try {
+      rules = sheet.cssRules
+    } catch {
+      continue // cross-origin stylesheet — can't introspect, not one of ours anyway
+    }
+    for (const rule of Array.from(rules)) {
+      if (!(rule instanceof CSSFontFaceRule)) continue
+      const style = rule.style
+      const ruleFamily = style.getPropertyValue('font-family').replace(/^['"]|['"]$/g, '').trim()
+      const ruleWeight = Number.parseInt(style.getPropertyValue('font-weight'), 10)
+      const ruleStyle = style.getPropertyValue('font-style').trim() || 'normal'
+      if (ruleFamily !== family || ruleWeight !== weight || ruleStyle !== (italic ? 'italic' : 'normal')) continue
+      const match = style.getPropertyValue('src').match(/url\(["']?([^"')]+)["']?\)/)
+      if (match) return match[1]
+    }
+  }
+  return null
+}
+
+async function fetchAsBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const buf = await res.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    return btoa(binary)
+  } catch {
+    return null
+  }
+}
+
+interface FontInstance {
+  family: SvgEditorFontFamily
+  weight: number
+  italic: boolean
+}
+
+function collectUsedFonts(svgEl: SVGSVGElement): FontInstance[] {
+  const seen = new Map<string, FontInstance>()
+  const families = new Set(['Inter', 'Saira', 'Saira Condensed', 'Spline Sans Mono'])
+  svgEl.querySelectorAll('text').forEach((el) => {
+    const styleFamily = (el as SVGElement).style.fontFamily.replace(/^['"]|['"]$/g, '').trim()
+    const attrFamily = (el.getAttribute('font-family') || '').split(',')[0].replace(/^['"]|['"]$/g, '').trim()
+    const family = (families.has(styleFamily) ? styleFamily : families.has(attrFamily) ? attrFamily : null) as
+      | SvgEditorFontFamily
+      | null
+    if (!family) return
+    const weight = Number.parseInt(el.getAttribute('font-weight') || '400', 10) || 400
+    const italic = el.getAttribute('font-style') === 'italic'
+    const key = `${family}-${weight}-${italic}`
+    if (!seen.has(key)) seen.set(key, { family, weight, italic })
+  })
+  return [...seen.values()]
+}
+
+// Typical size of one @fontsource woff2 file for a single weight/style —
+// used only to approximate the size embedded fonts will add once actually
+// fetched, without doing a real fetch on every keystroke while editing.
+const APPROX_FONT_FILE_BYTES = 20_000
+
+// Cheap, synchronous "roughly how big will this end up" for the sidebar —
+// serializes without fetching/embedding font bytes (that only happens in
+// serializeForExport, on actual download/copy) and adds a flat estimate
+// per unique font instance in use instead.
+export function estimateExportSizeBytes(svgEl: SVGSVGElement): number {
+  const clone = svgEl.cloneNode(true) as SVGSVGElement
+  clone.querySelectorAll('[data-gse-id]').forEach((el) => el.removeAttribute('data-gse-id'))
+  clone.querySelectorAll('[data-gse-font]').forEach((el) => el.removeAttribute('data-gse-font'))
+  const style = document.createElementNS(SVG_NS, 'style')
+  style.textContent = GHOST_STYLE_CSS.trim()
+  clone.insertBefore(style, clone.firstChild)
+  const baseSize = new Blob([new XMLSerializer().serializeToString(clone)]).size
+  const fontCount = collectUsedFonts(svgEl).length
+  return baseSize + fontCount * APPROX_FONT_FILE_BYTES
+}
+
+async function buildEmbeddedFontFaces(svgEl: SVGSVGElement): Promise<string> {
+  const instances = collectUsedFonts(svgEl)
+  const rules = await Promise.all(
+    instances.map(async ({ family, weight, italic }) => {
+      const url = findSelfHostedFontUrl(family, weight, italic)
+      if (!url) return null
+      const base64 = await fetchAsBase64(url)
+      if (!base64) return null
+      return `@font-face {
+  font-family: '${family}';
+  font-style: ${italic ? 'italic' : 'normal'};
+  font-weight: ${weight};
+  src: url(data:font/woff2;base64,${base64}) format('woff2');
+}`
+    }),
+  )
+  return rules.filter((r): r is string => r != null).join('\n')
+}
+
 // Final output: clones once more (so repeated calls never mutate the
 // editor's working copy), strips editor-only bookkeeping attributes, embeds
-// the Ghost theme <style>, and serializes. A bare "&" in the Google Fonts
-// query string is valid CSS but not valid bare XML text, so it's escaped
-// before being written out as literal markup.
-export function serializeForExport(svgEl: SVGSVGElement): string {
+// the Ghost theme <style> (with self-contained font data in place of the
+// Google Fonts @import — see buildEmbeddedFontFaces above), and serializes.
+export async function serializeForExport(svgEl: SVGSVGElement): Promise<string> {
   const clone = svgEl.cloneNode(true) as SVGSVGElement
   clone.querySelectorAll('[data-gse-id]').forEach((el) => el.removeAttribute('data-gse-id'))
   clone.querySelectorAll('[data-gse-font]').forEach((el) => el.removeAttribute('data-gse-font'))
 
+  const fontFaces = await buildEmbeddedFontFaces(svgEl)
+  // Keep the @import as a fallback only if embedding came up empty (e.g. a
+  // font whose file couldn't be fetched) — with at least one real
+  // @font-face embedded, the @import would be redundant dead weight for
+  // fonts that already work, and worse, a second, differently-sourced
+  // definition of the SAME family if it partially failed.
+  const themeCss = fontFaces
+    ? `${fontFaces}\n${GHOST_STYLE_CSS.replace(SVG_EDITOR_GOOGLE_FONTS_IMPORT, '').trim()}`
+    : GHOST_STYLE_CSS.trim()
   const style = document.createElementNS(SVG_NS, 'style')
-  style.textContent = GHOST_STYLE_CSS.replace(/&/g, '&amp;')
+  style.textContent = themeCss.replace(/&/g, '&amp;')
   clone.insertBefore(style, clone.firstChild)
 
   return new XMLSerializer().serializeToString(clone)

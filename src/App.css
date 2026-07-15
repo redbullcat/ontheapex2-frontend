@@ -983,7 +983,8 @@ header h1 {
 
 .svg-editor-sidebar input[type='text'],
 .svg-editor-sidebar input[type='number'],
-.svg-editor-sidebar select {
+.svg-editor-sidebar select,
+.svg-editor-sidebar textarea {
   border: 1px solid var(--border, #e1e0d9);
   background: var(--surface-1, #fcfcfb);
   color: var(--text-h, #0b0b0b);
@@ -991,6 +992,11 @@ header h1 {
   padding: 6px 8px;
   font-size: 13px;
   width: 100%;
+}
+
+.svg-editor-sidebar textarea {
+  resize: vertical;
+  font-family: inherit;
 }
 
 .svg-editor-row {
