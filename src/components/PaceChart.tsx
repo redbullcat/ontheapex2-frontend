@@ -14,6 +14,7 @@ import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
 import { isLapValid } from '../lib/lapValidity'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 32, left: 200 }
 const MARGIN_LEFT_MIN = 90
@@ -136,10 +137,16 @@ function formatSeconds(s: number): string {
 // already only ever passes one car's laps in — "Add car" would just offer a
 // single, already-selected option, which reads as broken rather than
 // merely unused. Every other caller omits this and is unaffected.
+// `forcedWidth`/`onRendered` are only used by the SVG editor: it mounts a
+// second, off-screen instance of this same component (see
+// ChartExportButtons' `renderChart`) to get a true D3 reflow at an
+// arbitrary width, then reads the finished SVG back out via `onRendered`.
 export function PaceChart({
   laps,
   hideCarFilter,
   compactFilters,
+  forcedWidth,
+  onRendered,
 }: {
   laps: LapRead[]
   hideCarFilter?: boolean
@@ -148,10 +155,12 @@ export function PaceChart({
   // have much less width to spare than this chart's other home in the
   // full-width sidebar/main app, where the controls stay inline as always.
   compactFilters?: boolean
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [groupBy, setGroupBy] = useState<GroupBy>('team')
   const [chartType, setChartType] = useState<ChartType>('bar')
@@ -161,17 +170,6 @@ export function PaceChart({
   const [topPercentInput, setTopPercentInput] = useState('100')
   const [gapMode, setGapMode] = useState<GapMode>('ahead')
   const [hover, setHover] = useState<HoverState | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -374,7 +372,9 @@ export function PaceChart({
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [groups, width, chartType, gaps])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [groups, width, chartType, gaps, onRendered])
 
   const filterControls = (
     <>
@@ -480,7 +480,25 @@ export function PaceChart({
       {compactFilters ? (
         <PanelSettingsPopover>{filterControls}</PanelSettingsPopover>
       ) : (
-        <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pace_chart" />}>{filterControls}</CollapsibleFilters>
+        <CollapsibleFilters
+          actions={
+            <ChartExportButtons
+              svgRef={svgRef}
+              filename="pace_chart"
+              renderChart={(w, onReady) => (
+                <PaceChart
+                  laps={laps}
+                  hideCarFilter={hideCarFilter}
+                  compactFilters={compactFilters}
+                  forcedWidth={w}
+                  onRendered={onReady}
+                />
+              )}
+            />
+          }
+        >
+          {filterControls}
+        </CollapsibleFilters>
       )}
       {groups.length === 0 ? <p className="hint">No lap data for this selection.</p> : <svg ref={svgRef} />}
       {hover && (

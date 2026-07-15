@@ -10,6 +10,7 @@ import { PanelSettingsPopover } from '../dashboard/PanelSettingsPopover'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { GapModeToggle } from './GapModeToggle'
 import { computeGaps, formatGap, type GapMode } from '../lib/gapToLeader'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const BAR_MARGIN = { top: 8, right: 56, bottom: 32, left: 160 }
 const BAR_MARGIN_LEFT_MIN = 80
@@ -105,37 +106,29 @@ function formatSeconds(s: number): string {
   return `${sign}${abs.toFixed(1)}s`
 }
 
-export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compactFilters?: boolean }) {
+export function PitTimeChart({
+  laps,
+  compactFilters,
+  forcedBarWidth,
+  onBarRendered,
+  forcedScatterWidth,
+  onScatterRendered,
+}: {
+  laps: LapRead[]
+  compactFilters?: boolean
+  forcedBarWidth?: number
+  onBarRendered?: (svg: SVGSVGElement) => void
+  forcedScatterWidth?: number
+  onScatterRendered?: (svg: SVGSVGElement) => void
+}) {
   const barContainerRef = useRef<HTMLDivElement>(null)
   const barSvgRef = useRef<SVGSVGElement>(null)
   const scatterContainerRef = useRef<HTMLDivElement>(null)
   const scatterSvgRef = useRef<SVGSVGElement>(null)
-  const [barWidth, setBarWidth] = useState(800)
-  const [scatterWidth, setScatterWidth] = useState(800)
+  const barWidth = useResponsiveWidth(barContainerRef, forcedBarWidth)
+  const scatterWidth = useResponsiveWidth(scatterContainerRef, forcedScatterWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [gapMode, setGapMode] = useState<GapMode>('ahead')
-
-  useEffect(() => {
-    const el = barContainerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setBarWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const el = scatterContainerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setScatterWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -244,7 +237,9 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [carStats, barWidth, gaps])
+
+    if (barSvgRef.current) onBarRendered?.(barSvgRef.current)
+  }, [carStats, barWidth, gaps, onBarRendered])
 
   useEffect(() => {
     const svg = d3.select(scatterSvgRef.current)
@@ -288,7 +283,9 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [stops, scatterWidth])
+
+    if (scatterSvgRef.current) onScatterRendered?.(scatterSvgRef.current)
+  }, [stops, scatterWidth, onScatterRendered])
 
   return (
     <div className="viz-root pit-time-chart">
@@ -353,14 +350,36 @@ export function PitTimeChart({ laps, compactFilters }: { laps: LapRead[]; compac
         <>
           <div className="chart-controls">
             <h3 className="pit-time-subheading">Average pit loss per car</h3>
-            <ChartExportButtons svgRef={barSvgRef} filename="pit_loss_avg" />
+            <ChartExportButtons
+              svgRef={barSvgRef}
+              filename="pit_loss_avg"
+              renderChart={(w, onReady) => (
+                <PitTimeChart
+                  laps={laps}
+                  compactFilters={compactFilters}
+                  forcedBarWidth={w}
+                  onBarRendered={onReady}
+                />
+              )}
+            />
           </div>
           <div ref={barContainerRef}>
             <svg ref={barSvgRef} />
           </div>
           <div className="chart-controls">
             <h3 className="pit-time-subheading">Individual pit stops</h3>
-            <ChartExportButtons svgRef={scatterSvgRef} filename="pit_stops" />
+            <ChartExportButtons
+              svgRef={scatterSvgRef}
+              filename="pit_stops"
+              renderChart={(w, onReady) => (
+                <PitTimeChart
+                  laps={laps}
+                  compactFilters={compactFilters}
+                  forcedScatterWidth={w}
+                  onScatterRendered={onReady}
+                />
+              )}
+            />
           </div>
           <div ref={scatterContainerRef}>
             <svg ref={scatterSvgRef} />

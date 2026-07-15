@@ -17,6 +17,7 @@ import { PlaybackControls } from './PlaybackControls'
 import { useSvgRecorder } from '../hooks/useSvgRecorder'
 import { RecordControls } from './RecordControls'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 // right is wider than LapPositionChart's — its end labels are just "Pn",
 // this chart's are gap values up to "+123.4s (ref)".
@@ -82,11 +83,19 @@ function declutter(ys: number[], minGap: number): number[] {
   return out
 }
 
-export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
+export function GapEvolutionChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const recorder = useSvgRecorder(svgRef, 'gap_evolution')
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   // Synchronous mirror of `hover` for the overlay's click handler below —
   // that handler is registered once per chart rebuild, so it can't close
@@ -108,17 +117,6 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
   const [referenceCarOverride, setReferenceCarOverride] = useState<string | null>(null)
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -632,7 +630,9 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           return next
         })
       })
-  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, minGap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods, applyPinnedStyling])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [cars, width, activeClasses, strokeColor, minLap, maxLap, minGap, maxGap, gapByLapAndCar, referenceCar, showFlags, flagPeriods, applyPinnedStyling, onRendered])
 
   // Toggling a pin (or clearing all) restyles the existing paths in place —
   // no need for the expensive rebuild above.
@@ -831,7 +831,15 @@ export function GapEvolutionChart({ laps }: { laps: LapRead[] }) {
           color: var(--text-muted);
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="gap_evolution" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="gap_evolution"
+            renderChart={(w, onReady) => <GapEvolutionChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
           {activeClasses.size > 1 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}

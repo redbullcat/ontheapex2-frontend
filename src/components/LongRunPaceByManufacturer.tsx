@@ -11,6 +11,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 140, bottom: 32, left: 56 }
 const PLOT_HEIGHT = 460
@@ -87,27 +88,24 @@ function formatSeconds(s: number): string {
   return `${m}:${sec.toFixed(3).padStart(6, '0')}`
 }
 
-export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
+export function LongRunPaceByManufacturer({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(null)
   // Defaults to zoomed on the actual long-run trend lines — a raw-point
   // domain gets blown out by rare outlier laps (traffic, yellow flags),
   // squashing the trends themselves into an illegible band at the bottom.
   const [zoomToTrend, setZoomToTrend] = useState(true)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -256,7 +254,9 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
           .attr('font-size', 11)
           .text(d.manufacturer)
       })
-  }, [series, width, zoomToTrend])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [series, width, zoomToTrend, onRendered])
 
   return (
     <div className="viz-root long-run-manufacturer-chart" ref={containerRef}>
@@ -298,7 +298,17 @@ export function LongRunPaceByManufacturer({ laps }: { laps: LapRead[] }) {
           --axis: #c3c2b7;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="long_run_pace_by_manufacturer" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="long_run_pace_by_manufacturer"
+            renderChart={(w, onReady) => (
+              <LongRunPaceByManufacturer laps={laps} forcedWidth={w} onRendered={onReady} />
+            )}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
           <div className="color-mode-toggle" role="radiogroup" aria-label="Y-axis range">

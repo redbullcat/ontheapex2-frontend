@@ -71,23 +71,32 @@ function Panel({
   width,
   maxElapsed,
   onHover,
+  forcedWidth,
+  onRendered,
 }: {
   title: string
   series: Series[]
   width: number
   maxElapsed: number
   onHover: (state: HoverState | null) => void
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
+  // Panel has no container of its own to measure — its width is driven by
+  // the parent WeatherChart's ResizeObserver and passed down as a prop, so
+  // (unlike every other chart here) there's no useResponsiveWidth/containerRef
+  // to plug forcedWidth into. Just override the prop directly instead.
+  const effectiveWidth = forcedWidth ?? width
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
-    if (width === 0 || series.every((s) => s.points.length === 0)) return
+    if (effectiveWidth === 0 || series.every((s) => s.points.length === 0)) return
 
-    const innerWidth = Math.max(0, width - MARGIN.left - MARGIN.right)
+    const innerWidth = Math.max(0, effectiveWidth - MARGIN.left - MARGIN.right)
     const innerHeight = PANEL_HEIGHT - MARGIN.top - MARGIN.bottom
-    svg.attr('width', width).attr('height', PANEL_HEIGHT)
+    svg.attr('width', effectiveWidth).attr('height', PANEL_HEIGHT)
 
     const allPoints = series.flatMap((s) => s.points)
     const yMin = d3.min(allPoints, (p) => p.y) ?? 0
@@ -175,7 +184,9 @@ function Panel({
         })
       })
       .on('mouseleave', () => onHover(null))
-  }, [series, width, maxElapsed, onHover])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [series, effectiveWidth, maxElapsed, onHover, onRendered])
 
   return (
     <div className="weather-panel">
@@ -189,7 +200,21 @@ function Panel({
                 {s.label}
               </span>
             ))}
-          <ChartExportButtons svgRef={svgRef} filename={`weather_${title.toLowerCase().replace(/\s+/g, '_')}`} />
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename={`weather_${title.toLowerCase().replace(/\s+/g, '_')}`}
+            renderChart={(w, onReady) => (
+              <Panel
+                title={title}
+                series={series}
+                width={width}
+                maxElapsed={maxElapsed}
+                onHover={onHover}
+                forcedWidth={w}
+                onRendered={onReady}
+              />
+            )}
+          />
         </span>
       </div>
       <svg ref={svgRef} />

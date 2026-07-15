@@ -8,6 +8,7 @@ import { ChartExportButtons } from './ChartExportButtons'
 import { truncateLabel } from '../lib/textTruncate'
 import { computePitStops, type PitStop } from './PitTimeChart'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 56, bottom: 24, left: 160 }
 const MARGIN_LEFT_MIN = 80
@@ -22,21 +23,20 @@ function formatSeconds(s: number): string {
 // One faceted bar panel for a single pit-stop round — bars ordered by lap
 // (earliest stopper at top, latest at bottom), same visual language as
 // PitTimeChart's average-loss bars just scoped to this round's stops.
-function RoundPanel({ round, stops }: { round: number; stops: PitStop[] }) {
+function RoundPanel({
+  round,
+  stops,
+  forcedWidth,
+  onRendered,
+}: {
+  round: number
+  stops: PitStop[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+  const width = useResponsiveWidth(containerRef, forcedWidth)
 
   // Ordered by lap ascending — the car that stopped earliest in this round
   // at top, working down to the latest stopper.
@@ -115,13 +115,21 @@ function RoundPanel({ round, stops }: { round: number; stops: PitStop[] }) {
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 10))
-  }, [ordered, width])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [ordered, width, onRendered])
 
   return (
     <div className="pit-round-panel">
       <div className="chart-controls">
         <h3 className="pit-time-subheading">Stop {round}</h3>
-        <ChartExportButtons svgRef={svgRef} filename={`pit_round_${round}`} />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename={`pit_round_${round}`}
+          renderChart={(w, onReady) => (
+            <RoundPanel round={round} stops={stops} forcedWidth={w} onRendered={onReady} />
+          )}
+        />
       </div>
       <div ref={containerRef}>
         <svg ref={svgRef} />

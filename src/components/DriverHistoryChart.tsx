@@ -7,6 +7,7 @@ import { CarPicker, type CarOption } from './CarPicker'
 import { CarDetailModal } from './CarDetailModal'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 140 }
 const MARGIN_LEFT_MIN = 44
@@ -168,28 +169,21 @@ export function DriverHistoryChart({
   stints,
   laps,
   isRaceSession = false,
+  forcedWidth,
+  onRendered,
 }: {
   stints: Stint[]
   laps: LapRead[]
   isRaceSession?: boolean
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [selectedCars, setSelectedCars] = useState<string[]>([])
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [selectedStint, setSelectedStint] = useState<{ carNumber: string; segment: StintSegment } | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const carOptions: CarOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
@@ -333,7 +327,9 @@ export function DriverHistoryChart({
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [rows, width, maxLap])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [rows, width, maxLap, onRendered])
 
   return (
     <div className="viz-root driver-history-chart" ref={containerRef}>
@@ -462,7 +458,23 @@ export function DriverHistoryChart({
           flex: none;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="driver_stint_history" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="driver_stint_history"
+            renderChart={(w, onReady) => (
+              <DriverHistoryChart
+                stints={stints}
+                laps={laps}
+                isRaceSession={isRaceSession}
+                forcedWidth={w}
+                onRendered={onReady}
+              />
+            )}
+          />
+        }
+      >
         <div className="chart-controls">
           <CarPicker cars={carOptions} selected={selectedCars} onChange={setSelectedCars} />
         </div>

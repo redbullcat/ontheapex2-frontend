@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import type { LapRead } from '../api/types'
 import { computeFlagPeriods, FLAG_COLORS, FLAG_LABELS, type FlagPeriod } from '../lib/flags'
 import { ChartExportButtons } from './ChartExportButtons'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 8, right: 16, bottom: 32, left: 16 }
 const BAR_HEIGHT = 40
@@ -13,22 +14,19 @@ interface TooltipState {
   period: FlagPeriod
 }
 
-export function FlagGanttChart({ laps }: { laps: LapRead[] }) {
+export function FlagGanttChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const periods = useMemo(() => computeFlagPeriods(laps), [laps])
   const legendCategories = useMemo(
@@ -81,7 +79,9 @@ export function FlagGanttChart({ laps }: { laps: LapRead[] }) {
       .call((sel) => sel.select('.domain').attr('stroke', 'var(--axis)'))
       .call((sel) => sel.selectAll('.tick line').attr('stroke', 'var(--grid)'))
       .call((sel) => sel.selectAll('.tick text').attr('fill', 'var(--text-muted)').attr('font-size', 11))
-  }, [periods, width])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [periods, width, onRendered])
 
   return (
     <div className="viz-root flag-gantt-chart" ref={containerRef}>
@@ -163,7 +163,11 @@ export function FlagGanttChart({ laps }: { laps: LapRead[] }) {
             </div>
           ))}
         </div>
-        <ChartExportButtons svgRef={svgRef} filename="flag_periods" />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename="flag_periods"
+          renderChart={(w, onReady) => <FlagGanttChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+        />
       </div>
       {periods.length === 0 ? (
         <p className="hint">No flag data for this session.</p>

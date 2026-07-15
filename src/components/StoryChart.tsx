@@ -7,6 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 64, bottom: 40, left: 48 }
 const PLOT_HEIGHT = 420
@@ -161,24 +162,21 @@ function computeStory(laps: LapRead[], activeClasses: Set<string>, activeCars: S
   }
 }
 
-export function StoryChart({ laps }: { laps: LapRead[] }) {
+export function StoryChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
   const [hover, setHover] = useState<HoverState | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -382,7 +380,9 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
         pathsSelRef.current?.attr('opacity', 0.7).attr('stroke-width', (d) => (d.isReference ? 2.5 : 2))
         setHover(null)
       })
-  }, [story, width, strokeColor])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [story, width, strokeColor, onRendered])
 
   return (
     <div className="viz-root story-chart" ref={containerRef}>
@@ -471,7 +471,11 @@ export function StoryChart({ laps }: { laps: LapRead[] }) {
           addLabel="Add car"
           resetLabel="Show all cars"
         />
-        <ChartExportButtons svgRef={svgRef} filename="story_chart" />
+        <ChartExportButtons
+          svgRef={svgRef}
+          filename="story_chart"
+          renderChart={(w, onReady) => <StoryChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+        />
       </div>
       {story.cars.length === 0 ? (
         <p className="hint">No lap data for this selection.</p>

@@ -10,6 +10,7 @@ import { EntityFilter, type EntityOption } from './EntityFilter'
 import { resolveEntitySelection, type EntitySelection } from '../lib/entitySelection'
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 16, bottom: 32, left: 60 }
 const PLOT_HEIGHT = 420
@@ -97,24 +98,23 @@ function computeSeries(laps: LapRead[], compound: string, activeCars: Set<string
   return out
 }
 
-export function TyreDegradationChart({ laps, compound }: { laps: LapRead[]; compound: string }) {
+export function TyreDegradationChart({
+  laps,
+  compound,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  compound: string
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [colorBy, setColorBy] = useState<ColorBy>('team')
   const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const carOptions: EntityOption[] = useMemo(() => {
     const byCar = new Map<string, string>()
@@ -279,7 +279,9 @@ export function TyreDegradationChart({ laps, compound }: { laps: LapRead[]; comp
         pathsSelRef.current?.attr('opacity', 0.8).attr('stroke-width', 2)
         setHover(null)
       })
-  }, [series, width, colorFor])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [series, width, colorFor, onRendered])
 
   return (
     <div className="viz-root tyre-degradation-chart" ref={containerRef}>
@@ -336,7 +338,17 @@ export function TyreDegradationChart({ laps, compound }: { laps: LapRead[]; comp
           font-size: 13px;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename={`tyre_degradation_${compound.toLowerCase()}`} />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename={`tyre_degradation_${compound.toLowerCase()}`}
+            renderChart={(w, onReady) => (
+              <TyreDegradationChart laps={laps} compound={compound} forcedWidth={w} onRendered={onReady} />
+            )}
+          />
+        }
+      >
         <div className="chart-controls">
           <div className="color-mode-toggle" role="radiogroup" aria-label="Color by">
             {(['team', 'manufacturer', 'car'] as const).map((m) => (

@@ -7,6 +7,7 @@ import { resolveClassSelection, type ClassSelection } from '../lib/classSelectio
 import { ChartExportButtons } from './ChartExportButtons'
 import { CollapsibleFilters } from './CollapsibleFilters'
 import { isLapValid } from '../lib/lapValidity'
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth'
 
 const MARGIN = { top: 16, right: 24, bottom: 40, left: 56 }
 const HEIGHT = 440
@@ -40,23 +41,20 @@ function sampleStd(values: number[]): number {
   return Math.sqrt(variance)
 }
 
-export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
+export function PaceConsistencyChart({
+  laps,
+  forcedWidth,
+  onRendered,
+}: {
+  laps: LapRead[]
+  forcedWidth?: number
+  onRendered?: (svg: SVGSVGElement) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(800)
+  const width = useResponsiveWidth(containerRef, forcedWidth)
   const [classSelection, setClassSelection] = useState<ClassSelection>(null)
   const [hover, setHover] = useState<HoverState | null>(null)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w) setWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -199,7 +197,9 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
       .attr('fill', 'var(--text-muted)')
       .attr('font-size', 11)
       .text('Std deviation (s)')
-  }, [points, width])
+
+    if (svgRef.current) onRendered?.(svgRef.current)
+  }, [points, width, onRendered])
 
   return (
     <div className="viz-root pace-consistency-chart" ref={containerRef}>
@@ -258,7 +258,15 @@ export function PaceConsistencyChart({ laps }: { laps: LapRead[] }) {
           font-size: 13px;
         }
       `}</style>
-      <CollapsibleFilters actions={<ChartExportButtons svgRef={svgRef} filename="pace_consistency" />}>
+      <CollapsibleFilters
+        actions={
+          <ChartExportButtons
+            svgRef={svgRef}
+            filename="pace_consistency"
+            renderChart={(w, onReady) => <PaceConsistencyChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+          />
+        }
+      >
         <div className="chart-controls">
           <ClassFilter classes={allClasses} selection={classSelection} onChange={setClassSelection} />
         </div>
