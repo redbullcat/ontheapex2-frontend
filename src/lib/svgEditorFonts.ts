@@ -80,6 +80,16 @@ export function svgEditorFontFamilyCss(family: SvgEditorFontFamily): string {
   return family.includes(' ') ? `'${family}'` : family
 }
 
+// A generic fallback matters here specifically: if the named family fails
+// to load (slow network, a host that strips the @import), a bare family
+// name with nothing after it falls back to the browser's serif default on
+// many platforms — jarringly different from the sans look every one of
+// these families has.
+export function svgEditorFontStack(family: SvgEditorFontFamily): string {
+  const generic = family === 'Spline Sans Mono' ? 'monospace' : 'sans-serif'
+  return `${svgEditorFontFamilyCss(family)}, ${generic}`
+}
+
 // Fed into an exported/copied SVG's <style> block — the file lives outside
 // the app (pasted into Ghost), so it can't reach our self-hosted assets and
 // needs the same families from Google Fonts' CDN instead. ital/wght range

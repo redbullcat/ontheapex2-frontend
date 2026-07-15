@@ -88,24 +88,33 @@ function formatSeconds(s: number): string {
   return `${m}:${sec.toFixed(3).padStart(6, '0')}`
 }
 
+// `initial*` props are editor-only: they seed the off-screen instance
+// ChartExportButtons' `renderChart` mounts (see below) from the live
+// chart's current filters, so "Edit as SVG" doesn't silently reset them.
 export function LongRunPaceByManufacturer({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialManufacturerSelection,
+  initialZoomToTrend,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialManufacturerSelection?: EntitySelection
+  initialZoomToTrend?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [manufacturerSelection, setManufacturerSelection] = useState<EntitySelection>(initialManufacturerSelection ?? null)
   // Defaults to zoomed on the actual long-run trend lines — a raw-point
   // domain gets blown out by rare outlier laps (traffic, yellow flags),
   // squashing the trends themselves into an illegible band at the bottom.
-  const [zoomToTrend, setZoomToTrend] = useState(true)
+  const [zoomToTrend, setZoomToTrend] = useState(initialZoomToTrend ?? true)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -304,7 +313,14 @@ export function LongRunPaceByManufacturer({
             svgRef={svgRef}
             filename="long_run_pace_by_manufacturer"
             renderChart={(w, onReady) => (
-              <LongRunPaceByManufacturer laps={laps} forcedWidth={w} onRendered={onReady} />
+              <LongRunPaceByManufacturer
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialManufacturerSelection={manufacturerSelection}
+                initialZoomToTrend={zoomToTrend}
+              />
             )}
           />
         }

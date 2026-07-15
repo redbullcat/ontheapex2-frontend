@@ -141,12 +141,28 @@ function formatSeconds(s: number): string {
 // second, off-screen instance of this same component (see
 // ChartExportButtons' `renderChart`) to get a true D3 reflow at an
 // arbitrary width, then reads the finished SVG back out via `onRendered`.
+// The `initial*` props are also editor-only: the off-screen instance is a
+// fresh mount with its own state, starting from each field's normal
+// default — without seeding it from the live chart's *current* filters
+// (class/car/driver selection, group-by, chart type, ...), "Edit as SVG"
+// would silently reset every filter the user had applied on screen. These
+// just override the initial useState value; the editor's live chart still
+// has its own separate state after that (matches "doesn't change the
+// chart in the app" — there's nothing to sync back).
 export function PaceChart({
   laps,
   hideCarFilter,
   compactFilters,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialGroupBy,
+  initialChartType,
+  initialCarSelection,
+  initialDriverSelection,
+  initialLapRange,
+  initialTopPercent,
+  initialGapMode,
 }: {
   laps: LapRead[]
   hideCarFilter?: boolean
@@ -157,18 +173,26 @@ export function PaceChart({
   compactFilters?: boolean
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialGroupBy?: GroupBy
+  initialChartType?: ChartType
+  initialCarSelection?: EntitySelection
+  initialDriverSelection?: EntitySelection
+  initialLapRange?: [number, number] | null
+  initialTopPercent?: string
+  initialGapMode?: GapMode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [groupBy, setGroupBy] = useState<GroupBy>('team')
-  const [chartType, setChartType] = useState<ChartType>('bar')
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-  const [driverSelection, setDriverSelection] = useState<EntitySelection>(null)
-  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
-  const [topPercentInput, setTopPercentInput] = useState('100')
-  const [gapMode, setGapMode] = useState<GapMode>('ahead')
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [groupBy, setGroupBy] = useState<GroupBy>(initialGroupBy ?? 'team')
+  const [chartType, setChartType] = useState<ChartType>(initialChartType ?? 'bar')
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
+  const [driverSelection, setDriverSelection] = useState<EntitySelection>(initialDriverSelection ?? null)
+  const [lapRange, setLapRange] = useState<[number, number] | null>(initialLapRange ?? null)
+  const [topPercentInput, setTopPercentInput] = useState(initialTopPercent ?? '100')
+  const [gapMode, setGapMode] = useState<GapMode>(initialGapMode ?? 'ahead')
   const [hover, setHover] = useState<HoverState | null>(null)
 
   const allClasses = useMemo(() => {
@@ -492,6 +516,14 @@ export function PaceChart({
                   compactFilters={compactFilters}
                   forcedWidth={w}
                   onRendered={onReady}
+                  initialClassSelection={classSelection}
+                  initialGroupBy={groupBy}
+                  initialChartType={chartType}
+                  initialCarSelection={carSelection}
+                  initialDriverSelection={driverSelection}
+                  initialLapRange={lapRange}
+                  initialTopPercent={topPercentInput}
+                  initialGapMode={gapMode}
                 />
               )}
             />

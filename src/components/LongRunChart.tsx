@@ -64,21 +64,29 @@ function formatSeconds(s: number): string {
   return `${m}:${sec.toFixed(3).padStart(6, '0')}`
 }
 
+// `initialClassSelection`/`initialCarSelection` are editor-only: they seed
+// the off-screen instance ChartExportButtons' `renderChart` mounts (see
+// below) from the live chart's current filters, so "Edit as SVG" doesn't
+// silently reset them.
 export function LongRunChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialCarSelection,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialCarSelection?: EntitySelection
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const width = useResponsiveWidth(containerRef, forcedWidth)
   const [hover, setHover] = useState<HoverState | null>(null)
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
 
   const allClasses = useMemo(() => {
     const s = new Set<string>()
@@ -304,7 +312,15 @@ export function LongRunChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="longest_run_pace"
-            renderChart={(w, onReady) => <LongRunChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <LongRunChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialCarSelection={carSelection}
+              />
+            )}
           />
         }
       >

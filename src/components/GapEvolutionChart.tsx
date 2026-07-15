@@ -83,14 +83,34 @@ function declutter(ys: number[], minGap: number): number[] {
   return out
 }
 
+// The `initial*` props are editor-only: ChartExportButtons' `renderChart`
+// (see below) mounts a second, off-screen instance of this same component to
+// get a true D3 reflow at an arbitrary width, then reads the finished SVG
+// back out via `onRendered`. Without seeding that fresh instance's state
+// from the live chart's *current* filters, "Edit as SVG" would silently
+// reset every filter the user had applied on screen. `pinnedCars` is
+// deliberately excluded — it's a presentational highlight (opacity/z-order)
+// on top of already-rendered data, not a filter of what's shown.
 export function GapEvolutionChart({
   laps,
   forcedWidth,
   onRendered,
+  initialClassSelection,
+  initialColorMode,
+  initialCarSelection,
+  initialLapRange,
+  initialShowFlags,
+  initialReferenceCarOverride,
 }: {
   laps: LapRead[]
   forcedWidth?: number
   onRendered?: (svg: SVGSVGElement) => void
+  initialClassSelection?: ClassSelection
+  initialColorMode?: ColorMode
+  initialCarSelection?: EntitySelection
+  initialLapRange?: [number, number] | null
+  initialShowFlags?: boolean
+  initialReferenceCarOverride?: string | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -109,12 +129,12 @@ export function GapEvolutionChart({
   useEffect(() => {
     pinnedCarsRef.current = pinnedCars
   }, [pinnedCars])
-  const [classSelection, setClassSelection] = useState<ClassSelection>(null)
-  const [colorMode, setColorMode] = useState<ColorMode>('team')
-  const [carSelection, setCarSelection] = useState<EntitySelection>(null)
-  const [lapRange, setLapRange] = useState<[number, number] | null>(null)
-  const [showFlags, setShowFlags] = useState(false)
-  const [referenceCarOverride, setReferenceCarOverride] = useState<string | null>(null)
+  const [classSelection, setClassSelection] = useState<ClassSelection>(initialClassSelection ?? null)
+  const [colorMode, setColorMode] = useState<ColorMode>(initialColorMode ?? 'team')
+  const [carSelection, setCarSelection] = useState<EntitySelection>(initialCarSelection ?? null)
+  const [lapRange, setLapRange] = useState<[number, number] | null>(initialLapRange ?? null)
+  const [showFlags, setShowFlags] = useState(initialShowFlags ?? false)
+  const [referenceCarOverride, setReferenceCarOverride] = useState<string | null>(initialReferenceCarOverride ?? null)
 
   const flagPeriods = useMemo(() => computeFlagPeriods(laps), [laps])
 
@@ -836,7 +856,19 @@ export function GapEvolutionChart({
           <ChartExportButtons
             svgRef={svgRef}
             filename="gap_evolution"
-            renderChart={(w, onReady) => <GapEvolutionChart laps={laps} forcedWidth={w} onRendered={onReady} />}
+            renderChart={(w, onReady) => (
+              <GapEvolutionChart
+                laps={laps}
+                forcedWidth={w}
+                onRendered={onReady}
+                initialClassSelection={classSelection}
+                initialColorMode={colorMode}
+                initialCarSelection={carSelection}
+                initialLapRange={lapRange}
+                initialShowFlags={showFlags}
+                initialReferenceCarOverride={referenceCarOverride}
+              />
+            )}
           />
         }
       >
