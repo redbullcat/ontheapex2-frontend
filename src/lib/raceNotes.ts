@@ -51,6 +51,11 @@ export interface RaceNote {
   // Which grid column this note was filed under — defaults to matching the
   // linked car's class if a column with that id exists, else GENERAL_COLUMN_ID.
   columnId: string
+  // Who wrote this note — only set for notes synced through the shared
+  // backend (see hooks/useRaceNotes); undefined for purely local notes
+  // (not logged in, or this session_key isn't shared with anyone).
+  authorEmail?: string
+  authorName?: string
   // When the note was actually typed, in the note-taker's own timezone —
   // "my local timestamp" from the spec this was built from.
   userLocalTimestamp: string

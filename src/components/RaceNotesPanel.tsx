@@ -9,7 +9,10 @@ import { formatClock } from '../replay/format'
 import { getTeamDisplayName } from '../lib/identityColors'
 import { buildCarReferenceOptions } from '../lib/carReference'
 import { SlashReferenceTextarea } from './SlashReferenceTextarea'
+import { NotesShareSettings } from './NotesShareSettings'
+import { getSession } from '../lib/session'
 import type { RaceLogEntry } from '../api/types'
+import type { TypingUser } from '../hooks/useRaceNotes'
 
 interface LapLike {
   car_number: string
@@ -39,12 +42,14 @@ function NoteItem({
   isRaceSession,
   onSaveText,
   onRequestDelete,
+  onTyping,
 }: {
   note: RaceNote
   laps: LapLike[]
   isRaceSession: boolean
   onSaveText: (text: string) => void
   onRequestDelete: () => void
+  onTyping: (editing: boolean) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(note.text)
@@ -66,12 +71,18 @@ function NoteItem({
     const trimmed = draft.trim()
     if (trimmed) onSaveText(trimmed)
     setEditing(false)
+    onTyping(false)
   }
 
   return (
     <div className="race-note-item">
       <div className="race-note-item-meta">
         <span>{note.elapsedSeconds != null ? formatClock(note.elapsedSeconds) : '—'}</span>
+        {note.authorName && (
+          <span className="race-note-author" title={note.authorEmail}>
+            {note.authorName}
+          </span>
+        )}
         {note.linkedCar && (
           <span>
             #{note.linkedCar.carNumber} {getTeamDisplayName(note.linkedCar.team)} · L{note.linkedCar.lapNumber} · P
@@ -95,20 +106,33 @@ function NoteItem({
           <SlashReferenceTextarea
             className="race-notes-textarea"
             value={draft}
-            onChange={setDraft}
+            onChange={(v) => {
+              setDraft(v)
+              onTyping(true)
+            }}
             options={carRefOptions}
             rows={2}
             autoFocus
             onKeyDownCapture={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
-              if (e.key === 'Escape') setEditing(false)
+              if (e.key === 'Escape') {
+                setEditing(false)
+                onTyping(false)
+              }
             }}
           />
           <div className="race-note-edit-actions">
             <button type="button" className="replay-btn" onClick={save} disabled={!draft.trim()}>
               Save
             </button>
-            <button type="button" className="replay-btn" onClick={() => setEditing(false)}>
+            <button
+              type="button"
+              className="replay-btn"
+              onClick={() => {
+                setEditing(false)
+                onTyping(false)
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -118,6 +142,13 @@ function NoteItem({
       )}
     </div>
   )
+}
+
+function typingLabel(users: TypingUser[]): string | null {
+  if (users.length === 0) return null
+  const names = users.map((u) => u.name)
+  if (names.length === 1) return `${names[0]} is typing…`
+  return `${names.join(', ')} are typing…`
 }
 
 export function RaceNotesPanel({
@@ -159,13 +190,15 @@ export function RaceNotesPanel({
   // ranking produces nonsense positions outside of an actual race.
   isRaceSession: boolean
 }) {
-  const { notes, addNote, removeNote, updateNoteText } = useRaceNotes(sessionKey)
+  const { notes, addNote, removeNote, updateNoteText, mode, typingUsers, sendTyping } = useRaceNotes(sessionKey)
   const { columns, addColumn, removeColumn, renameColumn } = useNotesColumns(sessionKey, classes)
   const [text, setText] = useState('')
   const [manualCar, setManualCar] = useState('')
   const [columnId, setColumnId] = useState(GENERAL_COLUMN_ID)
   const [newColumnName, setNewColumnName] = useState('')
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [showShareSettings, setShowShareSettings] = useState(false)
+  const isLoggedIn = getSession() != null
 
   const totalDuration =
     currentElapsedSeconds != null && currentRemainingSeconds != null ? currentElapsedSeconds + currentRemainingSeconds : null
@@ -216,6 +249,7 @@ export function RaceNotesPanel({
     )
     setText('')
     setManualCar('')
+    sendTyping(columnId, false)
     if (pendingLink) onConsumeLink()
   }
 
@@ -258,7 +292,18 @@ export function RaceNotesPanel({
         <button type="button" className="replay-btn" onClick={handleAddColumn} disabled={!newColumnName.trim()}>
           Add
         </button>
+        {isLoggedIn && (
+          <button type="button" className="replay-btn race-notes-share-btn" onClick={() => setShowShareSettings(true)}>
+            {mode === 'synced' ? 'Shared' : 'Share'}
+          </button>
+        )}
       </div>
+
+      {typingLabel(typingUsers) && <p className="race-notes-typing-indicator">{typingLabel(typingUsers)}</p>}
+
+      {showShareSettings && (
+        <NotesShareSettings sessionKey={sessionKey} onClose={() => setShowShareSettings(false)} />
+      )}
 
       <div className="race-notes-add">
         {pendingLink ? (
@@ -293,7 +338,10 @@ export function RaceNotesPanel({
           className="race-notes-textarea"
           placeholder="What's happening… e.g. left rear puncture at turn 3, trundles back round to the pits. Type / to reference another car."
           value={text}
-          onChange={setText}
+          onChange={(v) => {
+            setText(v)
+            sendTyping(columnId, v.length > 0)
+          }}
           options={addCarRefOptions}
           rows={2}
           onKeyDownCapture={(e) => {
@@ -346,6 +394,7 @@ export function RaceNotesPanel({
                             isRaceSession={isRaceSession}
                             onSaveText={(newText) => updateNoteText(note.id, newText)}
                             onRequestDelete={() => setPendingDeleteId(note.id)}
+                            onTyping={(editing) => sendTyping(note.columnId, editing)}
                           />
                         ))}
                       </td>
@@ -359,6 +408,7 @@ export function RaceNotesPanel({
                           isRaceSession={isRaceSession}
                           onSaveText={(newText) => updateNoteText(note.id, newText)}
                           onRequestDelete={() => setPendingDeleteId(note.id)}
+                          onTyping={(editing) => sendTyping(note.columnId, editing)}
                         />
                       ))}
                     </td>

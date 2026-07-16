@@ -1976,3 +1976,115 @@ button.replay-play:hover {
 .replay-root .moment-editor-anchor:active {
   cursor: grabbing;
 }
+
+.race-note-author {
+  font-weight: 700;
+  color: var(--replay-ink);
+}
+.race-notes-share-btn {
+  margin-left: auto;
+}
+.race-notes-typing-indicator {
+  font-size: 11px;
+  color: var(--replay-muted);
+  font-style: italic;
+  margin: 2px 0 6px;
+}
+.notes-share-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.notes-share-modal {
+  background: var(--replay-paper);
+  border: 1px solid var(--replay-line-strong);
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.notes-share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.notes-share-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.notes-share-close {
+  border: none;
+  background: transparent;
+  color: var(--replay-muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+.notes-share-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.notes-share-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border: 1px solid var(--replay-line);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.notes-share-list li button {
+  border: none;
+  background: transparent;
+  color: var(--replay-muted);
+  cursor: pointer;
+}
+.notes-share-search {
+  position: relative;
+  margin-top: 8px;
+}
+.notes-share-search input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--replay-line-strong);
+  background: var(--replay-surface);
+  color: var(--replay-ink);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.notes-share-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 1px solid var(--replay-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.notes-share-results li button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  background: var(--replay-paper);
+  color: var(--replay-ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+.notes-share-results li button:hover {
+  background: var(--replay-surface);
+}
+.notes-share-result-email {
+  color: var(--replay-muted);
+  font-size: 11px;
+}
