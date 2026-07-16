@@ -4,7 +4,7 @@
 // different registrable domains and a cookie set by one is never sent to
 // the other. Stored in localStorage so a reload doesn't force a re-login;
 // the token itself carries an expiry the backend enforces independently.
-const API_BASE = 'https://ontheapex-api.fly.dev'
+export const API_BASE = 'https://ontheapex-api.fly.dev'
 const STORAGE_KEY = 'ota:session'
 const CHANGE_EVENT = 'ota:session-changed'
 
